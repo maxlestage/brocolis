@@ -209,3 +209,19 @@ Les pull requests doivent être faites de la branche de travail vers `dev`.
 - Créer une release GitHub pour chaque version
 - Générer des notes de release décrivant les changements
 
+# Licence
+
+Ce logiciel est la propriété exclusive de LESTAGE Maxime Nathan et ne peut pas être copié, modifié, distribué ou utilisé sans autorisation écrite préalable. 
+
+Le code source de ce logiciel n'est pas fourni et ne peut pas être réutilisé sans permission. Seuls les binaires compilés sont distribués aux utilisateurs finaux selon les termes du contrat de licence utilisateur final (CLUF).
+
+Ce logiciel est protégé par le droit d'auteur et par les lois sur la propriété intellectuelle en vigueur. Toute copie, modification, distribution ou utilisation en violation de cette licence propriétaire est strictement interdite et passible de poursuites judiciaires.
+
+LESTAGE Maxime Nathan se réserve le droit de poursuivre en justice toute personne contrevenant à cette licence propriétaire du logiciel.
+
+Cette clause indique clairement que:
+
+- Le code source est privé et propriétaire 
+- Aucun droit n'est concédé sur le code
+- Seule l'utilisation du binaire sous licence est autorisée
+- La copie ou redistribution est interdite
