@@ -3,8 +3,9 @@
 # Brocolis.rs 🥦 - Un proxy MITM Rust pour le chiffrement sélectif du trafic réseau
 
 ![brocolisMan](https://github.com/maxlestage/brocolis/blob/master/assets/brocolisMan.png)
+<img src="https://github.com/maxlestage/brocolis/blob/master/assets/brocolisMan.png" width="200">
 
-![brocolisMan2](http://thumbor-server/unsafe/200x0/https://github.com/maxlestage/brocolis/blob/master/assets/brocolisMan.png)
+
 
 ## Présentation
 
