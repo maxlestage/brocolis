@@ -175,7 +175,7 @@ Le trafic désigné comme devant être chiffré le sera automatiquement avec vos
 
 ## Branches
 
-- `main` - branche principale contenant le code en production
+- `master` - branche principale contenant le code en production
 - `dev` - branche de développement pour le travail en cours
 - `feature/nom` - branches de feature pour les nouvelles fonctionnalités
 - `bugfix/nom` - branches pour corriger des bugs
