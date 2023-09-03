@@ -4,6 +4,8 @@
 
 ![brocolisMan](https://github.com/maxlestage/brocolis/blob/master/assets/brocolisMan.png)
 
+![brocolisMan2](http://thumbor-server/unsafe/200x0/https://github.com/maxlestage/brocolis/blob/master/assets/brocolisMan.png)
+
 ## Présentation
 
 Brocolis est un proxy MITM (Man In The Middle) développé en Rust permettant de chiffrer sélectivement le trafic HTTP/HTTPS.
