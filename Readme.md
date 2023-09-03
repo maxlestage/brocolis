@@ -1,5 +1,3 @@
-
-
 # Brocolis.rs 🥦 - Un proxy MITM Rust pour le chiffrement sélectif du trafic réseau
 
 <!-- ![brocolisMan](https://github.com/maxlestage/brocolis/blob/master/assets/brocolisMan.png) -->
@@ -7,19 +5,17 @@
   <img src="https://github.com/maxlestage/brocolis/blob/master/assets/brocolisMan.png" width="512" style="border-radius: 10px;">
 </div>
 
-
 ## Présentation
 
 Brocolis est un proxy MITM (Man In The Middle) développé en Rust permettant de chiffrer sélectivement le trafic HTTP/HTTPS.
 
-Il intercepte les requêtes entre le client et le serveur de manière transparente afin de chiffrer uniquement les données désirées grâce à un système de clés symétriques partageables. 
+Il intercepte les requêtes entre le client et le serveur de manière transparente afin de chiffrer uniquement les données désirées grâce à un système de clés symétriques partageables.
 
 Brocolis assure ainsi la confidentialité des échanges sur des services comme Twitter, les forums, messageries, etc.
 
-
 ## Proxy MITM
 
-Un proxy MITM (Man In The Middle) est un proxy qui s'intercale entre le client et le serveur et intercepte activement la communication dans les deux sens. 
+Un proxy MITM (Man In The Middle) est un proxy qui s'intercale entre le client et le serveur et intercepte activement la communication dans les deux sens.
 
 Il permet d'analyser et même de modifier les requêtes et réponses à la volée avant de les transmettre à leur destination finale.
 
@@ -31,11 +27,11 @@ Cela permet des usages comme l'analyse de trafic, l'ajout de chiffrement, le cac
 
 Un proxy MITM nécessite des mécanismes d'interception du trafic et de resigning des certificats SSL pour les connexions HTTPS.
 
-## Fonctionnement 
+## Fonctionnement
 
 Le proxy MITM est implémenté avec **Actix**. Il écoute les connexions entrantes, analyse le trafic et applique la logique métier de chiffrement/déchiffrement.
 
-**Reqwest** est utilisé par le proxy Actix pour effectuer les requêtes HTTP/HTTPS sortantes vers les serveurs distants. 
+**Reqwest** est utilisé par le proxy Actix pour effectuer les requêtes HTTP/HTTPS sortantes vers les serveurs distants.
 
 ```mermaid
 sequenceDiagram
@@ -64,7 +60,7 @@ Cette architecture permet de séparer clairement les responsabilités :
 |-|-|
 | Interception MITM | Redirection transparente du trafic via le proxy |
 | Certificats SSL | Génération de certificats auto-signés |
-| Chiffrement AES-256 | Chiffrement du contenu textuel ciblé | 
+| Chiffrement AES-256 | Chiffrement du contenu textuel ciblé |
 | Gestion des clés | Partage sécurisé des clés symétriques |
 | Régénération des clés | Rotation automatique en cas de compromission |
 | CLI | Interface en ligne de commande |
@@ -147,12 +143,12 @@ L'architecture interne comprend :
 Pré-requis : Rust 1.58+
 
 ```
-$ git clone https://github.com/brocolis/brocolis
-$ cd brocolis
-$ cargo build --release
+git clone https://github.com/brocolis/brocolis
+cd brocolis
+cargo build --release
 ```
 
-## Utilisation 
+## Utilisation
 
 Générer une nouvelle clé :
 
@@ -174,7 +170,6 @@ Configurer votre navigateur pour utiliser le proxy sur le port 8080.
 
 Le trafic désigné comme devant être chiffré le sera automatiquement avec vos clés !
 
-
 # Organisation du code avec Git
 
 ## Branches
@@ -195,7 +190,7 @@ Les pull requests doivent être faites de la branche de travail vers `dev`.
 ## Conventions de code
 
 - Suivre le style de codage défini par le linter Rust Clippy
-- Privilégier les noms de variables et fonctions explicites 
+- Privilégier les noms de variables et fonctions explicites
 - Commenter le code pour expliquer l'intention et les choix techniques
 - Garder le code simple et éviter les optimisations prématurées
 - Couvrir le code par des tests unitaires et d'intégration
@@ -204,7 +199,7 @@ Les pull requests doivent être faites de la branche de travail vers `dev`.
 
 - Ouvrir les PRs pour toute contribution significative
 - Expliquer clairement l'objectif et les changements
-- Limiter la portée des PRs pour faciliter la revue 
+- Limiter la portée des PRs pour faciliter la revue
 - S'assurer que tous les tests passent avant de merger
 
 ## Releases
@@ -215,7 +210,7 @@ Les pull requests doivent être faites de la branche de travail vers `dev`.
 
 # Licence
 
-Ce logiciel est la propriété exclusive de LESTAGE Maxime Nathan et ne peut pas être copié, modifié, distribué ou utilisé sans autorisation écrite préalable. 
+Ce logiciel est la propriété exclusive de LESTAGE Maxime Nathan et ne peut pas être copié, modifié, distribué ou utilisé sans autorisation écrite préalable.
 
 Le code source de ce logiciel n'est pas fourni et ne peut pas être réutilisé sans permission. Seuls les binaires compilés sont distribués aux utilisateurs finaux selon les termes du contrat de licence utilisateur final (CLUF).
 
@@ -225,11 +220,10 @@ LESTAGE Maxime Nathan se réserve le droit de poursuivre en justice toute person
 
 Cette clause indique clairement que:
 
-- Le code source est privé et propriétaire 
+- Le code source est privé et propriétaire
 - Aucun droit n'est concédé sur le code
 - Seule l'utilisation du binaire sous licence est autorisée
 - La copie ou redistribution est interdite
-
 
 # ⚠️ AVERTISSEMENT ⚠️
 
@@ -246,4 +240,3 @@ Veuillez noter les points suivants :
 Nous vous recommandons vivement de prendre toutes les précautions nécessaires lors de l'utilisation de ce logiciel. En cas de doute quant à son fonctionnement ou à ses effets, il est conseillé de consulter un professionnel qualifié.
 
 UTILISEZ CE LOGICIEL À VOS PROPRES RISQUES.
-
