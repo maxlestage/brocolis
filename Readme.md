@@ -171,3 +171,41 @@ Configurer votre navigateur pour utiliser le proxy sur le port 8080.
 Le trafic désigné comme devant être chiffré le sera automatiquement avec vos clés !
 
 
+# Organisation du code avec Git
+
+## Branches
+
+- `main` - branche principale contenant le code en production
+- `dev` - branche de développement pour le travail en cours
+- `feature/nom` - branches de feature pour les nouvelles fonctionnalités
+- `bugfix/nom` - branches pour corriger des bugs
+- `release/version` - branches pour préparer les releases
+
+Les pull requests doivent être faites de la branche de travail vers `dev`.
+
+## Nommage des commits
+
+- Utiliser l'impératif au présent : "Fix bug", "Add feature"
+- Donner suffisamment de contexte pour comprendre facilement les changements
+
+## Conventions de code
+
+- Suivre le style de codage défini par le linter Rust Clippy
+- Privilégier les noms de variables et fonctions explicites 
+- Commenter le code pour expliquer l'intention et les choix techniques
+- Garder le code simple et éviter les optimisations prématurées
+- Couvrir le code par des tests unitaires et d'intégration
+
+## Pull requests
+
+- Ouvrir les PRs pour toute contribution significative
+- Expliquer clairement l'objectif et les changements
+- Limiter la portée des PRs pour faciliter la revue 
+- S'assurer que tous les tests passent avant de merger
+
+## Releases
+
+- Les numéros de version suivent SemVer (MAJEUR.MINEUR.PATCH)
+- Créer une release GitHub pour chaque version
+- Générer des notes de release décrivant les changements
+
