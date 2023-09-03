@@ -233,16 +233,17 @@ Cette clause indique clairement que:
 
 # ⚠️ AVERTISSEMENT ⚠️
 
-Ce logiciel, Brocolis.rs, est fourni "TEL QUEL" et LESTAGE Maxime Nathan, l'auteur, décline toutes les garanties concernant ce logiciel, y compris toutes les garanties implicites de qualité marchande et d'adéquation à un usage particulier. En aucun cas, LESTAGE Maxime Nathan ne sera responsable des dommages spéciaux, directs, indirects ou consécutifs, ou de quelque dommage que ce soit résultant de la perte d'utilisation, de données ou de profits, que ce soit dans une action contractuelle, une négligence ou toute autre action délictuelle, découlant de l'utilisation ou de la performance de ce logiciel.
+Ce logiciel, Brocolis.rs, est mis à disposition "TEL QUEL" par Maxime Nathan LESTAGE, l'auteur, sans aucune garantie explicite ou implicite. L'auteur décline toute responsabilité quant à ce logiciel, y compris les garanties implicites de qualité marchande et d'adéquation à un usage particulier. En aucun cas, Maxime Nathan LESTAGE ne pourra être tenu pour responsable des dommages spéciaux, directs, indirects ou consécutifs, ou de tout autre préjudice découlant de la perte d'utilisation, de données ou de profits, que ce soit dans le cadre d'un contrat, d'une négligence ou de toute autre action délictuelle, liée à l'utilisation ou à la performance de ce logiciel.
 
 Veuillez noter les points suivants :
 
-- Ce logiciel est fourni "TEL QUEL", sans aucune garantie expresse ou implicite.
+- Ce logiciel est fourni "TEL QUEL", sans aucune garantie explicite ou implicite.
 - L'auteur ne garantit pas que le logiciel sera exempt d'erreurs ou de défauts.
-- Vous êtes seul responsable de l'utilisation de ce logiciel et de ses conséquences.
-- L'auteur ne sera pas tenu responsable des éventuels problèmes, pertes de données, ou dommages causés par l'utilisation de ce logiciel.
+- Vous assumez l'entière responsabilité de l'utilisation de ce logiciel et de ses conséquences.
+- L'auteur ne sera pas tenu responsable des éventuels problèmes, pertes de données ou dommages résultant de l'utilisation de ce logiciel.
 - En utilisant ce logiciel, vous acceptez les termes de cette licence et assumez tous les risques qui y sont associés.
 
-Veuillez prendre toutes les précautions nécessaires lors de l'utilisation de ce logiciel. En cas de doute sur son fonctionnement ou ses effets, il est recommandé de consulter un professionnel qualifié.
+Nous vous recommandons vivement de prendre toutes les précautions nécessaires lors de l'utilisation de ce logiciel. En cas de doute quant à son fonctionnement ou à ses effets, il est conseillé de consulter un professionnel qualifié.
 
 UTILISEZ CE LOGICIEL À VOS PROPRES RISQUES.
+
