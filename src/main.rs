@@ -43,18 +43,31 @@ async fn forward(
     // URL du serveur de test
     let server_test_url = "http://127.0.0.1:8081".to_string();
 
+    // Décompose le corps de la requête
+    let mut body_str = String::from_utf8(body.to_vec()).unwrap();
+    println!("le corps de la requête initiale : {:?}", &body_str);
+
+    // Modifie le corps de la requête
+    body_str = "Ceci est une requête modifiée par le proxy".to_string();
+
+    // Recompose le corps de la requête
+    let new_body = web::Bytes::from(body_str);
+
     // Crée une nouvelle requête à partir de la requête entrante
     let forwarded_req = client
         .request_from(server_test_url, req.head())
         .no_decompress();
 
     // Envoie la requête et gère les erreurs
-    let res = forwarded_req.send_body(body).await.map_err(|e| {
+    let mut res = forwarded_req.send_body(new_body).await.map_err(|e| {
         let my_error = MyError {
             name: format!("La requête de transfert a échoué : {}", e.to_string()),
         };
         actix_web::Error::from(my_error)
     })?;
+
+    // Log the response body from the test server
+    println!("Réponse du serveur de test : {:?}", &res.body().await?);
 
     // Construit la réponse
     let mut client_resp = HttpResponse::build(res.status());

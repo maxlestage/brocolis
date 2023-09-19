@@ -56,14 +56,14 @@ Cette architecture permet de séparer clairement les responsabilités :
 
 ## Fonctionnalités
 
-| Fonctionnalité | Description |
-|-|-|
-| Interception MITM | Redirection transparente du trafic via le proxy |
-| Certificats SSL | Génération de certificats auto-signés |
-| Chiffrement AES-256 | Chiffrement du contenu textuel ciblé |
-| Gestion des clés | Partage sécurisé des clés symétriques |
-| Régénération des clés | Rotation automatique en cas de compromission |
-| CLI | Interface en ligne de commande |
+| Fonctionnalité        | Description                                     |
+| --------------------- | ----------------------------------------------- |
+| Interception MITM     | Redirection transparente du trafic via le proxy |
+| Certificats SSL       | Génération de certificats auto-signés           |
+| Chiffrement AES-256   | Chiffrement du contenu textuel ciblé            |
+| Gestion des clés      | Partage sécurisé des clés symétriques           |
+| Régénération des clés | Rotation automatique en cas de compromission    |
+| CLI                   | Interface en ligne de commande                  |
 
 ## Architecture globale
 
@@ -81,7 +81,7 @@ subgraph Brocolis
     Proxy[Proxy MITM]
 end
 
-subgraph Utilisateur
+subgraph Client
     User[Navigateur]
 end   
 
