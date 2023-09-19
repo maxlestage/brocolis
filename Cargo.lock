@@ -287,6 +287,8 @@ dependencies = [
  "actix-web",
  "reqwest",
  "rustls",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
