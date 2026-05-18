@@ -142,7 +142,9 @@ L'architecture interne comprend :
 
 Le cœur est une **bibliothèque** Rust (`src/lib.rs` : modules `ca`, `config`,
 `crypto`, `keys`, `proxy`, `system`) exposée via un unique frontend, la
-**ligne de commande** `brocolis` (Linux / macOS / Windows).
+**ligne de commande** `brocolis`. La configuration système automatique
+(`brocolis auto`) cible **macOS** ; le proxy et le chiffrement eux-mêmes
+fonctionnent partout où Rust compile.
 
 ## Installation
 
@@ -156,28 +158,38 @@ cargo build --release      # binaire: target/release/brocolis
 
 ## Utilisation (CLI)
 
-### Tout-en-un : `brocolis auto`
+### Tout-en-un : `brocolis auto` (macOS)
 
-La façon la plus simple. Une seule commande approuve le CA, règle le proxy
-système sur le proxy local, démarre le chiffrement, puis **restaure l'état
-initial à l'arrêt** (Ctrl-C) :
+La façon la plus simple, **sur macOS**. Une seule commande :
 
 ```
 $ sudo brocolis auto --config brocolis.toml
 ```
 
-Prise en charge de la configuration système automatique :
+Elle exécute, sans rien d'autre à faire :
 
-| OS | Confiance du CA | Proxy système |
-|----|-----------------|---------------|
-| macOS | trousseau Système (`security`) | `networksetup` web + HTTPS |
-| Linux | magasin système (`update-ca-certificates` / `update-ca-trust`) | proxy GNOME (`gsettings`) |
-| Autres | — | — (proxy à pointer manuellement) |
+1. **Confiance du CA** — ajoute le certificat racine au *trousseau
+   Système* (`security add-trusted-cert … /Library/Keychains/System.keychain`) ;
+2. **Proxy système** — règle le proxy *web* et *HTTPS* sur
+   `127.0.0.1:<port>` pour le service réseau actif (`networksetup`) ;
+3. **Chiffrement** — démarre le proxy MITM ;
+4. **Restauration** — à l'arrêt (`Ctrl-C` / `SIGTERM`), remet le proxy
+   système exactement dans son état initial.
 
-`sudo` est requis pour écrire dans le magasin de certificats du système
-(frontière de sécurité de l'OS, une seule invite). Le proxy GNOME est réglé
-par utilisateur, sans root. Tout est **restauré à l'arrêt** (Ctrl-C).
-`--no-system` lance le proxy sans rien modifier.
+#### Pourquoi `sudo` ?
+
+Écrire dans le trousseau **Système** et modifier le **proxy système**
+exige les droits administrateur. macOS demande donc le mot de passe
+administrateur **une seule fois** au lancement de `sudo brocolis auto` :
+c'est une frontière de sécurité imposée par macOS, qu'aucun logiciel ne
+peut contourner. Sans `sudo`, `brocolis auto` détecte l'absence de
+droits, l'indique clairement et démarre le proxy **sans** toucher au
+système (équivalent à `--no-system`).
+
+> Plateformes non-macOS : la configuration système automatique n'est
+> **pas** prise en charge. `brocolis auto` lance le proxy et signale
+> qu'il faut pointer le client sur `127.0.0.1:<port>` manuellement.
+> `--no-system` lance le proxy sans aucune modification système.
 
 ### Commandes de base
 
@@ -211,11 +223,11 @@ le fichier de configuration.
 ## Binaires précompilés
 
 **Aucune manipulation requise.** À chaque push sur `master`, le workflow
-`.github/workflows/cli-release.yml` compile le binaire `brocolis` pour
-Linux (x86_64) et macOS (universel Intel + Apple Silicon) et publie/actualise
-automatiquement la release GitHub **`cli-latest`**. Il suffit de télécharger
-l'archive depuis l'onglet *Releases*. Un tag `v*` produit en plus une
-release versionnée.
+`.github/workflows/macos-cli-release.yml` compile le binaire `brocolis`
+pour **macOS** (universel Intel + Apple Silicon) et publie/actualise
+automatiquement la release GitHub **`cli-latest`**. Il suffit de
+télécharger `brocolis-macos-universal.tar.gz` depuis l'onglet
+*Releases*. Un tag `v*` produit en plus une release versionnée.
 
 ## Chiffrement sélectif
 
