@@ -1,0 +1,108 @@
+name: CLI release
+
+# Compile le binaire CLI `brocolis` pour Linux (x86_64) et macOS (universel
+# Intel + Apple Silicon) et publie automatiquement une release téléchargeable.
+# Aucune action manuelle nécessaire.
+
+on:
+  push:
+    branches:
+      - master
+      - claude/rust-mitm-proxy-JHKLR
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: linux-cargo-${{ hashFiles('Cargo.lock') }}
+      - name: Build
+        run: cargo build --release --bin brocolis
+      - name: Package
+        run: tar -czf brocolis-linux-x86_64.tar.gz -C target/release brocolis
+      - uses: actions/upload-artifact@v4
+        with:
+          name: brocolis-linux-x86_64
+          path: brocolis-linux-x86_64.tar.gz
+
+  build-macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: macos-cargo-${{ hashFiles('Cargo.lock') }}
+      - name: Build (Apple Silicon)
+        run: cargo build --release --bin brocolis --target aarch64-apple-darwin
+      - name: Build (Intel)
+        run: cargo build --release --bin brocolis --target x86_64-apple-darwin
+      - name: Universal binary
+        run: |
+          mkdir -p target/universal
+          lipo -create \
+            target/aarch64-apple-darwin/release/brocolis \
+            target/x86_64-apple-darwin/release/brocolis \
+            -output target/universal/brocolis
+          lipo -info target/universal/brocolis
+      - name: Package
+        run: tar -czf brocolis-macos-universal.tar.gz -C target/universal brocolis
+      - uses: actions/upload-artifact@v4
+        with:
+          name: brocolis-macos-universal
+          path: brocolis-macos-universal.tar.gz
+
+  release:
+    needs: [build-linux, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Collect files
+        id: collect
+        run: |
+          FILES=$(find artifacts -name '*.tar.gz' | tr '\n' ' ')
+          echo "files=${FILES}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish rolling release
+        if: github.ref_type == 'branch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete cli-latest --yes --cleanup-tag --repo "${GITHUB_REPOSITORY}" || true
+          gh release create cli-latest ${{ steps.collect.outputs.files }} \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title "Brocolis CLI (dernier ${GITHUB_REF_NAME})" \
+            --notes "Build automatique du dernier ${GITHUB_REF_NAME} (Linux x86_64 + macOS universel)." \
+            --prerelease
+
+      - name: Publish tagged release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" ${{ steps.collect.outputs.files }} \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "Brocolis ${GITHUB_REF_NAME}" \
+            --notes "Release ${GITHUB_REF_NAME} (Linux x86_64 + macOS universel)."
