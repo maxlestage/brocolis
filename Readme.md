@@ -205,6 +205,21 @@ La fenêtre permet de configurer l'adresse d'écoute, les hôtes ciblés et la
 clé (génération/copie), de générer/exporter le CA, de démarrer/arrêter le
 proxy et de suivre le journal en direct.
 
+### Application macOS (Brocolis.app)
+
+Le bundle macOS se construit **sur macOS** (le SDK Apple est requis) :
+
+```
+cargo build --release --features gui --bin brocolis-gui
+bash scripts/build-macos-app.sh target/release/brocolis-gui dist 0.1.0
+# -> dist/Brocolis.app
+```
+
+Le workflow CI `.github/workflows/macos-desktop.yml` automatise tout sur un
+runner macOS : binaire **universel** (Intel + Apple Silicon via `lipo`),
+assemblage de `Brocolis.app` et génération d'un `.dmg`, publiés en artefacts.
+Le déclencher manuellement (« Run workflow ») ou pousser un tag `v*`.
+
 ## Chiffrement sélectif
 
 Seul le contenu **explicitement marqué** est chiffré : tout segment

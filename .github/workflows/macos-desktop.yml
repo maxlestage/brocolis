@@ -1,0 +1,72 @@
+name: macOS desktop
+
+# Construit l'application de bureau macOS (binaire universel Intel + Apple
+# Silicon), assemble Brocolis.app et un .dmg, et les publie en artefacts.
+# Doit tourner sur un runner macOS (le SDK Apple est indispensable).
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/rust-mitm-proxy-JHKLR
+    tags:
+      - "v*"
+
+jobs:
+  build-macos:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: macos-cargo-${{ hashFiles('Cargo.lock') }}
+
+      - name: Build (Apple Silicon)
+        run: cargo build --release --features gui --bin brocolis-gui --target aarch64-apple-darwin
+
+      - name: Build (Intel)
+        run: cargo build --release --features gui --bin brocolis-gui --target x86_64-apple-darwin
+
+      - name: Create universal binary
+        run: |
+          mkdir -p target/universal
+          lipo -create \
+            target/aarch64-apple-darwin/release/brocolis-gui \
+            target/x86_64-apple-darwin/release/brocolis-gui \
+            -output target/universal/brocolis-gui
+          lipo -info target/universal/brocolis-gui
+
+      - name: Assemble Brocolis.app
+        run: |
+          VERSION=$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')
+          bash scripts/build-macos-app.sh target/universal/brocolis-gui dist "${VERSION}"
+
+      - name: Create DMG
+        run: |
+          hdiutil create -volname Brocolis \
+            -srcfolder dist/Brocolis.app \
+            -ov -format UDZO dist/Brocolis.dmg
+
+      - name: Upload app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: Brocolis-macos-app
+          path: dist/Brocolis.app
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: Brocolis-macos-dmg
+          path: dist/Brocolis.dmg

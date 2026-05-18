@@ -6,6 +6,16 @@ description = "Proxy MITM Rust pour le chiffrement sélectif du trafic HTTP/HTTP
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+# Métadonnées de bundle macOS (utilisées par `cargo bundle` et par
+# scripts/build-macos-app.sh). L'app de bureau cible macOS.
+[package.metadata.bundle]
+name = "Brocolis"
+identifier = "com.maxlestage.brocolis"
+category = "public.app-category.utilities"
+short_description = "Proxy MITM de chiffrement sélectif"
+long_description = "Brocolis chiffre sélectivement le trafic HTTP/HTTPS désigné via un proxy MITM local."
+osx_minimum_system_version = "11.0"
+
 [lib]
 name = "brocolis"
 path = "src/lib.rs"
