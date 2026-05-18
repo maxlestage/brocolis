@@ -1,0 +1,24 @@
+# Exemple de configuration Brocolis.
+# Copiez ce fichier en `brocolis.toml` puis adaptez-le.
+#
+#   cp brocolis.example.toml brocolis.toml
+#   brocolis keygen            # génère une clé à coller dans `key`
+#   brocolis ca                # génère le CA à installer dans le navigateur
+#   brocolis run               # démarre le proxy
+
+# Adresse d'écoute du proxy (HTTP et HTTPS via CONNECT).
+listen = "127.0.0.1:8080"
+
+# Certificat racine + clé privée de l'autorité interne.
+# Générés automatiquement au premier lancement s'ils n'existent pas.
+ca_cert = "brocolis-ca.crt"
+ca_key = "brocolis-ca.key"
+
+# Clé symétrique AES-256 partagée (base64, 32 octets), obtenue via
+# `brocolis keygen`. À transmettre par un canal sûr aux utilisateurs
+# autorisés. Si absente, une clé éphémère est générée au démarrage.
+# key = "REMPLACEZ_PAR_VOTRE_CLE_BASE64"
+
+# Hôtes dont le trafic doit subir le chiffrement sélectif.
+# Liste vide = tous les hôtes.
+encrypt_hosts = ["twitter.com", "x.com"]

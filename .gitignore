@@ -1,2 +1,8 @@
 /target
 .DS_Store
+
+# Artefacts d'exécution / secrets (ne jamais committer)
+/brocolis.toml
+*-ca.crt
+*-ca.key
+brocolis-ca.*

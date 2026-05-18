@@ -2,13 +2,28 @@
 name = "brocolis"
 version = "0.1.0"
 edition = "2021"
+description = "Proxy MITM Rust pour le chiffrement sélectif du trafic HTTP/HTTPS"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-awc = "^3"
-actix-web = "^4"
-reqwest = "^0"
-rustls = "^0"
-serde_json = "^1"
-serde = { version = "^1", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+hyper = { version = "1", features = ["server", "client", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1"
+tokio-rustls = "0.26"
+rustls = "0.23"
+rustls-pemfile = "2"
+rcgen = "0.12"
+reqwest = { version = "0.12", default-features = false, features = ["default-tls"] }
+aes-gcm = "0.10"
+rand = "0.8"
+base64 = "0.22"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
+thiserror = "1"
