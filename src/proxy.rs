@@ -81,17 +81,34 @@ fn bad_gateway(msg: &str) -> Response<ResBody> {
         .expect("réponse 502 valide")
 }
 
-/// Démarre la boucle d'acceptation TCP du proxy.
+/// Démarre la boucle d'acceptation TCP du proxy (tourne indéfiniment).
 pub async fn run(state: Arc<AppState>, listen: SocketAddr) -> anyhow::Result<()> {
+    run_until(state, listen, std::future::pending::<()>()).await
+}
+
+/// Identique à [`run`], mais s'arrête proprement dès que `shutdown` se résout.
+/// Utilisé par l'interface graphique pour le bouton « Stop ».
+pub async fn run_until(
+    state: Arc<AppState>,
+    listen: SocketAddr,
+    shutdown: impl std::future::Future<Output = ()>,
+) -> anyhow::Result<()> {
     let listener = TcpListener::bind(listen).await?;
     tracing::info!("Brocolis écoute sur http://{listen} (proxy HTTP/HTTPS)");
+    tokio::pin!(shutdown);
     loop {
-        let (stream, peer) = match listener.accept().await {
-            Ok(v) => v,
-            Err(e) => {
-                tracing::warn!("accept a échoué: {e}");
-                continue;
+        let (stream, peer) = tokio::select! {
+            _ = &mut shutdown => {
+                tracing::info!("Arrêt du proxy demandé");
+                return Ok(());
             }
+            accepted = listener.accept() => match accepted {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::warn!("accept a échoué: {e}");
+                    continue;
+                }
+            },
         };
         let state = state.clone();
         tokio::spawn(async move {

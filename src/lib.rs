@@ -1,0 +1,66 @@
+//! Brocolis 🥦 — bibliothèque du proxy MITM de chiffrement sélectif.
+//!
+//! Le cœur est exposé sous forme de bibliothèque pour être réutilisé par
+//! plusieurs frontends : la CLI (`src/main.rs`) et l'application de bureau
+//! (`src/bin/brocolis-gui.rs`).
+
+pub mod ca;
+pub mod config;
+pub mod crypto;
+pub mod keys;
+pub mod proxy;
+
+use std::sync::Arc;
+use std::time::Duration;
+
+pub use config::Config;
+pub use crypto::SymKey;
+pub use keys::KeyManager;
+pub use proxy::{AppState, run, run_until};
+
+/// Construit l'état applicatif (CA, gestionnaire de clés, client HTTP) à
+/// partir d'une configuration. Renvoie aussi un handle vers le gestionnaire de
+/// clés pour permettre la rotation/recharge depuis un frontend.
+pub fn build_app_state(cfg: Config) -> anyhow::Result<(Arc<AppState>, Arc<KeyManager>)> {
+    // Le fournisseur cryptographique rustls doit être installé AVANT la
+    // construction du client reqwest.
+    ca::ensure_crypto_provider();
+
+    let ca = Arc::new(ca::Ca::load_or_generate(&cfg.ca_cert, &cfg.ca_key)?);
+
+    let keys = Arc::new(match &cfg.key {
+        Some(b64) => KeyManager::from_base64(b64)
+            .map_err(|e| anyhow::anyhow!("clé invalide dans la configuration: {e}"))?,
+        None => {
+            let km = KeyManager::ephemeral();
+            tracing::warn!(
+                "Aucune clé configurée — clé éphémère générée: {}",
+                km.current().to_base64()
+            );
+            tracing::warn!("Le contenu chiffré ne sera lisible que durant cette session.");
+            km
+        }
+    });
+
+    let http = reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(60))
+        .build()?;
+
+    if cfg.encrypt_hosts.is_empty() {
+        tracing::info!("Portée: tous les hôtes");
+    } else {
+        tracing::info!("Portée: {:?}", cfg.encrypt_hosts);
+    }
+
+    let keys_handle = keys.clone();
+    let state = Arc::new(AppState {
+        ca,
+        keys,
+        cfg: Arc::new(cfg),
+        http,
+    });
+    Ok((state, keys_handle))
+}
