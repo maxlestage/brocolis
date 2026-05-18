@@ -141,18 +141,8 @@ L'architecture interne comprend :
 ## Architecture du code
 
 Le cœur est une **bibliothèque** Rust (`src/lib.rs` : modules `ca`, `config`,
-`crypto`, `keys`, `proxy`) réutilisée par deux frontends :
-
-| Cible | Binaire | Plateformes |
-|-------|---------|-------------|
-| Ligne de commande | `brocolis` | Linux / macOS / Windows |
-| Application de bureau (eframe/egui) | `brocolis-gui` | Linux / macOS / Windows |
-
-> Note mobile : un vrai proxy MITM système n'est pas réalisable comme app
-> iOS/Android classique (Network Extension/VPN requis, CA utilisateur non
-> approuvé par défaut, restrictions des stores). Une app mobile ne peut être
-> qu'un *compagnon* (gestion de clés, export du CA, configuration d'un proxy
-> distant), pas l'interception elle-même.
+`crypto`, `keys`, `proxy`, `system`) exposée via un unique frontend, la
+**ligne de commande** `brocolis` (Linux / macOS / Windows).
 
 ## Installation
 
@@ -161,9 +151,7 @@ Pré-requis : Rust stable récent.
 ```
 git clone https://github.com/maxlestage/brocolis
 cd brocolis
-
-cargo build --release                              # CLI
-cargo build --release --features gui --bin brocolis-gui   # interface graphique
+cargo build --release      # binaire: target/release/brocolis
 ```
 
 ## Utilisation (CLI)
@@ -178,11 +166,18 @@ initial à l'arrêt** (Ctrl-C) :
 $ sudo brocolis auto --config brocolis.toml
 ```
 
-Sur macOS, `sudo` est nécessaire car modifier le trousseau et le proxy
-système exige les droits administrateur (frontière de sécurité macOS, une
-seule invite). `--no-system` se contente de lancer le proxy sans rien
-modifier. Sur les autres OS, `auto` lance le proxy et signale que la
-configuration système automatique n'est pas encore prise en charge.
+Prise en charge de la configuration système automatique :
+
+| OS | Confiance du CA | Proxy système |
+|----|-----------------|---------------|
+| macOS | trousseau Système (`security`) | `networksetup` web + HTTPS |
+| Linux | magasin système (`update-ca-certificates` / `update-ca-trust`) | proxy GNOME (`gsettings`) |
+| Autres | — | — (proxy à pointer manuellement) |
+
+`sudo` est requis pour écrire dans le magasin de certificats du système
+(frontière de sécurité de l'OS, une seule invite). Le proxy GNOME est réglé
+par utilisateur, sans root. Tout est **restauré à l'arrêt** (Ctrl-C).
+`--no-system` lance le proxy sans rien modifier.
 
 ### Commandes de base
 
@@ -213,38 +208,14 @@ Sur Unix, la gestion des clés se pilote par signaux : `SIGHUP` régénère la c
 (rotation en cas de compromission), `SIGUSR1` recharge la clé partagée depuis
 le fichier de configuration.
 
-## Utilisation (interface graphique)
-
-```
-$ cargo run --release --features gui --bin brocolis-gui
-```
-
-La fenêtre permet de configurer l'adresse d'écoute, les hôtes ciblés et la
-clé (génération/copie), de générer/exporter le CA, de démarrer/arrêter le
-proxy et de suivre le journal en direct.
-
-### Application macOS (Brocolis.app)
+## Binaires précompilés
 
 **Aucune manipulation requise.** À chaque push sur `master`, le workflow
-`.github/workflows/macos-desktop.yml` s'exécute sur un runner macOS,
-produit un binaire **universel** (Intel + Apple Silicon via `lipo`),
-assemble `Brocolis.app`, génère un `.dmg` et publie/actualise
-automatiquement une **release GitHub `desktop-latest`**. Il suffit donc
-de télécharger `Brocolis.dmg` depuis l'onglet *Releases* — rien d'autre.
-
-Un tag `v*` (ex. `v0.2.0`) produit en plus une release versionnée.
-
-> Binaire non notarisé (la notarisation exige un certificat Apple
-> Developer payant) : au tout premier lancement, faire un clic droit sur
-> l'app → *Ouvrir*. C'est une protection imposée par macOS.
-
-Build local (sur macOS uniquement, le SDK Apple est requis) :
-
-```
-cargo build --release --features gui --bin brocolis-gui
-bash scripts/build-macos-app.sh target/release/brocolis-gui dist 0.1.0
-# -> dist/Brocolis.app
-```
+`.github/workflows/cli-release.yml` compile le binaire `brocolis` pour
+Linux (x86_64) et macOS (universel Intel + Apple Silicon) et publie/actualise
+automatiquement la release GitHub **`cli-latest`**. Il suffit de télécharger
+l'archive depuis l'onglet *Releases*. Un tag `v*` produit en plus une
+release versionnée.
 
 ## Chiffrement sélectif
 
