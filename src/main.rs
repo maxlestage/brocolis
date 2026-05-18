@@ -50,6 +50,31 @@ enum Command {
         #[arg(long = "encrypt-host")]
         encrypt_host: Vec<String>,
     },
+    /// Tout-en-un : approuve le CA, règle le proxy système, démarre le
+    /// proxy, et restaure l'état initial à l'arrêt (macOS : `sudo` requis).
+    Auto {
+        /// Fichier de configuration TOML.
+        #[arg(long, default_value = "brocolis.toml")]
+        config: PathBuf,
+        /// Adresse d'écoute (surcharge la config).
+        #[arg(long)]
+        listen: Option<SocketAddr>,
+        /// Clé symétrique base64 (surcharge la config).
+        #[arg(long)]
+        key: Option<String>,
+        /// Chemin du certificat CA (surcharge la config).
+        #[arg(long)]
+        ca_cert: Option<PathBuf>,
+        /// Chemin de la clé CA (surcharge la config).
+        #[arg(long)]
+        ca_key: Option<PathBuf>,
+        /// Hôtes à traiter (répétable ; surcharge la config).
+        #[arg(long = "encrypt-host")]
+        encrypt_host: Vec<String>,
+        /// Ne pas toucher au système (équivaut à `run`).
+        #[arg(long)]
+        no_system: bool,
+    },
     /// Génère une nouvelle clé symétrique AES-256 (base64) à partager.
     Keygen,
     /// Génère/charge le CA et l'exporte pour le navigateur.
@@ -124,6 +149,33 @@ fn main() -> anyhow::Result<()> {
             }
             run_proxy(cfg, config)
         }
+        Command::Auto {
+            config,
+            listen,
+            key,
+            ca_cert,
+            ca_key,
+            encrypt_host,
+            no_system,
+        } => {
+            let mut cfg = Config::load(&config)?;
+            if let Some(l) = listen {
+                cfg.listen = l;
+            }
+            if let Some(c) = ca_cert {
+                cfg.ca_cert = c;
+            }
+            if let Some(k) = ca_key {
+                cfg.ca_key = k;
+            }
+            if key.is_some() {
+                cfg.key = key;
+            }
+            if !encrypt_host.is_empty() {
+                cfg.encrypt_hosts = encrypt_host;
+            }
+            run_auto(cfg, config, !no_system)
+        }
     }
 }
 
@@ -180,4 +232,51 @@ async fn run_proxy(cfg: Config, config_path: PathBuf) -> anyhow::Result<()> {
     let _ = (keys, config_path);
 
     brocolis::proxy::run(state, listen).await
+}
+
+/// Future qui se résout au premier `Ctrl-C` / `SIGTERM`.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut int = signal(SignalKind::interrupt()).expect("SIGINT");
+        let mut term = signal(SignalKind::terminate()).expect("SIGTERM");
+        tokio::select! {
+            _ = int.recv() => {}
+            _ = term.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
+}
+
+/// Commande tout-en-un : configure le système, démarre le proxy, et restaure
+/// l'état initial à l'arrêt (Ctrl-C).
+#[tokio::main]
+async fn run_auto(cfg: Config, config_path: PathBuf, system: bool) -> anyhow::Result<()> {
+    let listen = cfg.listen;
+    let port = listen.port();
+    let ca_cert = cfg.ca_cert.clone();
+    let (state, keys) = brocolis::build_app_state(cfg)?;
+
+    #[cfg(unix)]
+    spawn_key_signal_handlers(keys.clone(), config_path);
+    #[cfg(not(unix))]
+    let _ = (keys, config_path);
+
+    let sys = if system {
+        brocolis::system::SystemProxy::engage(&ca_cert, port)?
+    } else {
+        None
+    };
+
+    tracing::info!("Ctrl-C pour arrêter et restaurer la configuration");
+    let result = brocolis::proxy::run_until(state, listen, shutdown_signal()).await;
+
+    if let Some(sys) = sys {
+        sys.revert();
+    }
+    result
 }
