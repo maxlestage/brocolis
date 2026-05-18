@@ -1,29 +1,24 @@
-//! Brocolis 🥦 — proxy MITM Rust pour le chiffrement sélectif du trafic.
+//! Brocolis 🥦 — interface en ligne de commande.
 //!
 //! Sous-commandes :
 //! - `brocolis run`    : démarre le proxy.
 //! - `brocolis keygen` : génère une clé symétrique AES-256 partageable.
 //! - `brocolis ca`     : génère/exporte le certificat racine à installer dans
 //!   le navigateur.
-
-mod ca;
-mod config;
-mod crypto;
-mod keys;
-mod proxy;
+//!
+//! L'interface graphique équivalente est `brocolis-gui`
+//! (`cargo run --features gui --bin brocolis-gui`).
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 
 use clap::{Parser, Subcommand};
 
-use crate::ca::Ca;
-use crate::config::Config;
-use crate::crypto::SymKey;
-use crate::keys::KeyManager;
-use crate::proxy::AppState;
+use brocolis::ca::Ca;
+use brocolis::config::Config;
+use brocolis::crypto::SymKey;
+use brocolis::keys::KeyManager;
 
 #[derive(Parser)]
 #[command(name = "brocolis", version, about = "Proxy MITM de chiffrement sélectif")]
@@ -82,9 +77,7 @@ fn main() -> anyhow::Result<()> {
         Command::Keygen => {
             let key = SymKey::generate();
             println!("{}", key.to_base64());
-            println!(
-                "# Partagez cette clé (canal sûr) avec les utilisateurs autorisés,"
-            );
+            println!("# Partagez cette clé (canal sûr) avec les utilisateurs autorisés,");
             println!("# puis placez-la dans brocolis.toml (champ `key`).");
             Ok(())
         }
@@ -98,11 +91,7 @@ fn main() -> anyhow::Result<()> {
                 std::fs::write(&path, ca.root_cert_pem())?;
                 println!("Certificat racine exporté: {}", path.display());
             }
-            println!(
-                "CA prêt: {} / {}",
-                ca_cert.display(),
-                ca_key.display()
-            );
+            println!("CA prêt: {} / {}", ca_cert.display(), ca_key.display());
             println!(
                 "Installez {} comme autorité de confiance dans votre navigateur.",
                 ca_cert.display()
@@ -182,51 +171,13 @@ fn spawn_key_signal_handlers(keys: Arc<KeyManager>, config_path: PathBuf) {
 
 #[tokio::main]
 async fn run_proxy(cfg: Config, config_path: PathBuf) -> anyhow::Result<()> {
-    // Installe le fournisseur cryptographique rustls AVANT de construire le
-    // client reqwest (sinon son magasin de racines TLS n'est pas configuré).
-    ca::ensure_crypto_provider();
-
-    let ca = Arc::new(Ca::load_or_generate(&cfg.ca_cert, &cfg.ca_key)?);
-
-    let keys = Arc::new(match &cfg.key {
-        Some(b64) => KeyManager::from_base64(b64)
-            .map_err(|e| anyhow::anyhow!("clé invalide dans la configuration: {e}"))?,
-        None => {
-            let km = KeyManager::ephemeral();
-            tracing::warn!(
-                "Aucune clé configurée — clé éphémère générée: {}",
-                km.current().to_base64()
-            );
-            tracing::warn!(
-                "Le contenu chiffré ne sera lisible que durant cette session."
-            );
-            km
-        }
-    });
-
-    let http = reqwest::Client::builder()
-        .no_proxy()
-        .redirect(reqwest::redirect::Policy::none())
-        .connect_timeout(Duration::from_secs(15))
-        .timeout(Duration::from_secs(60))
-        .build()?;
+    let listen = cfg.listen;
+    let (state, keys) = brocolis::build_app_state(cfg)?;
 
     #[cfg(unix)]
     spawn_key_signal_handlers(keys.clone(), config_path);
+    #[cfg(not(unix))]
+    let _ = (keys, config_path);
 
-    if cfg.encrypt_hosts.is_empty() {
-        tracing::info!("Portée: tous les hôtes");
-    } else {
-        tracing::info!("Portée: {:?}", cfg.encrypt_hosts);
-    }
-
-    let listen = cfg.listen;
-    let state = Arc::new(AppState {
-        ca,
-        keys,
-        cfg: Arc::new(cfg),
-        http,
-    });
-
-    proxy::run(state, listen).await
+    brocolis::proxy::run(state, listen).await
 }
