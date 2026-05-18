@@ -207,18 +207,26 @@ proxy et de suivre le journal en direct.
 
 ### Application macOS (Brocolis.app)
 
-Le bundle macOS se construit **sur macOS** (le SDK Apple est requis) :
+**Aucune manipulation requise.** À chaque push sur `master`, le workflow
+`.github/workflows/macos-desktop.yml` s'exécute sur un runner macOS,
+produit un binaire **universel** (Intel + Apple Silicon via `lipo`),
+assemble `Brocolis.app`, génère un `.dmg` et publie/actualise
+automatiquement une **release GitHub `desktop-latest`**. Il suffit donc
+de télécharger `Brocolis.dmg` depuis l'onglet *Releases* — rien d'autre.
+
+Un tag `v*` (ex. `v0.2.0`) produit en plus une release versionnée.
+
+> Binaire non notarisé (la notarisation exige un certificat Apple
+> Developer payant) : au tout premier lancement, faire un clic droit sur
+> l'app → *Ouvrir*. C'est une protection imposée par macOS.
+
+Build local (sur macOS uniquement, le SDK Apple est requis) :
 
 ```
 cargo build --release --features gui --bin brocolis-gui
 bash scripts/build-macos-app.sh target/release/brocolis-gui dist 0.1.0
 # -> dist/Brocolis.app
 ```
-
-Le workflow CI `.github/workflows/macos-desktop.yml` automatise tout sur un
-runner macOS : binaire **universel** (Intel + Apple Silicon via `lipo`),
-assemblage de `Brocolis.app` et génération d'un `.dmg`, publiés en artefacts.
-Le déclencher manuellement (« Run workflow ») ou pousser un tag `v*`.
 
 ## Chiffrement sélectif
 

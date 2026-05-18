@@ -1,16 +1,21 @@
 name: macOS desktop
 
 # Construit l'application de bureau macOS (binaire universel Intel + Apple
-# Silicon), assemble Brocolis.app et un .dmg, et les publie en artefacts.
+# Silicon), assemble Brocolis.app + un .dmg, et publie automatiquement une
+# release GitHub téléchargeable — sans aucune action manuelle.
 # Doit tourner sur un runner macOS (le SDK Apple est indispensable).
 
 on:
-  workflow_dispatch:
   push:
     branches:
+      - master
       - claude/rust-mitm-proxy-JHKLR
     tags:
       - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build-macos:
@@ -53,20 +58,46 @@ jobs:
           VERSION=$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')
           bash scripts/build-macos-app.sh target/universal/brocolis-gui dist "${VERSION}"
 
-      - name: Create DMG
+      - name: Ad-hoc codesign
+        run: codesign --force --deep --sign - dist/Brocolis.app
+
+      - name: Package .app (zip) and .dmg
         run: |
+          ditto -c -k --sequesterRsrc --keepParent dist/Brocolis.app dist/Brocolis-app.zip
           hdiutil create -volname Brocolis \
             -srcfolder dist/Brocolis.app \
             -ov -format UDZO dist/Brocolis.dmg
 
-      - name: Upload app bundle
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Brocolis-macos-app
-          path: dist/Brocolis.app
+          name: Brocolis-macos
+          path: |
+            dist/Brocolis-app.zip
+            dist/Brocolis.dmg
 
-      - name: Upload DMG
-        uses: actions/upload-artifact@v4
-        with:
-          name: Brocolis-macos-dmg
-          path: dist/Brocolis.dmg
+      # Release "roulante" mise à jour à chaque push (master / branche de dev) :
+      # téléchargeable directement depuis l'onglet Releases, sans manipulation.
+      - name: Publish rolling release
+        if: github.ref_type == 'branch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete desktop-latest --yes --cleanup-tag || true
+          gh release create desktop-latest \
+            dist/Brocolis.dmg dist/Brocolis-app.zip \
+            --target "${GITHUB_SHA}" \
+            --title "Brocolis desktop (dernier ${GITHUB_REF_NAME})" \
+            --notes "Build automatique du dernier ${GITHUB_REF_NAME}. Binaire universel non notarisé : au 1er lancement, clic droit → Ouvrir." \
+            --prerelease
+
+      # Release versionnée sur tag v* (ex. v0.2.0).
+      - name: Publish tagged release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/Brocolis.dmg dist/Brocolis-app.zip \
+            --title "Brocolis ${GITHUB_REF_NAME}" \
+            --notes "Release ${GITHUB_REF_NAME}. Binaire universel macOS non notarisé."
