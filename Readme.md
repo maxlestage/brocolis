@@ -138,37 +138,80 @@ L'architecture interne comprend :
 - Gestionnaire des clés en mémoire
 - Proxy MITM implémenté en Rust/Actix/Reqwest
 
+## Architecture du code
+
+Le cœur est une **bibliothèque** Rust (`src/lib.rs` : modules `ca`, `config`,
+`crypto`, `keys`, `proxy`) réutilisée par deux frontends :
+
+| Cible | Binaire | Plateformes |
+|-------|---------|-------------|
+| Ligne de commande | `brocolis` | Linux / macOS / Windows |
+| Application de bureau (eframe/egui) | `brocolis-gui` | Linux / macOS / Windows |
+
+> Note mobile : un vrai proxy MITM système n'est pas réalisable comme app
+> iOS/Android classique (Network Extension/VPN requis, CA utilisateur non
+> approuvé par défaut, restrictions des stores). Une app mobile ne peut être
+> qu'un *compagnon* (gestion de clés, export du CA, configuration d'un proxy
+> distant), pas l'interception elle-même.
+
 ## Installation
 
-Pré-requis : Rust 1.58+
+Pré-requis : Rust stable récent.
 
 ```
-git clone https://github.com/brocolis/brocolis
+git clone https://github.com/maxlestage/brocolis
 cd brocolis
-cargo build --release
+
+cargo build --release                              # CLI
+cargo build --release --features gui --bin brocolis-gui   # interface graphique
 ```
 
-## Utilisation
+## Utilisation (CLI)
 
-Générer une nouvelle clé :
-
-```
-$ brocolis generate-key
-Généré la clé 486f9735524b52506e5948724938625a
-```
-
-Partager cette clé avec un ami pour chiffrer vos conversations.
-
-Lancer le proxy :
+Générer une clé symétrique AES-256 à partager (canal sûr) :
 
 ```
-$ brocolis proxy
-Proxy MITM démarré sur le port 8080
+$ brocolis keygen
+SomopQcHJyVQQAWedZFGY5E4+hxKjZemOB7aGnYr6kw=
 ```
 
-Configurer votre navigateur pour utiliser le proxy sur le port 8080.
+Générer le certificat racine et l'installer comme autorité de confiance dans
+le navigateur (nécessaire pour l'interception HTTPS) :
 
-Le trafic désigné comme devant être chiffré le sera automatiquement avec vos clés !
+```
+$ brocolis ca --export brocolis-ca.crt
+```
+
+Lancer le proxy (place la clé dans `brocolis.toml`, cf. `brocolis.example.toml`) :
+
+```
+$ brocolis run --config brocolis.toml
+Brocolis écoute sur http://127.0.0.1:8080 (proxy HTTP/HTTPS)
+```
+
+Configurer le navigateur pour utiliser le proxy HTTP/HTTPS sur ce port.
+
+Sur Unix, la gestion des clés se pilote par signaux : `SIGHUP` régénère la clé
+(rotation en cas de compromission), `SIGUSR1` recharge la clé partagée depuis
+le fichier de configuration.
+
+## Utilisation (interface graphique)
+
+```
+$ cargo run --release --features gui --bin brocolis-gui
+```
+
+La fenêtre permet de configurer l'adresse d'écoute, les hôtes ciblés et la
+clé (génération/copie), de générer/exporter le CA, de démarrer/arrêter le
+proxy et de suivre le journal en direct.
+
+## Chiffrement sélectif
+
+Seul le contenu **explicitement marqué** est chiffré : tout segment
+`((texte secret))` d'une requête est remplacé par un jeton
+`[[BROCOLIS:v1:…]]` (AES-256-GCM) ; les jetons reçus dans les réponses sont
+déchiffrés à la volée. Le service distant ne stocke donc que du chiffré, alors
+que les utilisateurs partageant la clé voient le texte en clair.
 
 # Organisation du code avec Git
 
