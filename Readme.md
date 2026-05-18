@@ -168,6 +168,24 @@ cargo build --release --features gui --bin brocolis-gui   # interface graphique
 
 ## Utilisation (CLI)
 
+### Tout-en-un : `brocolis auto`
+
+La façon la plus simple. Une seule commande approuve le CA, règle le proxy
+système sur le proxy local, démarre le chiffrement, puis **restaure l'état
+initial à l'arrêt** (Ctrl-C) :
+
+```
+$ sudo brocolis auto --config brocolis.toml
+```
+
+Sur macOS, `sudo` est nécessaire car modifier le trousseau et le proxy
+système exige les droits administrateur (frontière de sécurité macOS, une
+seule invite). `--no-system` se contente de lancer le proxy sans rien
+modifier. Sur les autres OS, `auto` lance le proxy et signale que la
+configuration système automatique n'est pas encore prise en charge.
+
+### Commandes de base
+
 Générer une clé symétrique AES-256 à partager (canal sûr) :
 
 ```
