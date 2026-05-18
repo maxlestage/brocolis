@@ -1,21 +1,25 @@
-//! Intégration système : configuration automatique du proxy et de la
+//! Intégration système macOS : configuration automatique du proxy et de la
 //! confiance du certificat racine, restaurée à l'arrêt.
 //!
-//! - **macOS** : trousseau Système (`security`) + proxy web/HTTPS
-//!   (`networksetup`). Nécessite les droits administrateur (`sudo`).
-//! - **Linux** : magasin de certificats système
-//!   (`update-ca-certificates` / `update-ca-trust`, nécessite root) +
-//!   proxy GNOME (`gsettings`, par utilisateur, sans root).
-//! - **Autres OS** : non pris en charge ; le proxy tourne, à l'utilisateur
-//!   de pointer son client dessus.
+//! `brocolis auto` (macOS) :
+//! 1. ajoute le CA au **trousseau Système** (`security add-trusted-cert`),
+//! 2. règle le **proxy web et HTTPS système** sur `127.0.0.1:<port>`
+//!    (`networksetup`),
+//! 3. restaure l'état initial à l'arrêt (Ctrl-C / SIGTERM).
 //!
-//! Ces opérations modifient l'état système : c'est une frontière de sécurité
-//! imposée par l'OS, non contournable.
+//! Les étapes 1 et 2 modifient l'état du système et exigent donc les droits
+//! administrateur : il faut lancer `sudo brocolis auto`. macOS impose une
+//! seule invite de mot de passe — c'est une frontière de sécurité de l'OS,
+//! non contournable.
+//!
+//! Sur les autres systèmes d'exploitation, la configuration système
+//! automatique n'est pas prise en charge : le proxy démarre quand même, mais
+//! c'est à l'utilisateur de pointer son client dessus.
 
 #[allow(unused_imports)]
 use std::path::Path;
 
-/// État d'un proxy `networksetup` (macOS).
+/// État d'un proxy `networksetup` (web ou sécurisé).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProxyState {
     pub enabled: bool,
@@ -24,6 +28,14 @@ pub struct ProxyState {
 }
 
 /// Analyse la sortie de `networksetup -getwebproxy "<service>"`.
+///
+/// Exemple :
+/// ```text
+/// Enabled: No
+/// Server:
+/// Port: 0
+/// Authenticated Proxy Enabled: 0
+/// ```
 pub fn parse_getproxy(out: &str) -> ProxyState {
     let mut enabled = false;
     let mut server = String::new();
@@ -47,45 +59,11 @@ pub fn parse_getproxy(out: &str) -> ProxyState {
     }
 }
 
-/// Retire d'éventuelles apostrophes englobantes (`gsettings get` renvoie
-/// `'manual'`, `'127.0.0.1'`, ...). Les entiers sont laissés tels quels.
-pub fn gsettings_unquote(s: &str) -> String {
-    let t = s.trim();
-    if t.len() >= 2 && t.starts_with('\'') && t.ends_with('\'') {
-        t[1..t.len() - 1].to_string()
-    } else {
-        t.to_string()
-    }
-}
-
-#[cfg(unix)]
-fn is_root() -> bool {
-    // SAFETY: getuid() est sans effet de bord et toujours sûr.
-    unsafe { c_getuid() == 0 }
-}
-
-#[cfg(unix)]
-extern "C" {
-    #[link_name = "getuid"]
-    fn c_getuid() -> u32;
-}
-
-#[cfg(unix)]
-fn in_path(cmd: &str) -> bool {
-    std::env::var_os("PATH")
-        .map(|paths| {
-            std::env::split_paths(&paths).any(|dir| {
-                let p = dir.join(cmd);
-                p.is_file()
-            })
-        })
-        .unwrap_or(false)
-}
-
-/// Configuration système active, restaurée à la destruction logique
-/// (`revert`). [`SystemProxy::engage`] renvoie `Ok(None)` si rien n'a été
-/// modifié (OS non pris en charge, outils absents, droits insuffisants).
+/// Configuration système active, restaurée par [`SystemProxy::revert`].
+/// [`SystemProxy::engage`] renvoie `Ok(None)` si rien n'a été modifié (OS non
+/// macOS, ou droits administrateur absents).
 pub struct SystemProxy {
+    #[allow(dead_code)]
     backend: Backend,
 }
 
@@ -98,21 +76,23 @@ enum Backend {
         saved_web: ProxyState,
         saved_secure: ProxyState,
     },
-    #[cfg(target_os = "linux")]
-    Linux {
-        gnome: Option<linux::GnomeBackup>,
-        ca_path: Option<std::path::PathBuf>,
-    },
 }
 
-// ---------------------------------------------------------------------------
-// macOS
-// ---------------------------------------------------------------------------
 #[cfg(target_os = "macos")]
 mod macos {
-    use super::{is_root, parse_getproxy, Backend, ProxyState, SystemProxy};
+    use super::{parse_getproxy, Backend, ProxyState, SystemProxy};
     use std::path::Path;
     use std::process::Command;
+
+    fn is_root() -> bool {
+        // SAFETY: getuid() est sans effet de bord et toujours sûr.
+        unsafe { c_getuid() == 0 }
+    }
+
+    extern "C" {
+        #[link_name = "getuid"]
+        fn c_getuid() -> u32;
+    }
 
     fn ns(args: &[&str]) -> anyhow::Result<String> {
         let out = Command::new("networksetup").args(args).output()?;
@@ -137,7 +117,11 @@ mod macos {
     }
 
     fn get(service: &str, secure: bool) -> anyhow::Result<ProxyState> {
-        let cmd = if secure { "-getsecurewebproxy" } else { "-getwebproxy" };
+        let cmd = if secure {
+            "-getsecurewebproxy"
+        } else {
+            "-getwebproxy"
+        };
         Ok(parse_getproxy(&ns(&[cmd, service])?))
     }
 
@@ -224,173 +208,20 @@ mod macos {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Linux (proxy GNOME + magasin de certificats système)
-// ---------------------------------------------------------------------------
-#[cfg(target_os = "linux")]
-mod linux {
-    use super::{gsettings_unquote, in_path, is_root, Backend, SystemProxy};
-    use std::path::{Path, PathBuf};
-    use std::process::Command;
-
-    const SCHEMA: &str = "org.gnome.system.proxy";
-
-    #[derive(Debug, Clone)]
-    pub struct GnomeBackup {
-        mode: String,
-        http_host: String,
-        http_port: String,
-        https_host: String,
-        https_port: String,
-    }
-
-    fn gs_get(schema: &str, key: &str) -> Option<String> {
-        let out = Command::new("gsettings").args(["get", schema, key]).output().ok()?;
-        if !out.status.success() {
-            return None;
-        }
-        Some(gsettings_unquote(&String::from_utf8_lossy(&out.stdout)))
-    }
-
-    fn gs_set(schema: &str, key: &str, value: &str) -> anyhow::Result<()> {
-        let out = Command::new("gsettings")
-            .args(["set", schema, key, value])
-            .output()?;
-        if !out.status.success() {
-            anyhow::bail!(
-                "gsettings set {schema} {key}: {}",
-                String::from_utf8_lossy(&out.stderr).trim()
-            );
-        }
-        Ok(())
-    }
-
-    fn gnome_available() -> bool {
-        in_path("gsettings") && gs_get(SCHEMA, "mode").is_some()
-    }
-
-    fn save() -> Option<GnomeBackup> {
-        Some(GnomeBackup {
-            mode: gs_get(SCHEMA, "mode")?,
-            http_host: gs_get(&format!("{SCHEMA}.http"), "host").unwrap_or_default(),
-            http_port: gs_get(&format!("{SCHEMA}.http"), "port").unwrap_or_else(|| "0".into()),
-            https_host: gs_get(&format!("{SCHEMA}.https"), "host").unwrap_or_default(),
-            https_port: gs_get(&format!("{SCHEMA}.https"), "port").unwrap_or_else(|| "0".into()),
-        })
-    }
-
-    fn apply(port: u16) -> anyhow::Result<()> {
-        let p = port.to_string();
-        gs_set(&format!("{SCHEMA}.http"), "host", "127.0.0.1")?;
-        gs_set(&format!("{SCHEMA}.http"), "port", &p)?;
-        gs_set(&format!("{SCHEMA}.https"), "host", "127.0.0.1")?;
-        gs_set(&format!("{SCHEMA}.https"), "port", &p)?;
-        gs_set(SCHEMA, "mode", "manual")?;
-        Ok(())
-    }
-
-    pub(super) fn restore(b: &GnomeBackup) {
-        let _ = gs_set(&format!("{SCHEMA}.http"), "host", &b.http_host);
-        let _ = gs_set(&format!("{SCHEMA}.http"), "port", &b.http_port);
-        let _ = gs_set(&format!("{SCHEMA}.https"), "host", &b.https_host);
-        let _ = gs_set(&format!("{SCHEMA}.https"), "port", &b.https_port);
-        let _ = gs_set(SCHEMA, "mode", &b.mode);
-        tracing::info!("Proxy GNOME restauré");
-    }
-
-    /// Renvoie (chemin du fichier installé, commande de mise à jour).
-    fn trust_layout() -> Option<(PathBuf, &'static str)> {
-        if in_path("update-ca-certificates") {
-            Some((
-                PathBuf::from("/usr/local/share/ca-certificates/brocolis.crt"),
-                "update-ca-certificates",
-            ))
-        } else if in_path("update-ca-trust") {
-            Some((
-                PathBuf::from("/etc/pki/ca-trust/source/anchors/brocolis.crt"),
-                "update-ca-trust",
-            ))
-        } else {
-            None
-        }
-    }
-
-    fn trust_ca(cert: &Path) -> anyhow::Result<Option<PathBuf>> {
-        if !is_root() {
-            tracing::warn!(
-                "CA non installé dans le magasin système (root requis : \
-                 `sudo brocolis auto`)."
-            );
-            return Ok(None);
-        }
-        let (dest, tool) = match trust_layout() {
-            Some(v) => v,
-            None => {
-                tracing::warn!("aucun outil de magasin de certificats détecté");
-                return Ok(None);
-            }
-        };
-        std::fs::copy(cert, &dest)?;
-        let st = Command::new(tool).status()?;
-        if !st.success() {
-            tracing::warn!("{tool} a renvoyé une erreur");
-        } else {
-            tracing::info!("CA approuvé dans le magasin système ({tool})");
-        }
-        Ok(Some(dest))
-    }
-
-    pub(super) fn untrust_ca(path: &Path) {
-        let _ = std::fs::remove_file(path);
-        let tool = if in_path("update-ca-certificates") {
-            "update-ca-certificates"
-        } else {
-            "update-ca-trust"
-        };
-        let _ = Command::new(tool).status();
-        tracing::info!("CA retiré du magasin système");
-    }
-
-    pub(super) fn engage(ca_cert: &Path, port: u16) -> anyhow::Result<Option<SystemProxy>> {
-        let gnome = if gnome_available() {
-            let backup = save();
-            apply(port)?;
-            tracing::info!("Proxy GNOME réglé sur 127.0.0.1:{port}");
-            backup
-        } else {
-            tracing::warn!(
-                "GNOME (gsettings) indisponible : configurez le proxy \
-                 manuellement (http(s)_proxy=127.0.0.1:{port})."
-            );
-            None
-        };
-        let ca_path = trust_ca(ca_cert)?;
-        if gnome.is_none() && ca_path.is_none() {
-            return Ok(None);
-        }
-        Ok(Some(SystemProxy {
-            backend: Backend::Linux { gnome, ca_path },
-        }))
-    }
-}
-
 impl SystemProxy {
-    /// Applique la configuration système. `Ok(None)` si rien n'a été modifié.
+    /// Applique la configuration système macOS. Renvoie `Ok(None)` si rien
+    /// n'a été modifié (OS non macOS, ou pas de droits administrateur).
     #[allow(unused_variables)]
     pub fn engage(ca_cert: &Path, port: u16) -> anyhow::Result<Option<Self>> {
         #[cfg(target_os = "macos")]
         {
             macos::engage(ca_cert, port)
         }
-        #[cfg(target_os = "linux")]
-        {
-            linux::engage(ca_cert, port)
-        }
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        #[cfg(not(target_os = "macos"))]
         {
             tracing::warn!(
-                "Configuration système automatique non prise en charge sur cet \
-                 OS. Pointez votre client sur le proxy manuellement."
+                "Configuration système automatique prise en charge uniquement \
+                 sur macOS. Pointez votre client sur le proxy manuellement."
             );
             Ok(None)
         }
@@ -406,15 +237,6 @@ impl SystemProxy {
                 saved_web,
                 saved_secure,
             } => macos::revert(&service, &saved_web, &saved_secure),
-            #[cfg(target_os = "linux")]
-            Backend::Linux { gnome, ca_path } => {
-                if let Some(b) = gnome {
-                    linux::restore(&b);
-                }
-                if let Some(p) = ca_path {
-                    linux::untrust_ca(&p);
-                }
-            }
         }
     }
 }
@@ -425,8 +247,9 @@ mod tests {
 
     #[test]
     fn parse_disabled_proxy() {
-        let s = parse_getproxy("Enabled: No\nServer:\nPort: 0\n");
+        let s = parse_getproxy("Enabled: No\nServer:\nPort: 0\nAuthenticated Proxy Enabled: 0\n");
         assert!(!s.enabled);
+        assert_eq!(s.server, "");
         assert_eq!(s.port, "0");
     }
 
@@ -439,22 +262,24 @@ mod tests {
     }
 
     #[test]
+    fn parse_is_case_insensitive_for_enabled() {
+        assert!(parse_getproxy("Enabled: yes\n").enabled);
+        assert!(parse_getproxy("Enabled: YES\n").enabled);
+        assert!(!parse_getproxy("Enabled: no\n").enabled);
+    }
+
+    #[test]
     fn parse_ignores_garbage_lines() {
-        let s = parse_getproxy("\n  \nEnabled:Yes\nrandom\nPort: 8080\n");
+        let s = parse_getproxy("\n  \nEnabled:Yes\nrandom line\nPort: 8080\n");
         assert!(s.enabled);
         assert_eq!(s.port, "8080");
     }
 
     #[test]
-    fn gsettings_unquote_strips_quotes() {
-        assert_eq!(gsettings_unquote("'manual'"), "manual");
-        assert_eq!(gsettings_unquote("  '127.0.0.1' \n"), "127.0.0.1");
-    }
-
-    #[test]
-    fn gsettings_unquote_leaves_integers_and_bare() {
-        assert_eq!(gsettings_unquote("8080"), "8080");
-        assert_eq!(gsettings_unquote("none"), "none");
-        assert_eq!(gsettings_unquote("''"), "");
+    fn parse_empty_input_is_disabled() {
+        let s = parse_getproxy("");
+        assert!(!s.enabled);
+        assert_eq!(s.server, "");
+        assert_eq!(s.port, "");
     }
 }
