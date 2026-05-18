@@ -1,8 +1,8 @@
-name: CLI release
+name: macOS CLI release
 
-# Compile le binaire CLI `brocolis` pour Linux (x86_64) et macOS (universel
-# Intel + Apple Silicon) et publie automatiquement une release téléchargeable.
-# Aucune action manuelle nécessaire.
+# Compile le binaire CLI `brocolis` pour macOS (universel Intel + Apple
+# Silicon) et publie automatiquement une release téléchargeable.
+# Cible macOS uniquement. Aucune action manuelle nécessaire.
 
 on:
   push:
@@ -17,27 +17,6 @@ permissions:
   contents: write
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: linux-cargo-${{ hashFiles('Cargo.lock') }}
-      - name: Build
-        run: cargo build --release --bin brocolis
-      - name: Package
-        run: tar -czf brocolis-linux-x86_64.tar.gz -C target/release brocolis
-      - uses: actions/upload-artifact@v4
-        with:
-          name: brocolis-linux-x86_64
-          path: brocolis-linux-x86_64.tar.gz
-
   build-macos:
     runs-on: macos-14
     steps:
@@ -72,7 +51,7 @@ jobs:
           path: brocolis-macos-universal.tar.gz
 
   release:
-    needs: [build-linux, build-macos]
+    needs: [build-macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -93,8 +72,8 @@ jobs:
           gh release create cli-latest ${{ steps.collect.outputs.files }} \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${GITHUB_SHA}" \
-            --title "Brocolis CLI (dernier ${GITHUB_REF_NAME})" \
-            --notes "Build automatique du dernier ${GITHUB_REF_NAME} (Linux x86_64 + macOS universel)." \
+            --title "Brocolis CLI macOS (dernier ${GITHUB_REF_NAME})" \
+            --notes "Build automatique du dernier ${GITHUB_REF_NAME} (macOS universel Intel + Apple Silicon)." \
             --prerelease
 
       - name: Publish tagged release
@@ -105,4 +84,4 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" ${{ steps.collect.outputs.files }} \
             --repo "${GITHUB_REPOSITORY}" \
             --title "Brocolis ${GITHUB_REF_NAME}" \
-            --notes "Release ${GITHUB_REF_NAME} (Linux x86_64 + macOS universel)."
+            --notes "Release ${GITHUB_REF_NAME} (macOS universel Intel + Apple Silicon)."
