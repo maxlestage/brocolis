@@ -2,8 +2,10 @@
 //!
 //! Brocolis génère (au premier lancement) un certificat racine auto-signé,
 //! puis forge à la volée un certificat feuille par hôte, signé par ce CA.
-//! Le navigateur du client doit faire confiance au certificat racine (à
-//! installer manuellement) pour que l'interception HTTPS soit transparente.
+//! Pour que l'interception HTTPS soit transparente, le client doit faire
+//! confiance à ce certificat racine. Sur macOS, `brocolis auto` s'en charge
+//! automatiquement (trousseau Système → Safari/Chrome ; politique entreprise
+//! → Firefox) et restaure l'état initial à l'arrêt.
 
 use std::collections::HashMap;
 use std::path::Path;

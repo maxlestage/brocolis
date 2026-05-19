@@ -59,6 +59,14 @@ pub fn parse_getproxy(out: &str) -> ProxyState {
     }
 }
 
+/// Politique entreprise Firefox demandant l'import des racines du système
+/// d'exploitation (`ImportEnterpriseRoots`). Combinée à l'ajout du CA au
+/// trousseau Système, elle fait que Firefox lui fait confiance sans aucune
+/// action de l'utilisateur.
+pub fn firefox_policy_json() -> &'static str {
+    "{\n  \"policies\": {\n    \"Certificates\": {\n      \"ImportEnterpriseRoots\": true\n    }\n  }\n}\n"
+}
+
 /// Configuration système active, restaurée par [`SystemProxy::revert`].
 /// [`SystemProxy::engage`] renvoie `Ok(None)` si rien n'a été modifié (OS non
 /// macOS, ou droits administrateur absents).
@@ -75,6 +83,8 @@ enum Backend {
         service: String,
         saved_web: ProxyState,
         saved_secure: ProxyState,
+        /// Politique Firefox créée par nos soins (à retirer à l'arrêt).
+        firefox_policy: Option<std::path::PathBuf>,
     },
 }
 
@@ -174,6 +184,47 @@ mod macos {
         Ok(())
     }
 
+    /// Active la confiance du CA dans Firefox via la politique entreprise
+    /// (Firefox n'utilise pas le trousseau macOS). Renvoie le chemin du
+    /// fichier de politique *créé par nous* (à retirer à l'arrêt), ou `None`
+    /// si Firefox est absent ou si une politique existe déjà (non écrasée).
+    fn enable_firefox() -> Option<std::path::PathBuf> {
+        let app = Path::new("/Applications/Firefox.app");
+        if !app.exists() {
+            tracing::info!("Firefox non détecté : étape ignorée");
+            return None;
+        }
+        let dist = app.join("Contents/Resources/distribution");
+        let policy = dist.join("policies.json");
+        if policy.exists() {
+            tracing::warn!(
+                "Politique Firefox déjà présente ({}) : laissée intacte. \
+                 Activez-y `Certificates.ImportEnterpriseRoots` si besoin.",
+                policy.display()
+            );
+            return None;
+        }
+        if let Err(e) = std::fs::create_dir_all(&dist) {
+            tracing::warn!("Firefox: création {} impossible: {e}", dist.display());
+            return None;
+        }
+        if let Err(e) = std::fs::write(&policy, super::firefox_policy_json()) {
+            tracing::warn!("Firefox: écriture politique impossible: {e}");
+            return None;
+        }
+        tracing::info!("Firefox: confiance entreprise activée (politique créée)");
+        Some(policy)
+    }
+
+    fn disable_firefox(policy: &Path) {
+        let _ = std::fs::remove_file(policy);
+        if let Some(dir) = policy.parent() {
+            // Retire le dossier `distribution` s'il est devenu vide.
+            let _ = std::fs::remove_dir(dir);
+        }
+        tracing::info!("Firefox: politique retirée");
+    }
+
     pub(super) fn engage(ca_cert: &Path, port: u16) -> anyhow::Result<Option<SystemProxy>> {
         if !is_root() {
             tracing::warn!(
@@ -188,21 +239,31 @@ mod macos {
         set(&service, false, "127.0.0.1", port)?;
         set(&service, true, "127.0.0.1", port)?;
         tracing::info!("Proxy système réglé sur 127.0.0.1:{port} (« {service} »)");
+        let firefox_policy = enable_firefox();
         Ok(Some(SystemProxy {
             backend: Backend::MacOs {
                 service,
                 saved_web,
                 saved_secure,
+                firefox_policy,
             },
         }))
     }
 
-    pub(super) fn revert(service: &str, web: &ProxyState, secure: &ProxyState) {
+    pub(super) fn revert(
+        service: &str,
+        web: &ProxyState,
+        secure: &ProxyState,
+        firefox_policy: Option<&Path>,
+    ) {
         if let Err(e) = restore(service, false, web) {
             tracing::error!("restauration proxy web: {e}");
         }
         if let Err(e) = restore(service, true, secure) {
             tracing::error!("restauration proxy HTTPS: {e}");
+        }
+        if let Some(p) = firefox_policy {
+            disable_firefox(p);
         }
         tracing::info!("Proxy système restauré");
     }
@@ -236,7 +297,13 @@ impl SystemProxy {
                 service,
                 saved_web,
                 saved_secure,
-            } => macos::revert(&service, &saved_web, &saved_secure),
+                firefox_policy,
+            } => macos::revert(
+                &service,
+                &saved_web,
+                &saved_secure,
+                firefox_policy.as_deref(),
+            ),
         }
     }
 }
@@ -259,6 +326,22 @@ mod tests {
         assert!(s.enabled);
         assert_eq!(s.server, "10.0.0.2");
         assert_eq!(s.port, "3128");
+    }
+
+    #[test]
+    fn firefox_policy_is_well_formed() {
+        let p = firefox_policy_json();
+        assert!(p.trim_start().starts_with('{'));
+        assert!(p.trim_end().ends_with('}'));
+        assert!(p.contains("\"policies\""));
+        assert!(p.contains("\"Certificates\""));
+        assert!(p.contains("\"ImportEnterpriseRoots\""));
+        assert!(p.contains("true"));
+        // Accolades équilibrées.
+        let open = p.matches('{').count();
+        let close = p.matches('}').count();
+        assert_eq!(open, close);
+        assert!(open >= 3);
     }
 
     #[test]
