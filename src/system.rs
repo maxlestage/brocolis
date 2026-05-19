@@ -147,6 +147,8 @@ enum Backend {
         service: String,
         saved_web: ProxyState,
         saved_secure: ProxyState,
+        /// Le CA a-t-il été ajouté par nous (donc à retirer à l'arrêt) ?
+        ca_added: bool,
         /// Fichiers `policies.json` Firefox créés par nos soins (à retirer
         /// à l'arrêt), un par variante de Firefox détectée.
         firefox_policies: Vec<std::path::PathBuf>,
@@ -228,6 +230,19 @@ mod macos {
         Ok(())
     }
 
+    /// Nom commun du certificat racine (défini dans `ca.rs`, `root_params`).
+    const CA_CN: &str = "Brocolis Root CA";
+    const SYSTEM_KEYCHAIN: &str = "/Library/Keychains/System.keychain";
+
+    /// Le CA est-il déjà présent dans le trousseau Système ?
+    fn ca_present() -> bool {
+        Command::new("security")
+            .args(["find-certificate", "-c", CA_CN, SYSTEM_KEYCHAIN])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+
     fn trust_ca(cert: &Path) -> anyhow::Result<()> {
         let out = Command::new("security")
             .args([
@@ -236,7 +251,7 @@ mod macos {
                 "-r",
                 "trustRoot",
                 "-k",
-                "/Library/Keychains/System.keychain",
+                SYSTEM_KEYCHAIN,
             ])
             .arg(cert)
             .output()?;
@@ -249,6 +264,24 @@ mod macos {
             );
         }
         Ok(())
+    }
+
+    /// Retire le CA du trousseau Système (uniquement s'il a été ajouté par
+    /// nous). `security delete-certificate` exige les droits root.
+    fn untrust_ca() {
+        let out = Command::new("security")
+            .args(["delete-certificate", "-c", CA_CN, SYSTEM_KEYCHAIN])
+            .output();
+        match out {
+            Ok(o) if o.status.success() => {
+                tracing::info!("CA retiré du trousseau Système");
+            }
+            Ok(o) => tracing::warn!(
+                "retrait du CA: {}",
+                String::from_utf8_lossy(&o.stderr).trim()
+            ),
+            Err(e) => tracing::warn!("retrait du CA impossible: {e}"),
+        }
     }
 
     /// Variantes de Firefox potentiellement installées.
@@ -345,7 +378,12 @@ mod macos {
             );
             return Ok(None);
         }
+        // Ne retirer le CA à l'arrêt que si nous l'avons réellement ajouté.
+        let ca_added = !ca_present();
         trust_ca(ca_cert)?;
+        if !ca_added {
+            tracing::info!("CA déjà présent dans le trousseau : conservé à l'arrêt");
+        }
         let service = primary_service()?;
         let saved_web = get(&service, false)?;
         let saved_secure = get(&service, true)?;
@@ -359,6 +397,7 @@ mod macos {
                 service,
                 saved_web,
                 saved_secure,
+                ca_added,
                 firefox_policies,
                 mobileconfig,
             },
@@ -369,6 +408,7 @@ mod macos {
         service: &str,
         web: &ProxyState,
         secure: &ProxyState,
+        ca_added: bool,
         firefox_policies: &[std::path::PathBuf],
         mobileconfig: Option<&Path>,
     ) {
@@ -377,6 +417,9 @@ mod macos {
         }
         if let Err(e) = restore(service, true, secure) {
             tracing::error!("restauration proxy HTTPS: {e}");
+        }
+        if ca_added {
+            untrust_ca();
         }
         disable_firefox(firefox_policies, mobileconfig);
         tracing::info!("Proxy système restauré");
@@ -411,12 +454,14 @@ impl SystemProxy {
                 service,
                 saved_web,
                 saved_secure,
+                ca_added,
                 firefox_policies,
                 mobileconfig,
             } => macos::revert(
                 &service,
                 &saved_web,
                 &saved_secure,
+                ca_added,
                 &firefox_policies,
                 mobileconfig.as_deref(),
             ),
