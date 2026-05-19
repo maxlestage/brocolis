@@ -247,6 +247,22 @@ automatiquement la release GitHub **`cli-latest`**. Il suffit de
 télécharger `brocolis-macos-universal.tar.gz` depuis l'onglet
 *Releases*. Un tag `v*` produit en plus une release versionnée.
 
+## Test d'intégration macOS
+
+Le script `scripts/test-macos.sh` valide, sur une vraie machine macOS, le
+cycle complet de `brocolis auto` : ajout **puis retrait** du CA du
+trousseau Système, réglage **puis restauration** du proxy système, pose
+et retrait de la politique Firefox et du `.mobileconfig`, un vrai flux
+HTTPS au travers du proxy, et le round-trip du chiffrement sélectif.
+
+```
+bash scripts/test-macos.sh
+```
+
+Il compile la CLI, demande **une fois** le mot de passe administrateur,
+exécute les vérifications, puis **restaure l'état initial** du système.
+Il se termine avec un code non nul si une vérification échoue.
+
 ## Chiffrement sélectif
 
 Seul le contenu **explicitement marqué** est chiffré : tout segment
