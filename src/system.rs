@@ -67,6 +67,70 @@ pub fn firefox_policy_json() -> &'static str {
     "{\n  \"policies\": {\n    \"Certificates\": {\n      \"ImportEnterpriseRoots\": true\n    }\n  }\n}\n"
 }
 
+/// Profil de configuration macOS (`.mobileconfig`) — alternative qui **ne
+/// modifie pas** le bundle de Firefox.app. Il pousse les préférences gérées
+/// `EnterprisePoliciesEnabled` + `Certificates.ImportEnterpriseRoots` pour
+/// `org.mozilla.firefox`. Note : sur macOS récent, son installation via
+/// `profiles`/double-clic demande une approbation manuelle dans Réglages
+/// Système (contrainte macOS).
+pub fn firefox_mobileconfig() -> &'static str {
+    r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>PayloadType</key>
+      <string>com.apple.ManagedClient.preferences</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>PayloadIdentifier</key>
+      <string>com.maxlestage.brocolis.firefox</string>
+      <key>PayloadUUID</key>
+      <string>4F0E8A10-2C3D-4E5F-9A1B-BR0C0L15F1RE</string>
+      <key>PayloadDisplayName</key>
+      <string>Brocolis Firefox</string>
+      <key>PayloadContent</key>
+      <dict>
+        <key>org.mozilla.firefox</key>
+        <dict>
+          <key>Forced</key>
+          <array>
+            <dict>
+              <key>mcx_preference_settings</key>
+              <dict>
+                <key>EnterprisePoliciesEnabled</key>
+                <true/>
+                <key>Certificates</key>
+                <dict>
+                  <key>ImportEnterpriseRoots</key>
+                  <true/>
+                </dict>
+              </dict>
+            </dict>
+          </array>
+        </dict>
+      </dict>
+    </dict>
+  </array>
+  <key>PayloadDisplayName</key>
+  <string>Brocolis — Confiance CA Firefox</string>
+  <key>PayloadIdentifier</key>
+  <string>com.maxlestage.brocolis</string>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadUUID</key>
+  <string>1B2C3D4E-5F60-4712-8A9B-BR0C0L15C0NF</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+  <key>PayloadScope</key>
+  <string>System</string>
+</dict>
+</plist>
+"#
+}
+
 /// Configuration système active, restaurée par [`SystemProxy::revert`].
 /// [`SystemProxy::engage`] renvoie `Ok(None)` si rien n'a été modifié (OS non
 /// macOS, ou droits administrateur absents).
@@ -83,8 +147,11 @@ enum Backend {
         service: String,
         saved_web: ProxyState,
         saved_secure: ProxyState,
-        /// Politique Firefox créée par nos soins (à retirer à l'arrêt).
-        firefox_policy: Option<std::path::PathBuf>,
+        /// Fichiers `policies.json` Firefox créés par nos soins (à retirer
+        /// à l'arrêt), un par variante de Firefox détectée.
+        firefox_policies: Vec<std::path::PathBuf>,
+        /// Profil `.mobileconfig` généré (à retirer à l'arrêt).
+        mobileconfig: Option<std::path::PathBuf>,
     },
 }
 
@@ -184,45 +251,91 @@ mod macos {
         Ok(())
     }
 
-    /// Active la confiance du CA dans Firefox via la politique entreprise
-    /// (Firefox n'utilise pas le trousseau macOS). Renvoie le chemin du
-    /// fichier de politique *créé par nous* (à retirer à l'arrêt), ou `None`
-    /// si Firefox est absent ou si une politique existe déjà (non écrasée).
-    fn enable_firefox() -> Option<std::path::PathBuf> {
-        let app = Path::new("/Applications/Firefox.app");
-        if !app.exists() {
-            tracing::info!("Firefox non détecté : étape ignorée");
-            return None;
+    /// Variantes de Firefox potentiellement installées.
+    const FIREFOX_APPS: &[&str] = &[
+        "/Applications/Firefox.app",
+        "/Applications/Firefox Developer Edition.app",
+        "/Applications/Firefox Nightly.app",
+        "/Applications/Firefox ESR.app",
+    ];
+
+    /// Active la confiance du CA dans toutes les variantes de Firefox
+    /// détectées via la politique entreprise (Firefox n'utilise pas le
+    /// trousseau macOS). Renvoie la liste des fichiers de politique *créés
+    /// par nous* (à retirer à l'arrêt). Une politique préexistante n'est
+    /// jamais écrasée.
+    fn enable_firefox() -> Vec<std::path::PathBuf> {
+        let mut created = Vec::new();
+        let mut found_any = false;
+        for app in FIREFOX_APPS {
+            let app = Path::new(app);
+            if !app.exists() {
+                continue;
+            }
+            found_any = true;
+            let dist = app.join("Contents/Resources/distribution");
+            let policy = dist.join("policies.json");
+            if policy.exists() {
+                tracing::warn!(
+                    "Politique Firefox déjà présente ({}) : laissée intacte. \
+                     Activez-y `Certificates.ImportEnterpriseRoots` si besoin.",
+                    policy.display()
+                );
+                continue;
+            }
+            if let Err(e) = std::fs::create_dir_all(&dist) {
+                tracing::warn!("Firefox: création {} impossible: {e}", dist.display());
+                continue;
+            }
+            if let Err(e) = std::fs::write(&policy, super::firefox_policy_json()) {
+                tracing::warn!("Firefox: écriture {} impossible: {e}", policy.display());
+                continue;
+            }
+            tracing::info!("Firefox: confiance activée ({})", policy.display());
+            created.push(policy);
         }
-        let dist = app.join("Contents/Resources/distribution");
-        let policy = dist.join("policies.json");
-        if policy.exists() {
-            tracing::warn!(
-                "Politique Firefox déjà présente ({}) : laissée intacte. \
-                 Activez-y `Certificates.ImportEnterpriseRoots` si besoin.",
-                policy.display()
-            );
-            return None;
+        if !found_any {
+            tracing::info!("Aucun Firefox détecté : étape ignorée");
         }
-        if let Err(e) = std::fs::create_dir_all(&dist) {
-            tracing::warn!("Firefox: création {} impossible: {e}", dist.display());
-            return None;
-        }
-        if let Err(e) = std::fs::write(&policy, super::firefox_policy_json()) {
-            tracing::warn!("Firefox: écriture politique impossible: {e}");
-            return None;
-        }
-        tracing::info!("Firefox: confiance entreprise activée (politique créée)");
-        Some(policy)
+        created
     }
 
-    fn disable_firefox(policy: &Path) {
-        let _ = std::fs::remove_file(policy);
-        if let Some(dir) = policy.parent() {
-            // Retire le dossier `distribution` s'il est devenu vide.
-            let _ = std::fs::remove_dir(dir);
+    /// Écrit le profil de configuration `.mobileconfig` à côté du CA, comme
+    /// alternative ne modifiant pas le bundle Firefox. Renvoie son chemin.
+    fn write_mobileconfig(ca_cert: &Path) -> Option<std::path::PathBuf> {
+        let dir = ca_cert.parent().unwrap_or_else(|| Path::new("."));
+        let path = dir.join("brocolis-firefox.mobileconfig");
+        match std::fs::write(&path, super::firefox_mobileconfig()) {
+            Ok(()) => {
+                tracing::info!(
+                    "Profil de configuration écrit : {} (alternative ne \
+                     modifiant pas le bundle ; nécessite une approbation \
+                     manuelle dans Réglages Système)",
+                    path.display()
+                );
+                Some(path)
+            }
+            Err(e) => {
+                tracing::warn!("Écriture du .mobileconfig impossible: {e}");
+                None
+            }
         }
-        tracing::info!("Firefox: politique retirée");
+    }
+
+    fn disable_firefox(policies: &[std::path::PathBuf], mobileconfig: Option<&Path>) {
+        for policy in policies {
+            let _ = std::fs::remove_file(policy);
+            if let Some(dir) = policy.parent() {
+                // Retire le dossier `distribution` s'il est devenu vide.
+                let _ = std::fs::remove_dir(dir);
+            }
+        }
+        if let Some(mc) = mobileconfig {
+            let _ = std::fs::remove_file(mc);
+        }
+        if !policies.is_empty() || mobileconfig.is_some() {
+            tracing::info!("Firefox: politique(s) / profil retirés");
+        }
     }
 
     pub(super) fn engage(ca_cert: &Path, port: u16) -> anyhow::Result<Option<SystemProxy>> {
@@ -239,13 +352,15 @@ mod macos {
         set(&service, false, "127.0.0.1", port)?;
         set(&service, true, "127.0.0.1", port)?;
         tracing::info!("Proxy système réglé sur 127.0.0.1:{port} (« {service} »)");
-        let firefox_policy = enable_firefox();
+        let firefox_policies = enable_firefox();
+        let mobileconfig = write_mobileconfig(ca_cert);
         Ok(Some(SystemProxy {
             backend: Backend::MacOs {
                 service,
                 saved_web,
                 saved_secure,
-                firefox_policy,
+                firefox_policies,
+                mobileconfig,
             },
         }))
     }
@@ -254,7 +369,8 @@ mod macos {
         service: &str,
         web: &ProxyState,
         secure: &ProxyState,
-        firefox_policy: Option<&Path>,
+        firefox_policies: &[std::path::PathBuf],
+        mobileconfig: Option<&Path>,
     ) {
         if let Err(e) = restore(service, false, web) {
             tracing::error!("restauration proxy web: {e}");
@@ -262,9 +378,7 @@ mod macos {
         if let Err(e) = restore(service, true, secure) {
             tracing::error!("restauration proxy HTTPS: {e}");
         }
-        if let Some(p) = firefox_policy {
-            disable_firefox(p);
-        }
+        disable_firefox(firefox_policies, mobileconfig);
         tracing::info!("Proxy système restauré");
     }
 }
@@ -297,12 +411,14 @@ impl SystemProxy {
                 service,
                 saved_web,
                 saved_secure,
-                firefox_policy,
+                firefox_policies,
+                mobileconfig,
             } => macos::revert(
                 &service,
                 &saved_web,
                 &saved_secure,
-                firefox_policy.as_deref(),
+                &firefox_policies,
+                mobileconfig.as_deref(),
             ),
         }
     }
@@ -342,6 +458,23 @@ mod tests {
         let close = p.matches('}').count();
         assert_eq!(open, close);
         assert!(open >= 3);
+    }
+
+    #[test]
+    fn mobileconfig_is_well_formed() {
+        let m = firefox_mobileconfig();
+        assert!(m.starts_with("<?xml"));
+        assert!(m.contains("<!DOCTYPE plist"));
+        assert!(m.contains("com.apple.ManagedClient.preferences"));
+        assert!(m.contains("org.mozilla.firefox"));
+        assert!(m.contains("ImportEnterpriseRoots"));
+        assert!(m.contains("EnterprisePoliciesEnabled"));
+        assert!(m.contains("<key>PayloadType</key>"));
+        assert!(m.trim_end().ends_with("</plist>"));
+        // Balises plist/dict équilibrées.
+        assert_eq!(m.matches("<plist").count(), m.matches("</plist>").count());
+        assert_eq!(m.matches("<dict>").count(), m.matches("</dict>").count());
+        assert_eq!(m.matches("<array>").count(), m.matches("</array>").count());
     }
 
     #[test]
