@@ -168,13 +168,24 @@ $ sudo brocolis auto --config brocolis.toml
 
 Elle exécute, sans rien d'autre à faire :
 
-1. **Confiance du CA** — ajoute le certificat racine au *trousseau
-   Système* (`security add-trusted-cert … /Library/Keychains/System.keychain`) ;
-2. **Proxy système** — règle le proxy *web* et *HTTPS* sur
+1. **Confiance du CA — Safari & Chrome** : ajoute le certificat racine au
+   *trousseau Système* (`security add-trusted-cert …
+   /Library/Keychains/System.keychain`) ;
+2. **Confiance du CA — Firefox** : Firefox n'utilise pas le trousseau
+   macOS ; `auto` dépose donc une politique entreprise
+   (`Certificates.ImportEnterpriseRoots = true` dans
+   `/Applications/Firefox.app/…/distribution/policies.json`) pour qu'il
+   fasse confiance aux racines du système. Une politique Firefox
+   préexistante n'est **jamais** écrasée (un avertissement est émis) ;
+3. **Proxy système** — règle le proxy *web* et *HTTPS* sur
    `127.0.0.1:<port>` pour le service réseau actif (`networksetup`) ;
-3. **Chiffrement** — démarre le proxy MITM ;
-4. **Restauration** — à l'arrêt (`Ctrl-C` / `SIGTERM`), remet le proxy
-   système exactement dans son état initial.
+4. **Chiffrement** — démarre le proxy MITM ;
+5. **Restauration** — à l'arrêt (`Ctrl-C` / `SIGTERM`), remet le proxy
+   système dans son état initial et retire la politique Firefox que
+   `auto` avait créée.
+
+Ainsi **aucune installation manuelle de certificat** n'est nécessaire :
+Safari, Chrome et Firefox font confiance au CA automatiquement.
 
 #### Pourquoi `sudo` ?
 
