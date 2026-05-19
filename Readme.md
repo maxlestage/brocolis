@@ -173,19 +173,26 @@ Elle exécute, sans rien d'autre à faire :
    /Library/Keychains/System.keychain`) ;
 2. **Confiance du CA — Firefox** : Firefox n'utilise pas le trousseau
    macOS ; `auto` dépose donc une politique entreprise
-   (`Certificates.ImportEnterpriseRoots = true` dans
-   `/Applications/Firefox.app/…/distribution/policies.json`) pour qu'il
-   fasse confiance aux racines du système. Une politique Firefox
-   préexistante n'est **jamais** écrasée (un avertissement est émis) ;
+   (`Certificates.ImportEnterpriseRoots = true`,
+   `…/distribution/policies.json`) dans **chaque** variante détectée
+   (Firefox, Developer Edition, Nightly, ESR). Une politique
+   préexistante n'est **jamais** écrasée (un avertissement est émis).
+   En complément, un profil de configuration
+   `brocolis-firefox.mobileconfig` est généré à côté du CA : c'est une
+   **alternative qui ne modifie pas le bundle** de l'app (à
+   double-cliquer puis approuver dans *Réglages Système → Confidentialité
+   et sécurité → Profils* — étape manuelle imposée par macOS) ;
 3. **Proxy système** — règle le proxy *web* et *HTTPS* sur
    `127.0.0.1:<port>` pour le service réseau actif (`networksetup`) ;
 4. **Chiffrement** — démarre le proxy MITM ;
 5. **Restauration** — à l'arrêt (`Ctrl-C` / `SIGTERM`), remet le proxy
-   système dans son état initial et retire la politique Firefox que
-   `auto` avait créée.
+   système dans son état initial et retire les politiques Firefox et le
+   `.mobileconfig` que `auto` avait créés.
 
 Ainsi **aucune installation manuelle de certificat** n'est nécessaire :
-Safari, Chrome et Firefox font confiance au CA automatiquement.
+Safari, Chrome et Firefox font confiance au CA automatiquement (la
+méthode par défaut Firefox modifie son bundle ; le `.mobileconfig`
+fourni est l'alternative sans modification de bundle).
 
 #### Pourquoi `sudo` ?
 
