@@ -14,7 +14,10 @@
 </head>
 <body>
   <header class="hero">
-    <div class="container hero-grid">
+    <div class="container hero-stack">
+      <div class="hero-art">
+        <img src="./brocolisMan.png" alt="Mascotte Brocolis : un brocoli en chapeau et lunettes de soleil devant un ordinateur portable" width="220" height="220">
+      </div>
       <div class="hero-text">
         <h1>Brocolis <span class="emoji" aria-hidden="true">🥦</span></h1>
         <p class="tagline">Proxy MITM Rust pour le <strong>chiffrement sélectif</strong> de votre trafic web.</p>
@@ -28,9 +31,6 @@
           <a class="btn ghost" href="https://github.com/maxlestage/brocolis">Code source</a>
         </div>
       </div>
-      <div class="hero-art">
-        <img src="./brocolisMan.png" alt="Mascotte Brocolis : un brocoli en chapeau et lunettes de soleil devant un ordinateur portable" width="320" height="320">
-      </div>
     </div>
   </header>
 
@@ -39,12 +39,14 @@
       <h2>Une commande, zéro configuration</h2>
       <pre><code>sudo brocolis auto</code></pre>
       <ul class="checklist">
+        <li>Mot de passe administrateur demandé <strong>une seule fois</strong> (frontière de sécurité macOS)</li>
         <li>Génère un certificat racine et l'approuve dans le <strong>trousseau Système</strong> (Safari, Chrome)</li>
-        <li>Active la confiance entreprise pour <strong>Firefox</strong> (toutes variantes détectées)</li>
+        <li>Active la confiance entreprise pour <strong>Firefox</strong> (toutes variantes détectées), ou dépose un profil <code>brocolis-firefox.mobileconfig</code> à approuver dans <em>Réglages Système</em> — sans modifier le bundle Firefox</li>
         <li>Règle le proxy <strong>web et HTTPS</strong> du système</li>
         <li>Démarre le chiffrement sélectif AES-256-GCM</li>
-        <li><strong>Restaure exactement l'état initial</strong> à l'arrêt (Ctrl-C) : CA retiré, proxy remis comme avant</li>
+        <li><strong>Restaure exactement l'état initial</strong> à l'arrêt (Ctrl-C) : CA retiré, profil et politiques retirés, proxy remis comme avant</li>
       </ul>
+      <p class="note">Sans <code>sudo</code> ou hors macOS, <code>brocolis auto</code> démarre le proxy <strong>sans toucher au système</strong> (équivalent à <code>--no-system</code>) : pointez votre navigateur sur <code>127.0.0.1:&lt;port&gt;</code> manuellement.</p>
     </section>
 
     <section>
@@ -64,7 +66,7 @@
         </article>
         <article class="card">
           <h3>Multi-navigateurs</h3>
-          <p>Safari, Chrome (trousseau Système) et toutes les variantes Firefox (politique entreprise) font confiance au CA automatiquement.</p>
+          <p>Safari, Chrome (trousseau Système) et toutes les variantes Firefox (politique entreprise ou profil <code>.mobileconfig</code> sans modification de bundle) font confiance au CA automatiquement.</p>
         </article>
       </div>
     </section>
@@ -77,6 +79,27 @@
         <li>Tapez vos messages en marquant ce qui doit rester privé : <code>((mon secret))</code>. Vos correspondants partageant la clé voient le clair ; tous les autres ne voient que du chiffré.</li>
         <li><code>Ctrl-C</code> pour tout arrêter : Brocolis remet votre système exactement dans son état initial.</li>
       </ol>
+    </section>
+
+    <section>
+      <h2>Compiler depuis les sources &amp; CLI manuel</h2>
+      <p>Pour utiliser Brocolis hors macOS, ou tout piloter à la main :</p>
+      <pre><code># Compiler (Rust stable)
+git clone https://github.com/maxlestage/brocolis
+cd brocolis
+cargo build --release          # binaire : target/release/brocolis
+
+# 1. Générer une clé symétrique AES-256 (à partager par canal sûr)
+$ brocolis keygen
+SomopQcHJyVQQAWedZFGY5E4+hxKjZemOB7aGnYr6kw=
+
+# 2. Exporter le certificat racine pour l'installer dans le navigateur
+$ brocolis ca --export brocolis-ca.crt
+
+# 3. Lancer le proxy (clé renseignée dans brocolis.toml, cf. brocolis.example.toml)
+$ brocolis run --config brocolis.toml
+Brocolis écoute sur http://127.0.0.1:8080 (proxy HTTP/HTTPS)</code></pre>
+      <p>Sur Unix, la gestion des clés se pilote par signaux : <code>SIGHUP</code> régénère la clé (rotation en cas de compromission), <code>SIGUSR1</code> recharge la clé partagée depuis le fichier de configuration.</p>
     </section>
 
     <section>
@@ -94,14 +117,14 @@
         <li>Chiffrement <strong>de bout en bout</strong> entre utilisateurs partageant la clé — le service distant ne voit jamais le clair.</li>
         <li>Aucune télémétrie, aucun serveur, aucun compte — tout tourne en local.</li>
         <li>Le CA est <strong>retiré du trousseau</strong> automatiquement à l'arrêt s'il a été ajouté par Brocolis.</li>
-        <li>Code source ouvert et auditable.</li>
+        <li>Code source consultable sur GitHub pour audit (logiciel sous licence propriétaire, cf. <a href="https://github.com/maxlestage/brocolis/blob/master/Readme.md#licence">README</a>).</li>
       </ul>
     </section>
   </main>
 
   <footer>
     <div class="container">
-      <p>Projet Rust open-source — auteur <a href="https://github.com/maxlestage">@maxlestage</a> · <a href="https://github.com/maxlestage/brocolis">dépôt</a></p>
+      <p>Brocolis — proxy MITM en Rust · auteur <a href="https://github.com/maxlestage">@maxlestage</a> · <a href="https://github.com/maxlestage/brocolis">dépôt</a></p>
     </div>
   </footer>
 </body>
