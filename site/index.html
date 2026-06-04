@@ -8,21 +8,28 @@
   <meta property="og:title" content="Brocolis 🥦 — Chiffrement sélectif de votre trafic web">
   <meta property="og:description" content="Une commande, zéro configuration. AES-256-GCM sur les segments que vous marquez.">
   <meta property="og:type" content="website">
+  <meta property="og:image" content="./brocolisMan.png">
+  <link rel="icon" type="image/png" href="./brocolisMan.png">
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
   <header class="hero">
-    <div class="container">
-      <h1>Brocolis <span class="emoji" aria-hidden="true">🥦</span></h1>
-      <p class="tagline">Proxy MITM Rust pour le <strong>chiffrement sélectif</strong> de votre trafic web.</p>
-      <p class="lead">
-        Marquez <code class="inv">((votre secret))</code> dans vos messages : Brocolis le chiffre en AES-256-GCM
-        avant qu'il ne quitte votre machine, et le déchiffre pour les utilisateurs qui partagent votre clé.
-        Twitter, forums, messageries — sans rien changer côté serveur.
-      </p>
-      <div class="cta">
-        <a class="btn primary" href="https://github.com/maxlestage/brocolis/releases">Télécharger pour macOS</a>
-        <a class="btn ghost" href="https://github.com/maxlestage/brocolis">Code source</a>
+    <div class="container hero-grid">
+      <div class="hero-text">
+        <h1>Brocolis <span class="emoji" aria-hidden="true">🥦</span></h1>
+        <p class="tagline">Proxy MITM Rust pour le <strong>chiffrement sélectif</strong> de votre trafic web.</p>
+        <p class="lead">
+          Marquez <code class="inv">((votre secret))</code> dans vos messages : Brocolis le chiffre en AES-256-GCM
+          avant qu'il ne quitte votre machine, et le déchiffre pour les utilisateurs qui partagent votre clé.
+          Twitter, forums, messageries — sans rien changer côté serveur.
+        </p>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/maxlestage/brocolis/releases">Télécharger pour macOS</a>
+          <a class="btn ghost" href="https://github.com/maxlestage/brocolis">Code source</a>
+        </div>
+      </div>
+      <div class="hero-art">
+        <img src="./brocolisMan.png" alt="Mascotte Brocolis : un brocoli en chapeau et lunettes de soleil devant un ordinateur portable" width="320" height="320">
       </div>
     </div>
   </header>
