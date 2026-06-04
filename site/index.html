@@ -1,153 +1,30 @@
 <!doctype html>
-<html lang="fr">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Brocolis 🥦 — Proxy MITM Rust de chiffrement sélectif</title>
-  <meta name="description" content="Proxy MITM en Rust qui chiffre sélectivement le trafic HTTP/HTTPS sur Twitter, les forums, les messageries — sans rien changer côté serveur.">
-  <meta property="og:title" content="Brocolis 🥦 — Chiffrement sélectif de votre trafic web">
-  <meta property="og:description" content="Une commande, zéro configuration. AES-256-GCM sur les segments que vous marquez.">
-  <meta property="og:type" content="website">
-  <meta property="og:image" content="./brocolisMan.png">
-  <link rel="icon" type="image/png" href="./brocolisMan.png">
-  <link rel="stylesheet" href="./style.css">
-  <script>
-    // No-FOUC: apply persisted theme before first paint.
-    (function () {
-      try {
-        var t = localStorage.getItem("brocolis.theme");
-        if (t !== "green" && t !== "light" && t !== "dark") t = "green";
-        document.documentElement.setAttribute("data-theme", t);
-      } catch (_) {
-        document.documentElement.setAttribute("data-theme", "green");
-      }
-    })();
-  </script>
-  <script src="./i18n.js" defer></script>
-</head>
-<body>
-  <header class="hero">
-    <div class="container hero-stack">
-      <div class="switchers" role="toolbar">
-        <div class="switcher" data-i18n-aria="switch.lang" aria-label="Langue">
-          <button type="button" class="pill" data-lang-btn="fr" aria-pressed="false">FR</button>
-          <button type="button" class="pill" data-lang-btn="en" aria-pressed="false">EN</button>
-          <button type="button" class="pill" data-lang-btn="es" aria-pressed="false">ES</button>
-        </div>
-        <div class="switcher" data-i18n-aria="switch.theme" aria-label="Thème">
-          <button type="button" class="pill" data-theme-btn="green" aria-pressed="false" data-i18n-title="theme.green" title="Vert">🥦</button>
-          <button type="button" class="pill" data-theme-btn="light" aria-pressed="false" data-i18n-title="theme.light" title="Clair">☀</button>
-          <button type="button" class="pill" data-theme-btn="dark" aria-pressed="false" data-i18n-title="theme.dark" title="Sombre">🌙</button>
-        </div>
-      </div>
-      <div class="hero-art">
-        <img src="./brocolisMan.png" alt="Mascotte Brocolis : un brocoli en chapeau et lunettes de soleil devant un ordinateur portable" data-i18n-alt="hero.alt" width="220" height="220">
-      </div>
-      <div class="hero-text">
-        <h1>Brocolis <span class="emoji" aria-hidden="true">🥦</span></h1>
-        <p class="tagline" data-i18n="hero.tagline">Proxy MITM Rust pour le <strong>chiffrement sélectif</strong> de votre trafic web.</p>
-        <p class="lead" data-i18n="hero.lead">
-          Marquez <code class="inv">((votre secret))</code> dans vos messages : Brocolis le chiffre en AES-256-GCM
-          avant qu'il ne quitte votre machine, et le déchiffre pour les utilisateurs qui partagent votre clé.
-          Twitter, forums, messageries — sans rien changer côté serveur.
-        </p>
-        <div class="cta">
-          <a class="btn primary" href="https://github.com/maxlestage/brocolis/releases" data-i18n="hero.cta">Télécharger pour macOS</a>
-        </div>
-      </div>
-    </div>
-  </header>
-
-  <main class="container">
-    <section>
-      <h2 data-i18n="s1.h">Une commande, zéro configuration</h2>
-      <pre><code>sudo brocolis auto</code></pre>
-      <ul class="checklist">
-        <li data-i18n="s1.li1">Mot de passe administrateur demandé <strong>une seule fois</strong> (frontière de sécurité macOS)</li>
-        <li data-i18n="s1.li2">Génère un certificat racine et l'approuve dans le <strong>trousseau Système</strong> (Safari, Chrome)</li>
-        <li data-i18n="s1.li3">Active la confiance entreprise pour <strong>Firefox</strong> (toutes variantes détectées), ou dépose un profil <code>brocolis-firefox.mobileconfig</code> à approuver dans <em>Réglages Système</em> — sans modifier le bundle Firefox</li>
-        <li data-i18n="s1.li4">Règle le proxy <strong>web et HTTPS</strong> du système</li>
-        <li data-i18n="s1.li5">Démarre le chiffrement sélectif AES-256-GCM</li>
-        <li data-i18n="s1.li6"><strong>Restaure exactement l'état initial</strong> à l'arrêt (Ctrl-C) : CA retiré, profil et politiques retirés, proxy remis comme avant</li>
-      </ul>
-      <p class="note" data-i18n="s1.note">Sans <code>sudo</code> ou hors macOS, <code>brocolis auto</code> démarre le proxy <strong>sans toucher au système</strong> (équivalent à <code>--no-system</code>) : pointez votre navigateur sur <code>127.0.0.1:&lt;port&gt;</code> manuellement.</p>
-    </section>
-
-    <section>
-      <h2 data-i18n="s2.h">Fonctionnalités</h2>
-      <div class="grid">
-        <article class="card">
-          <h3 data-i18n="s2.c1.t">Chiffrement sélectif</h3>
-          <p data-i18n="s2.c1.d">Seuls les segments <code>((entre doubles parenthèses))</code> sont chiffrés, en AES-256-GCM, sous la forme d'un jeton <code>[[BROCOLIS:v1:…]]</code>. Le serveur distant ne stocke que du chiffré.</p>
-        </article>
-        <article class="card">
-          <h3 data-i18n="s2.c2.t">MITM transparent</h3>
-          <p data-i18n="s2.c2.d">Interception HTTPS via <code>CONNECT</code>, certificats feuilles forgés à la volée par une autorité interne (<em>rcgen</em>), TLS terminé côté client avec <em>rustls</em>.</p>
-        </article>
-        <article class="card">
-          <h3 data-i18n="s2.c3.t">Clés partagées</h3>
-          <p data-i18n="s2.c3.d">Une clé symétrique 256 bits, partagée par canal sûr. Rotation immédiate via <code>SIGHUP</code>, rechargement via <code>SIGUSR1</code>.</p>
-        </article>
-        <article class="card">
-          <h3 data-i18n="s2.c4.t">Multi-navigateurs</h3>
-          <p data-i18n="s2.c4.d">Safari, Chrome (trousseau Système) et toutes les variantes Firefox (politique entreprise ou profil <code>.mobileconfig</code> sans modification de bundle) font confiance au CA automatiquement.</p>
-        </article>
-      </div>
-    </section>
-
-    <section>
-      <h2 data-i18n="s3.h">Démarrage rapide</h2>
-      <ol>
-        <li data-i18n="s3.li1">Téléchargez l'archive <code>brocolis-macos-universal.tar.gz</code> via le bouton ci-dessus (binaire universel Intel + Apple Silicon).</li>
-        <li data-i18n="s3.li2">Lancez <code>sudo brocolis auto</code>. Le mot de passe administrateur n'est demandé qu'<strong>une fois</strong> (frontière de sécurité macOS).</li>
-        <li data-i18n="s3.li3">Tapez vos messages en marquant ce qui doit rester privé : <code>((mon secret))</code>. Vos correspondants partageant la clé voient le clair ; tous les autres ne voient que du chiffré.</li>
-        <li data-i18n="s3.li4"><code>Ctrl-C</code> pour tout arrêter : Brocolis remet votre système exactement dans son état initial.</li>
-      </ol>
-    </section>
-
-    <section>
-      <h2 data-i18n="s4.h">Compiler depuis les sources &amp; CLI manuel</h2>
-      <p data-i18n="s4.intro">Pour utiliser Brocolis hors macOS, ou tout piloter à la main :</p>
-      <pre><code data-i18n="s4.code"># Compiler (Rust stable, depuis les sources)
-cargo build --release          # binaire : target/release/brocolis
-
-# 1. Générer une clé symétrique AES-256 (à partager par canal sûr)
-$ brocolis keygen
-SomopQcHJyVQQAWedZFGY5E4+hxKjZemOB7aGnYr6kw=
-
-# 2. Exporter le certificat racine pour l'installer dans le navigateur
-$ brocolis ca --export brocolis-ca.crt
-
-# 3. Lancer le proxy (clé renseignée dans brocolis.toml, cf. brocolis.example.toml)
-$ brocolis run --config brocolis.toml
-Brocolis écoute sur http://127.0.0.1:8080 (proxy HTTP/HTTPS)</code></pre>
-      <p data-i18n="s4.outro">Sur Unix, la gestion des clés se pilote par signaux : <code>SIGHUP</code> régénère la clé (rotation en cas de compromission), <code>SIGUSR1</code> recharge la clé partagée depuis le fichier de configuration.</p>
-    </section>
-
-    <section>
-      <h2 data-i18n="s5.h">Comment ça marche</h2>
-      <p data-i18n="s5.intro">Brocolis s'intercale entre votre navigateur et le service en ligne. À l'envoi, il chiffre les segments marqués ; à la réception, il déchiffre les jetons lisibles avec la clé partagée.</p>
-      <pre class="diagram"><code data-i18n="s5.diagram">Navigateur ─►  Brocolis (proxy local)  ─►  Serveur distant
-                       │                              │
-   « salut ((secret)) » ───► « salut [[BROCOLIS:v1:…]] » (chiffré sur le fil)
-   « salut secret »     ◄─── « salut [[BROCOLIS:v1:…]] » (déchiffré pour vous)</code></pre>
-    </section>
-
-    <section>
-      <h2 data-i18n="s6.h">Vie privée et sécurité</h2>
-      <ul class="checklist">
-        <li data-i18n="s6.li1">Chiffrement <strong>de bout en bout</strong> entre utilisateurs partageant la clé — le service distant ne voit jamais le clair.</li>
-        <li data-i18n="s6.li2">Aucune télémétrie, aucun serveur, aucun compte — tout tourne en local.</li>
-        <li data-i18n="s6.li3">Le CA est <strong>retiré du trousseau</strong> automatiquement à l'arrêt s'il a été ajouté par Brocolis.</li>
-        <li data-i18n="s6.li4">Code source consultable pour audit (logiciel sous licence propriétaire).</li>
-      </ul>
-    </section>
-  </main>
-
-  <footer>
-    <div class="container">
-      <p data-i18n="footer">Brocolis — proxy MITM en Rust</p>
-    </div>
-  </footer>
-</body>
+<html lang="fr" data-theme="green">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Brocolis 🥦 — Proxy MITM Rust de chiffrement sélectif</title>
+    <meta name="description" content="Proxy MITM en Rust qui chiffre sélectivement le trafic HTTP/HTTPS sur Twitter, les forums, les messageries — sans rien changer côté serveur." />
+    <meta property="og:title" content="Brocolis 🥦 — Chiffrement sélectif de votre trafic web" />
+    <meta property="og:description" content="Une commande, zéro configuration. AES-256-GCM sur les segments que vous marquez." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="./brocolisMan.png" />
+    <link rel="icon" type="image/png" href="./brocolisMan.png" />
+    <script>
+      // No-FOUC: apply persisted theme before first paint.
+      (function () {
+        try {
+          var t = localStorage.getItem("brocolis.theme");
+          if (t !== "green" && t !== "light" && t !== "dark") t = "green";
+          document.documentElement.setAttribute("data-theme", t);
+        } catch (_) {
+          document.documentElement.setAttribute("data-theme", "green");
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
