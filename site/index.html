@@ -73,7 +73,7 @@
     <section>
       <h2>Démarrage rapide</h2>
       <ol>
-        <li>Téléchargez l'archive <code>brocolis-macos-universal.tar.gz</code> depuis les <a href="https://github.com/maxlestage/brocolis/releases">Releases GitHub</a> (binaire universel Intel + Apple Silicon).</li>
+        <li>Téléchargez l'archive <code>brocolis-macos-universal.tar.gz</code> via le bouton ci-dessus (binaire universel Intel + Apple Silicon).</li>
         <li>Lancez <code>sudo brocolis auto</code>. Le mot de passe administrateur n'est demandé qu'<strong>une fois</strong> (frontière de sécurité macOS).</li>
         <li>Tapez vos messages en marquant ce qui doit rester privé : <code>((mon secret))</code>. Vos correspondants partageant la clé voient le clair ; tous les autres ne voient que du chiffré.</li>
         <li><code>Ctrl-C</code> pour tout arrêter : Brocolis remet votre système exactement dans son état initial.</li>
@@ -83,9 +83,7 @@
     <section>
       <h2>Compiler depuis les sources &amp; CLI manuel</h2>
       <p>Pour utiliser Brocolis hors macOS, ou tout piloter à la main :</p>
-      <pre><code># Compiler (Rust stable)
-git clone https://github.com/maxlestage/brocolis
-cd brocolis
+      <pre><code># Compiler (Rust stable, depuis les sources)
 cargo build --release          # binaire : target/release/brocolis
 
 # 1. Générer une clé symétrique AES-256 (à partager par canal sûr)
@@ -116,7 +114,7 @@ Brocolis écoute sur http://127.0.0.1:8080 (proxy HTTP/HTTPS)</code></pre>
         <li>Chiffrement <strong>de bout en bout</strong> entre utilisateurs partageant la clé — le service distant ne voit jamais le clair.</li>
         <li>Aucune télémétrie, aucun serveur, aucun compte — tout tourne en local.</li>
         <li>Le CA est <strong>retiré du trousseau</strong> automatiquement à l'arrêt s'il a été ajouté par Brocolis.</li>
-        <li>Code source consultable sur GitHub pour audit (logiciel sous licence propriétaire, cf. <a href="https://github.com/maxlestage/brocolis/blob/master/Readme.md#licence">README</a>).</li>
+        <li>Code source consultable pour audit (logiciel sous licence propriétaire).</li>
       </ul>
     </section>
   </main>
