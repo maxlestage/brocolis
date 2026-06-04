@@ -5,6 +5,8 @@
   <img src="https://github.com/maxlestage/brocolis/blob/master/assets/brocolisMan.png" width="512" style="border-radius: 10px;">
 </div>
 
+🌐 **Site vitrine** : <https://maxlestage.github.io/brocolis/> (déployé automatiquement à chaque push sur `master` via `.github/workflows/pages.yml`).
+
 ## Présentation
 
 Brocolis est un proxy MITM (Man In The Middle) développé en Rust permettant de chiffrer sélectivement le trafic HTTP/HTTPS.
