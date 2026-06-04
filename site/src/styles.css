@@ -1,41 +1,41 @@
 :root,
 :root[data-theme="green"] {
   --green: #2f9e4a;
-  --green-dark: #20762f;
-  --green-soft: #d8ecdd;
-  --bg: #ecf4ee;
-  --ink: #14241a;
-  --muted: #4b6755;
-  --card: #f3faf5;
-  --border: #c4dccb;
-  --code-bg: #0e1612;
-  --code-ink: #d3ddd6;
-  --code-inline-bg: #dcecdf;
+  --green-dark: #1f6d2c;
+  --green-soft: #b9d6c1;
+  --bg: #c9dfd0;
+  --ink: #0f1f15;
+  --muted: #3d5746;
+  --card: #dceee2;
+  --border: #8fb89c;
+  --code-bg: #0c1610;
+  --code-ink: #d6e0d9;
+  --code-inline-bg: #b1ceba;
   --code-inline-ink: var(--ink);
-  --hero-bg: linear-gradient(135deg, var(--green) 0%, var(--green-dark) 100%);
+  --hero-bg: linear-gradient(135deg, #2f9e4a 0%, #1a6e2a 100%);
   --hero-ink: #ffffff;
-  --hero-lead: rgba(255, 255, 255, 0.94);
+  --hero-lead: rgba(255, 255, 255, 0.95);
   --hero-art-bg: rgba(255, 255, 255, 0.12);
-  --hero-art-border: rgba(255, 255, 255, 0.35);
-  --hero-art-shadow: 0 14px 32px rgba(0, 0, 0, 0.22);
-  --inv-bg: rgba(255, 255, 255, 0.18);
+  --hero-art-border: rgba(255, 255, 255, 0.4);
+  --hero-art-shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
+  --inv-bg: rgba(255, 255, 255, 0.2);
   --inv-ink: #ffffff;
-  --inv-border: rgba(255, 255, 255, 0.3);
+  --inv-border: rgba(255, 255, 255, 0.35);
   --btn-primary-bg: #ffffff;
   --btn-primary-ink: var(--green-dark);
   --btn-primary-hover: #f4fff5;
-  --footer-bg: #c7e0cd;
-  --footer-ink: #2c4a35;
-  --switcher-bg: rgba(32, 118, 47, 0.08);
-  --switcher-border: rgba(32, 118, 47, 0.22);
+  --footer-bg: #95bca1;
+  --footer-ink: #15281c;
+  --switcher-bg: rgba(15, 31, 21, 0.08);
+  --switcher-border: rgba(15, 31, 21, 0.22);
   --switcher-ink: var(--ink);
   --switcher-active-bg: var(--green);
   --switcher-active-ink: #ffffff;
-  --nav-bg: rgba(216, 236, 221, 0.85);
+  --nav-bg: rgba(185, 214, 193, 0.92);
   --nav-ink: var(--ink);
-  --nav-border: #b8d3c0;
-  --nav-link-hover-bg: rgba(47, 158, 74, 0.18);
-  --accent-bar: var(--green);
+  --nav-border: #87ad94;
+  --nav-link-hover-bg: rgba(31, 109, 44, 0.18);
+  --accent-bar: var(--green-dark);
 }
 
 :root[data-theme="light"] {
@@ -160,6 +160,7 @@ body {
   gap: 18px;
   height: 56px;
   max-width: 1080px;
+  position: relative;
 }
 .nav-brand {
   display: inline-flex;
@@ -175,13 +176,18 @@ body {
   font-size: 20px;
   line-height: 1;
 }
+.nav-drawer {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex: 1;
+}
 .nav-links {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   gap: 4px;
-  flex: 1;
 }
 .nav-links a {
   display: inline-block;
@@ -507,35 +513,35 @@ footer {
 @media (max-width: 760px) {
   .nav-toggle {
     display: block;
-    order: 3;
   }
-  .nav-links {
+  .nav-drawer {
     display: none;
     position: absolute;
     top: 56px;
     left: 0;
     right: 0;
     flex-direction: column;
-    background: var(--nav-bg);
+    align-items: stretch;
+    gap: 14px;
+    background: var(--bg);
     border-bottom: 1px solid var(--nav-border);
-    backdrop-filter: saturate(180%) blur(12px);
-    -webkit-backdrop-filter: saturate(180%) blur(12px);
-    padding: 8px 24px 14px;
-    gap: 2px;
+    padding: 14px 24px 18px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
   }
-  .nav-links.open {
+  .nav-drawer.open {
     display: flex;
+  }
+  .nav-links {
+    flex-direction: column;
+    gap: 2px;
   }
   .nav-links a {
     padding: 10px 12px;
+    font-size: 15px;
   }
   .nav-switchers {
     margin-left: 0;
-    order: 2;
-  }
-  .nav-switchers .switcher .pill {
-    padding: 4px 8px;
-    font-size: 12px;
+    justify-content: flex-start;
   }
 }
 

@@ -45,17 +45,19 @@ export function Navbar() {
           <span />
           <span />
         </button>
-        <ul className={`nav-links ${open ? "open" : ""}`}>
-          {NAV_ITEMS.map((item) => (
-            <li key={item.href}>
-              <a href={item.href} onClick={close}>
-                {t(item.key)}
-              </a>
-            </li>
-          ))}
-        </ul>
-        <div className="nav-switchers">
-          <Switchers />
+        <div className={`nav-drawer ${open ? "open" : ""}`}>
+          <ul className="nav-links">
+            {NAV_ITEMS.map((item) => (
+              <li key={item.href}>
+                <a href={item.href} onClick={close}>
+                  {t(item.key)}
+                </a>
+              </li>
+            ))}
+          </ul>
+          <div className="nav-switchers">
+            <Switchers />
+          </div>
         </div>
       </div>
     </nav>
