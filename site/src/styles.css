@@ -2,15 +2,15 @@
 :root[data-theme="green"] {
   --green: #2f9e4a;
   --green-dark: #20762f;
-  --green-soft: #e8f5ec;
-  --bg: #fafaf7;
-  --ink: #1d2326;
-  --muted: #5a6470;
-  --card: #ffffff;
-  --border: #e3e6e1;
-  --code-bg: #0e1116;
-  --code-ink: #d3d7de;
-  --code-inline-bg: #f0efe9;
+  --green-soft: #d8ecdd;
+  --bg: #ecf4ee;
+  --ink: #14241a;
+  --muted: #4b6755;
+  --card: #f3faf5;
+  --border: #c4dccb;
+  --code-bg: #0e1612;
+  --code-ink: #d3ddd6;
+  --code-inline-bg: #dcecdf;
   --code-inline-ink: var(--ink);
   --hero-bg: linear-gradient(135deg, var(--green) 0%, var(--green-dark) 100%);
   --hero-ink: #ffffff;
@@ -24,93 +24,96 @@
   --btn-primary-bg: #ffffff;
   --btn-primary-ink: var(--green-dark);
   --btn-primary-hover: #f4fff5;
-  --footer-bg: var(--green-soft);
-  --footer-ink: var(--muted);
-  --switcher-bg: rgba(0, 0, 0, 0.04);
-  --switcher-border: rgba(0, 0, 0, 0.12);
+  --footer-bg: #c7e0cd;
+  --footer-ink: #2c4a35;
+  --switcher-bg: rgba(32, 118, 47, 0.08);
+  --switcher-border: rgba(32, 118, 47, 0.22);
   --switcher-ink: var(--ink);
   --switcher-active-bg: var(--green);
   --switcher-active-ink: #ffffff;
-  --nav-bg: rgba(250, 250, 247, 0.85);
+  --nav-bg: rgba(216, 236, 221, 0.85);
   --nav-ink: var(--ink);
-  --nav-border: var(--border);
-  --nav-link-hover-bg: rgba(47, 158, 74, 0.1);
+  --nav-border: #b8d3c0;
+  --nav-link-hover-bg: rgba(47, 158, 74, 0.18);
+  --accent-bar: var(--green);
 }
 
 :root[data-theme="light"] {
   --green: #2f9e4a;
   --green-dark: #1f6d2c;
-  --green-soft: #eef6f0;
-  --bg: #ffffff;
-  --ink: #1a1f26;
-  --muted: #5f6a76;
-  --card: #fafaf9;
-  --border: #e6e8ed;
-  --code-bg: #1a1f26;
-  --code-ink: #e6e8ed;
-  --code-inline-bg: #f1f1ee;
+  --green-soft: #e3f1e7;
+  --bg: #f7fbf8;
+  --ink: #1a221d;
+  --muted: #57685d;
+  --card: #f1f8f3;
+  --border: #d6e6db;
+  --code-bg: #18221c;
+  --code-ink: #e6ede9;
+  --code-inline-bg: #e6f1ea;
   --code-inline-ink: var(--ink);
-  --hero-bg: linear-gradient(180deg, #ffffff 0%, #f4f8f5 100%);
-  --hero-ink: #1a1f26;
-  --hero-lead: #4a5560;
+  --hero-bg: linear-gradient(180deg, #f4faf6 0%, #dceee2 100%);
+  --hero-ink: #14241a;
+  --hero-lead: #3e5446;
   --hero-art-bg: #ffffff;
   --hero-art-border: var(--green);
-  --hero-art-shadow: 0 12px 28px rgba(31, 109, 44, 0.15);
+  --hero-art-shadow: 0 12px 28px rgba(31, 109, 44, 0.18);
   --inv-bg: var(--green-soft);
   --inv-ink: var(--green-dark);
   --inv-border: var(--green);
   --btn-primary-bg: var(--green);
   --btn-primary-ink: #ffffff;
   --btn-primary-hover: var(--green-dark);
-  --footer-bg: #f5f5f3;
+  --footer-bg: #e3f1e7;
   --footer-ink: var(--muted);
-  --switcher-bg: rgba(0, 0, 0, 0.04);
-  --switcher-border: rgba(0, 0, 0, 0.12);
+  --switcher-bg: rgba(31, 109, 44, 0.07);
+  --switcher-border: rgba(31, 109, 44, 0.2);
   --switcher-ink: var(--ink);
   --switcher-active-bg: var(--green);
   --switcher-active-ink: #ffffff;
-  --nav-bg: rgba(255, 255, 255, 0.85);
+  --nav-bg: rgba(231, 244, 235, 0.85);
   --nav-ink: var(--ink);
-  --nav-border: var(--border);
-  --nav-link-hover-bg: rgba(47, 158, 74, 0.1);
+  --nav-border: #cae0d0;
+  --nav-link-hover-bg: rgba(47, 158, 74, 0.15);
+  --accent-bar: var(--green);
 }
 
 :root[data-theme="dark"] {
   --green: #4cc66a;
   --green-dark: #2f9e4a;
-  --green-soft: #16261a;
-  --bg: #0e1116;
-  --ink: #e6e8ed;
-  --muted: #98a2b0;
-  --card: #161b21;
-  --border: #262c33;
-  --code-bg: #060809;
-  --code-ink: #c8cbd1;
-  --code-inline-bg: #1c2128;
-  --code-inline-ink: #e6e8ed;
-  --hero-bg: linear-gradient(135deg, #143820 0%, #0a1f12 100%);
-  --hero-ink: #eef0f3;
-  --hero-lead: rgba(238, 240, 243, 0.85);
-  --hero-art-bg: rgba(255, 255, 255, 0.06);
-  --hero-art-border: rgba(76, 198, 106, 0.5);
+  --green-soft: #18301f;
+  --bg: #0d1410;
+  --ink: #e6efe9;
+  --muted: #92a89a;
+  --card: #131c16;
+  --border: #1f2e25;
+  --code-bg: #060a07;
+  --code-ink: #c8d3cc;
+  --code-inline-bg: #1a261e;
+  --code-inline-ink: #e6efe9;
+  --hero-bg: linear-gradient(135deg, #1a4a2a 0%, #08200f 100%);
+  --hero-ink: #eef5f0;
+  --hero-lead: rgba(238, 245, 240, 0.88);
+  --hero-art-bg: rgba(76, 198, 106, 0.08);
+  --hero-art-border: rgba(76, 198, 106, 0.6);
   --hero-art-shadow: 0 14px 32px rgba(0, 0, 0, 0.45);
-  --inv-bg: rgba(76, 198, 106, 0.18);
+  --inv-bg: rgba(76, 198, 106, 0.22);
   --inv-ink: #b6efc3;
-  --inv-border: rgba(76, 198, 106, 0.45);
+  --inv-border: rgba(76, 198, 106, 0.55);
   --btn-primary-bg: var(--green);
-  --btn-primary-ink: #0e1116;
+  --btn-primary-ink: #07120a;
   --btn-primary-hover: #6cd687;
-  --footer-bg: #0a0d11;
+  --footer-bg: #0a140d;
   --footer-ink: var(--muted);
-  --switcher-bg: rgba(255, 255, 255, 0.06);
-  --switcher-border: rgba(255, 255, 255, 0.18);
-  --switcher-ink: #eef0f3;
+  --switcher-bg: rgba(76, 198, 106, 0.1);
+  --switcher-border: rgba(76, 198, 106, 0.28);
+  --switcher-ink: #eef5f0;
   --switcher-active-bg: var(--green);
-  --switcher-active-ink: #0e1116;
-  --nav-bg: rgba(14, 17, 22, 0.85);
+  --switcher-active-ink: #07120a;
+  --nav-bg: rgba(13, 20, 16, 0.88);
   --nav-ink: var(--ink);
-  --nav-border: var(--border);
-  --nav-link-hover-bg: rgba(76, 198, 106, 0.15);
+  --nav-border: #1f2e25;
+  --nav-link-hover-bg: rgba(76, 198, 106, 0.2);
+  --accent-bar: var(--green);
 }
 
 * {
@@ -358,11 +361,23 @@ main section {
 main section:last-child {
   border-bottom: none;
 }
-h2 {
+main section > h2 {
   font-size: 30px;
   margin: 0 0 18px;
   letter-spacing: -0.3px;
   color: var(--ink);
+  position: relative;
+  padding-left: 16px;
+}
+main section > h2::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--accent-bar, var(--green));
 }
 h3 {
   font-size: 17px;
@@ -448,13 +463,16 @@ code {
 .card {
   background: var(--card);
   border: 1px solid var(--border);
+  border-top: 3px solid var(--green);
   border-radius: 10px;
   padding: 18px 20px;
-  transition: transform 0.1s ease, border-color 0.15s ease;
+  transition: transform 0.1s ease, border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 .card:hover {
   border-color: var(--green);
   transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(47, 158, 74, 0.12);
 }
 .card h3 {
   color: var(--green-dark);
