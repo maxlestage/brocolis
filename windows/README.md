@@ -11,6 +11,26 @@ une vraie machine.
 | -------------------- | ------------------------------------------------------------------------------------------ |
 | `install.ps1`        | Setup CA + politique Firefox + config. Flag `-SystemProxy` opt-in (WinHTTP via netsh).     |
 | `uninstall.ps1`      | Annule ce que `install.ps1` a fait, en respectant ce qui préexistait.                      |
+| `test-auto.ps1`      | Test d'intégration de `brocolis auto` natif (équivalent direct de `linux/test-auto.sh`).   |
+
+## Tester `brocolis auto`
+
+Depuis un terminal **Exécuter en tant qu'administrateur**, à la racine du dépôt :
+
+```powershell
+.\windows\test-auto.ps1
+```
+
+Le script compile la CLI, joue le cycle complet (engage → flux HTTPS
+réel via le proxy → round-trip de chiffrement sélectif → revert), et
+vérifie la restauration en respectant l'état initial du poste (CA
+préexistant conservé, politique Firefox préexistante conservée,
+WinHTTP remis à l'identique).
+
+Le Ctrl+C est envoyé via les API Win32 `AttachConsole` +
+`GenerateConsoleCtrlEvent` pour que `tokio::signal::ctrl_c()` côté
+brocolis déclenche `revert()` proprement — sans ça, `Stop-Process`
+tuerait le proxy sans laisser le temps à `revert()` de tourner.
 
 ## Trois modes au choix
 
