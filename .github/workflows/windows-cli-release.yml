@@ -1,0 +1,92 @@
+name: Windows CLI release
+
+# Compile le binaire CLI `brocolis.exe` pour Windows x86_64 et publie
+# automatiquement une release rolling `cli-latest-windows`.
+# Sur tag v*, produit aussi une release versionnee vX.Y.Z-windows.
+#
+# Les tests d'integration (windows/install.ps1 / uninstall.ps1) ne
+# tournent PAS en CI : ils requierent une vraie machine Windows avec
+# admin + un Firefox installe pour valider la politique entreprise.
+
+on:
+  push:
+    branches:
+      - master
+      - claude/rust-mitm-proxy-JHKLR
+    tags:
+      - "v*"
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "windows/**"
+      - ".github/workflows/windows-cli-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: windows-cargo-${{ hashFiles('Cargo.lock') }}
+      - name: Build
+        run: cargo build --release --bin brocolis
+      - name: Stage release artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+          Copy-Item target/release/brocolis.exe artifacts/
+          Copy-Item windows/install.ps1 artifacts/
+          Copy-Item windows/uninstall.ps1 artifacts/
+          Compress-Archive -Path artifacts/* -DestinationPath brocolis-windows-x86_64.zip -Force
+          Get-Item brocolis-windows-x86_64.zip | Format-List FullName,Length
+      - uses: actions/upload-artifact@v4
+        with:
+          name: brocolis-windows-x86_64
+          path: brocolis-windows-x86_64.zip
+
+  release:
+    needs: [build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Collect files
+        id: collect
+        run: |
+          FILES=$(find artifacts -name '*.zip' | tr '\n' ' ')
+          echo "files=${FILES}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish rolling release (branch)
+        if: github.ref_type == 'branch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete cli-latest-windows --yes --cleanup-tag --repo "${GITHUB_REPOSITORY}" || true
+          gh release create cli-latest-windows ${{ steps.collect.outputs.files }} \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title "Brocolis CLI Windows (dernier ${GITHUB_REF_NAME})" \
+            --notes "Build automatique du dernier ${GITHUB_REF_NAME} (Windows x86_64). Inclut brocolis.exe + install.ps1 + uninstall.ps1." \
+            --prerelease
+
+      - name: Publish tagged release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}-windows" ${{ steps.collect.outputs.files }} \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "Brocolis ${GITHUB_REF_NAME} Windows" \
+            --notes "Release ${GITHUB_REF_NAME} pour Windows (x86_64)."

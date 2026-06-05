@@ -1,7 +1,7 @@
 //! Intégration système : configuration automatique du proxy et de la
 //! confiance du certificat racine, restaurée à l'arrêt.
 //!
-//! `brocolis auto` couvre nativement deux familles d'OS :
+//! `brocolis auto` couvre nativement trois familles d'OS :
 //!
 //! - **macOS** (`macos.rs`) :
 //!     1. ajoute le CA au trousseau Système (`security add-trusted-cert`),
@@ -18,18 +18,32 @@
 //!        (effet sur les nouvelles sessions shell),
 //!     4. restaure tout à l'arrêt.
 //!
-//! Les étapes modifient l'état système et exigent donc les droits
-//! administrateur : il faut lancer `sudo brocolis auto`. Sans `sudo`,
-//! le proxy démarre quand même mais ne touche à rien (équivalent
-//! `--no-system`) — l'utilisateur configure son client à la main.
+//! - **Windows** (`windows.rs`) :
+//!     1. ajoute le CA au magasin Local Machine\Trusted Root via
+//!        `certutil -addstore Root`,
+//!     2. politique entreprise Firefox dans chaque variante détectée
+//!        (`<install>\distribution\policies.json`),
+//!     3. règle le proxy WinHTTP système via
+//!        `netsh winhttp set proxy` (état initial sauvegardé pour
+//!        restauration),
+//!     4. restaure tout à l'arrêt.
 //!
-//! Sur les autres OS (Windows, BSD, …), la configuration système
-//! automatique n'est pas prise en charge : seul le proxy démarre.
+//! Les étapes modifient l'état système et exigent donc les droits
+//! administrateur : il faut lancer `sudo brocolis auto` (Unix) ou un
+//! terminal « Exécuter en tant qu'administrateur » (Windows). Sans
+//! élévation, le proxy démarre quand même mais ne touche à rien
+//! (équivalent `--no-system`) — l'utilisateur configure son client à la
+//! main.
+//!
+//! Sur les autres OS (BSD, …), la configuration système automatique
+//! n'est pas prise en charge : seul le proxy démarre.
 
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "windows")]
+mod windows;
 
 #[allow(unused_imports)]
 use std::path::Path;
@@ -184,6 +198,16 @@ enum Backend {
         /// Fichier `/etc/profile.d/brocolis-proxy.sh` créé par nos soins.
         env_proxy: Option<std::path::PathBuf>,
     },
+    #[cfg(target_os = "windows")]
+    Windows {
+        /// Le CA a-t-il été ajouté par nous (donc à retirer à l'arrêt) ?
+        ca_added: bool,
+        /// État WinHTTP initial à restaurer.
+        saved_winhttp: windows::WinHttpState,
+        /// `policies.json` Firefox créés par nos soins (à retirer à
+        /// l'arrêt), un par variante détectée.
+        firefox_policies: Vec<std::path::PathBuf>,
+    },
 }
 
 impl SystemProxy {
@@ -199,12 +223,20 @@ impl SystemProxy {
         {
             return linux::engage(ca_cert, port);
         }
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        #[cfg(target_os = "windows")]
+        {
+            return windows::engage(ca_cert, port);
+        }
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "linux",
+            target_os = "windows"
+        )))]
         {
             tracing::warn!(
                 "Configuration système automatique prise en charge \
-                 uniquement sur macOS et Linux. Pointez votre client \
-                 sur le proxy manuellement."
+                 uniquement sur macOS, Linux et Windows. Pointez votre \
+                 client sur le proxy manuellement."
             );
             Ok(None)
         }
@@ -244,6 +276,12 @@ impl SystemProxy {
                 firefox_policy.as_deref(),
                 env_proxy.as_deref(),
             ),
+            #[cfg(target_os = "windows")]
+            Backend::Windows {
+                saved_winhttp,
+                ca_added,
+                firefox_policies,
+            } => windows::revert(&saved_winhttp, ca_added, &firefox_policies),
         }
     }
 }
