@@ -1,0 +1,42 @@
+[Unit]
+Description=Brocolis selective-encryption MITM proxy
+Documentation=https://maxlestage.github.io/brocolis/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=brocolis
+Group=brocolis
+ExecStart=/usr/local/bin/brocolis run --config /etc/brocolis/brocolis.toml
+# SIGUSR1 = recharger la clé partagée depuis le fichier de configuration.
+ExecReload=/bin/kill -USR1 $MAINPID
+Restart=on-failure
+RestartSec=3
+
+# Durcissement (systemd-analyze security)
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ReadWritePaths=/etc/brocolis /var/lib/brocolis
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target
