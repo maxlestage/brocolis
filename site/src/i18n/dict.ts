@@ -5,10 +5,11 @@ export const DICT = {
   fr: {
     "meta.title": "Brocolis 🥦 — Proxy MITM Rust de chiffrement sélectif",
     "meta.desc":
-      "Proxy MITM en Rust qui chiffre sélectivement le trafic HTTP/HTTPS sur Twitter, les forums, les messageries — sans rien changer côté serveur.",
+      "Proxy MITM en Rust qui chiffre sélectivement le trafic HTTP/HTTPS sur Twitter, les forums, les messageries. Configuration automatique sur macOS, Linux et Windows — sans rien changer côté serveur.",
     "meta.ogTitle": "Brocolis 🥦 — Chiffrement sélectif de votre trafic web",
     "meta.ogDesc":
-      "Une commande, zéro configuration. AES-256-GCM sur les segments que vous marquez.",
+      "Une commande, zéro configuration. AES-256-GCM sur les segments que vous marquez. macOS, Linux, Windows.",
+    "nav.platforms": "Plateformes",
     "nav.features": "Fonctionnalités",
     "nav.quickstart": "Démarrage rapide",
     "nav.cli": "CLI",
@@ -20,25 +21,42 @@ export const DICT = {
       'Proxy MITM Rust pour le <strong>chiffrement sélectif</strong> de votre trafic web.',
     "hero.lead":
       'Marquez <code class="inv">((votre secret))</code> dans vos messages : Brocolis le chiffre en AES-256-GCM avant qu\'il ne quitte votre machine, et le déchiffre pour les utilisateurs qui partagent votre clé. Twitter, forums, messageries — sans rien changer côté serveur.',
-    "hero.cta": "Télécharger pour macOS",
+    "hero.cta": "Télécharger",
+    "hero.cta.sub": "macOS · Linux · Windows",
     "switch.lang": "Langue",
     "switch.theme": "Thème",
     "theme.green": "Vert",
     "theme.light": "Clair",
     "theme.dark": "Sombre",
+    "platforms.h": "Plateformes supportées",
+    "platforms.intro":
+      "<code>brocolis auto</code> détecte l'OS et fait le bon setup système — sans librairie spécifique côté code. Téléchargez la build pour votre plateforme :",
+    "platforms.macos.t": "macOS",
+    "platforms.macos.d":
+      "Trousseau Système (Safari, Chrome, Edge) + politique entreprise Firefox + profil <code>.mobileconfig</code> alternatif + proxies web/HTTPS via <code>networksetup</code>. Binaire universel Intel + Apple Silicon.",
+    "platforms.macos.cta": "Télécharger pour macOS",
+    "platforms.linux.t": "Linux",
+    "platforms.linux.d":
+      "Magasin de confiance distro (Debian/Ubuntu, Fedora/RHEL, Arch détectés via leurs outils) + politique entreprise Firefox + variables <code>http_proxy</code> dans <code>/etc/profile.d/</code>. Disponible aussi en paquets <code>.deb</code> et <code>.rpm</code>.",
+    "platforms.linux.cta": "Télécharger pour Linux",
+    "platforms.windows.t": "Windows",
+    "platforms.windows.d":
+      "Magasin <em>Local Machine\\Trusted Root</em> via <code>certutil</code> + politique entreprise Firefox + proxy WinHTTP via <code>netsh</code>. Scripts PowerShell <code>install.ps1</code> / <code>uninstall.ps1</code> pour les installs persistantes.",
+    "platforms.windows.cta": "Télécharger pour Windows",
     "s1.h": "Une commande, zéro configuration",
     "s1.li1":
-      "Mot de passe administrateur demandé <strong>une seule fois</strong> (frontière de sécurité macOS)",
+      "Mot de passe administrateur demandé <strong>une seule fois</strong> (<code>sudo</code> sur macOS/Linux, élévation UAC sur Windows)",
     "s1.li2":
-      "Génère un certificat racine et l'approuve dans le <strong>trousseau Système</strong> (Safari, Chrome)",
+      "Approuve le CA dans le magasin de confiance natif : <strong>trousseau Système</strong> (macOS), <code>update-ca-certificates</code> / <code>update-ca-trust</code> / <code>trust extract-compat</code> (Linux), <code>certutil -addstore Root</code> (Windows)",
     "s1.li3":
-      "Active la confiance entreprise pour <strong>Firefox</strong> (toutes variantes détectées), ou dépose un profil <code>brocolis-firefox.mobileconfig</code> à approuver dans <em>Réglages Système</em> — sans modifier le bundle Firefox",
-    "s1.li4": "Règle le proxy <strong>web et HTTPS</strong> du système",
+      "Active la confiance entreprise pour <strong>Firefox</strong> (toutes variantes détectées). Sur macOS, génère aussi un profil <code>brocolis-firefox.mobileconfig</code> qui ne modifie pas le bundle Firefox",
+    "s1.li4":
+      "Règle le proxy système : <code>networksetup</code> (macOS), <code>/etc/profile.d/brocolis-proxy.sh</code> avec <code>http_proxy</code>/<code>https_proxy</code> (Linux), <code>netsh winhttp set proxy</code> (Windows)",
     "s1.li5": "Démarre le chiffrement sélectif AES-256-GCM",
     "s1.li6":
-      "<strong>Restaure exactement l'état initial</strong> à l'arrêt (Ctrl-C) : CA retiré, profil et politiques retirés, proxy remis comme avant",
+      "<strong>Restaure exactement l'état initial</strong> à l'arrêt (Ctrl-C) : CA retiré, politiques/profil/variables retirés, proxy remis comme avant",
     "s1.note":
-      "Sans <code>sudo</code> ou hors macOS, <code>brocolis auto</code> démarre le proxy <strong>sans toucher au système</strong> (équivalent à <code>--no-system</code>) : pointez votre navigateur sur <code>127.0.0.1:&lt;port&gt;</code> manuellement.",
+      "Sans élévation administrateur, <code>brocolis auto</code> démarre le proxy <strong>sans toucher au système</strong> (équivalent à <code>--no-system</code>) : pointez votre navigateur sur <code>127.0.0.1:&lt;port&gt;</code> manuellement.",
     "s2.h": "Fonctionnalités",
     "s2.c1.t": "Chiffrement sélectif",
     "s2.c1.d":
@@ -48,22 +66,22 @@ export const DICT = {
       "Interception HTTPS via <code>CONNECT</code>, certificats feuilles forgés à la volée par une autorité interne (<em>rcgen</em>), TLS terminé côté client avec <em>rustls</em>.",
     "s2.c3.t": "Clés partagées",
     "s2.c3.d":
-      "Une clé symétrique 256 bits, partagée par canal sûr. Rotation immédiate via <code>SIGHUP</code>, rechargement via <code>SIGUSR1</code>.",
+      "Une clé symétrique 256 bits, partagée par canal sûr. Rotation immédiate via <code>SIGHUP</code>, rechargement via <code>SIGUSR1</code> (Unix).",
     "s2.c4.t": "Multi-navigateurs",
     "s2.c4.d":
-      "Safari, Chrome (trousseau Système) et toutes les variantes Firefox (politique entreprise ou profil <code>.mobileconfig</code> sans modification de bundle) font confiance au CA automatiquement.",
+      "Safari, Chrome, Edge, Chromium et toutes les variantes Firefox font confiance au CA automatiquement — via le magasin de confiance natif de l'OS et la politique entreprise Firefox.",
     "s3.h": "Démarrage rapide",
     "s3.li1":
-      "Téléchargez l'archive <code>brocolis-macos-universal.tar.gz</code> via le bouton ci-dessus (binaire universel Intel + Apple Silicon).",
+      "Téléchargez la build pour votre plateforme depuis la section ci-dessus (<code>.tar.gz</code> macOS universel, <code>.deb</code>/<code>.rpm</code> Linux ou <code>.zip</code> Windows x86_64).",
     "s3.li2":
-      "Lancez <code>sudo brocolis auto</code>. Le mot de passe administrateur n'est demandé qu'<strong>une fois</strong> (frontière de sécurité macOS).",
+      "Lancez <code>sudo brocolis auto</code> (macOS / Linux) ou <code>brocolis.exe auto</code> depuis un terminal <em>Exécuter en tant qu'administrateur</em> (Windows). Le mot de passe administrateur n'est demandé qu'<strong>une fois</strong>.",
     "s3.li3":
       "Tapez vos messages en marquant ce qui doit rester privé : <code>((mon secret))</code>. Vos correspondants partageant la clé voient le clair ; tous les autres ne voient que du chiffré.",
     "s3.li4":
       "<code>Ctrl-C</code> pour tout arrêter : Brocolis remet votre système exactement dans son état initial.",
     "s4.h": "Compiler depuis les sources &amp; CLI manuel",
     "s4.intro":
-      "Pour utiliser Brocolis hors macOS, ou tout piloter à la main :",
+      "Pour compiler vous-même ou tout piloter à la main (les commandes sont identiques sur les trois plateformes) :",
     "s4.code":
       "# Compiler (Rust stable, depuis les sources)\ncargo build --release          # binaire : target/release/brocolis\n\n# 1. Générer une clé symétrique AES-256 (à partager par canal sûr)\n$ brocolis keygen\nSomopQcHJyVQQAWedZFGY5E4+hxKjZemOB7aGnYr6kw=\n\n# 2. Exporter le certificat racine pour l'installer dans le navigateur\n$ brocolis ca --export brocolis-ca.crt\n\n# 3. Lancer le proxy (clé renseignée dans brocolis.toml, cf. brocolis.example.toml)\n$ brocolis run --config brocolis.toml\nBrocolis écoute sur http://127.0.0.1:8080 (proxy HTTP/HTTPS)",
     "s4.outro":
@@ -79,7 +97,7 @@ export const DICT = {
     "s6.li2":
       "Aucune télémétrie, aucun serveur, aucun compte — tout tourne en local.",
     "s6.li3":
-      "Le CA est <strong>retiré du trousseau</strong> automatiquement à l'arrêt s'il a été ajouté par Brocolis.",
+      "Le CA est <strong>retiré du magasin de confiance</strong> automatiquement à l'arrêt s'il a été ajouté par Brocolis.",
     "s6.li4":
       "Code source consultable pour audit (logiciel sous licence propriétaire).",
     "footer": "Brocolis — proxy MITM en Rust",
@@ -87,10 +105,11 @@ export const DICT = {
   en: {
     "meta.title": "Brocolis 🥦 — Rust MITM proxy for selective encryption",
     "meta.desc":
-      "A Rust MITM proxy that selectively encrypts HTTP/HTTPS traffic on Twitter, forums, messengers — with nothing to change on the server side.",
+      "A Rust MITM proxy that selectively encrypts HTTP/HTTPS traffic on Twitter, forums, messengers. Automatic system setup on macOS, Linux and Windows — with nothing to change on the server side.",
     "meta.ogTitle": "Brocolis 🥦 — Selective encryption for your web traffic",
     "meta.ogDesc":
-      "One command, zero configuration. AES-256-GCM on the segments you mark.",
+      "One command, zero configuration. AES-256-GCM on the segments you mark. macOS, Linux, Windows.",
+    "nav.platforms": "Platforms",
     "nav.features": "Features",
     "nav.quickstart": "Quick start",
     "nav.cli": "CLI",
@@ -102,25 +121,42 @@ export const DICT = {
       "Rust MITM proxy for <strong>selective encryption</strong> of your web traffic.",
     "hero.lead":
       'Mark <code class="inv">((your secret))</code> in your messages: Brocolis encrypts it with AES-256-GCM before it leaves your machine, and decrypts it back for users who share your key. Twitter, forums, messengers — with nothing to change on the server side.',
-    "hero.cta": "Download for macOS",
+    "hero.cta": "Download",
+    "hero.cta.sub": "macOS · Linux · Windows",
     "switch.lang": "Language",
     "switch.theme": "Theme",
     "theme.green": "Green",
     "theme.light": "Light",
     "theme.dark": "Dark",
+    "platforms.h": "Supported platforms",
+    "platforms.intro":
+      "<code>brocolis auto</code> detects the OS and runs the right system setup — no platform-specific library on the code side. Download the build for your platform:",
+    "platforms.macos.t": "macOS",
+    "platforms.macos.d":
+      "System keychain (Safari, Chrome, Edge) + Firefox enterprise policy + alternative <code>.mobileconfig</code> profile + web/HTTPS proxies via <code>networksetup</code>. Universal binary Intel + Apple Silicon.",
+    "platforms.macos.cta": "Download for macOS",
+    "platforms.linux.t": "Linux",
+    "platforms.linux.d":
+      "Distro trust store (Debian/Ubuntu, Fedora/RHEL, Arch detected via their tools) + Firefox enterprise policy + <code>http_proxy</code> variables in <code>/etc/profile.d/</code>. Also available as <code>.deb</code> and <code>.rpm</code> packages.",
+    "platforms.linux.cta": "Download for Linux",
+    "platforms.windows.t": "Windows",
+    "platforms.windows.d":
+      "<em>Local Machine\\Trusted Root</em> store via <code>certutil</code> + Firefox enterprise policy + WinHTTP proxy via <code>netsh</code>. PowerShell scripts <code>install.ps1</code> / <code>uninstall.ps1</code> for persistent installs.",
+    "platforms.windows.cta": "Download for Windows",
     "s1.h": "One command, zero configuration",
     "s1.li1":
-      "Admin password requested <strong>only once</strong> (a macOS security boundary)",
+      "Admin password requested <strong>only once</strong> (<code>sudo</code> on macOS/Linux, UAC elevation on Windows)",
     "s1.li2":
-      "Generates a root certificate and trusts it in the <strong>System keychain</strong> (Safari, Chrome)",
+      "Trusts the CA in the native trust store: <strong>System keychain</strong> (macOS), <code>update-ca-certificates</code> / <code>update-ca-trust</code> / <code>trust extract-compat</code> (Linux), <code>certutil -addstore Root</code> (Windows)",
     "s1.li3":
-      "Enables enterprise trust for <strong>Firefox</strong> (all detected variants), or drops a <code>brocolis-firefox.mobileconfig</code> profile to approve in <em>System Settings</em> — without modifying the Firefox bundle",
-    "s1.li4": "Sets the system <strong>web and HTTPS</strong> proxy",
+      "Enables enterprise trust for <strong>Firefox</strong> (all detected variants). On macOS, also generates a <code>brocolis-firefox.mobileconfig</code> profile that doesn't modify the Firefox bundle",
+    "s1.li4":
+      "Sets the system proxy: <code>networksetup</code> (macOS), <code>/etc/profile.d/brocolis-proxy.sh</code> with <code>http_proxy</code>/<code>https_proxy</code> (Linux), <code>netsh winhttp set proxy</code> (Windows)",
     "s1.li5": "Starts AES-256-GCM selective encryption",
     "s1.li6":
-      "<strong>Restores the exact original state</strong> on exit (Ctrl-C): CA removed, profile and policies removed, proxy reset",
+      "<strong>Restores the exact original state</strong> on exit (Ctrl-C): CA removed, policies/profile/variables removed, proxy reset",
     "s1.note":
-      "Without <code>sudo</code> or off macOS, <code>brocolis auto</code> starts the proxy <strong>without touching the system</strong> (equivalent to <code>--no-system</code>): point your browser at <code>127.0.0.1:&lt;port&gt;</code> manually.",
+      "Without admin elevation, <code>brocolis auto</code> starts the proxy <strong>without touching the system</strong> (equivalent to <code>--no-system</code>): point your browser at <code>127.0.0.1:&lt;port&gt;</code> manually.",
     "s2.h": "Features",
     "s2.c1.t": "Selective encryption",
     "s2.c1.d":
@@ -130,21 +166,22 @@ export const DICT = {
       "HTTPS interception via <code>CONNECT</code>, leaf certificates forged on the fly by an internal authority (<em>rcgen</em>), client-side TLS terminated with <em>rustls</em>.",
     "s2.c3.t": "Shared keys",
     "s2.c3.d":
-      "A 256-bit symmetric key, shared over a secure channel. Immediate rotation via <code>SIGHUP</code>, reload via <code>SIGUSR1</code>.",
+      "A 256-bit symmetric key, shared over a secure channel. Immediate rotation via <code>SIGHUP</code>, reload via <code>SIGUSR1</code> (Unix).",
     "s2.c4.t": "Multi-browser",
     "s2.c4.d":
-      "Safari, Chrome (System keychain) and all Firefox variants (enterprise policy or <code>.mobileconfig</code> profile, no bundle modification) trust the CA automatically.",
+      "Safari, Chrome, Edge, Chromium and all Firefox variants trust the CA automatically — via the native OS trust store and Firefox enterprise policy.",
     "s3.h": "Quick start",
     "s3.li1":
-      "Download the <code>brocolis-macos-universal.tar.gz</code> archive via the button above (universal Intel + Apple Silicon binary).",
+      "Download the build for your platform from the section above (universal macOS <code>.tar.gz</code>, Linux <code>.deb</code>/<code>.rpm</code>, or Windows <code>.zip</code> x86_64).",
     "s3.li2":
-      "Run <code>sudo brocolis auto</code>. The admin password is requested <strong>only once</strong> (a macOS security boundary).",
+      "Run <code>sudo brocolis auto</code> (macOS / Linux) or <code>brocolis.exe auto</code> from a <em>Run as administrator</em> terminal (Windows). The admin password is requested <strong>only once</strong>.",
     "s3.li3":
       "Type your messages marking what must stay private: <code>((my secret))</code>. Correspondents who share the key see the clear text; everyone else sees only ciphertext.",
     "s3.li4":
       "<code>Ctrl-C</code> to stop everything: Brocolis returns your system to its exact original state.",
     "s4.h": "Build from source &amp; manual CLI",
-    "s4.intro": "To use Brocolis off macOS, or drive everything by hand:",
+    "s4.intro":
+      "To build it yourself or drive everything by hand (commands are identical on all three platforms):",
     "s4.code":
       "# Build (stable Rust, from source)\ncargo build --release          # binary: target/release/brocolis\n\n# 1. Generate an AES-256 symmetric key (share it over a secure channel)\n$ brocolis keygen\nSomopQcHJyVQQAWedZFGY5E4+hxKjZemOB7aGnYr6kw=\n\n# 2. Export the root certificate to install it in the browser\n$ brocolis ca --export brocolis-ca.crt\n\n# 3. Start the proxy (key set in brocolis.toml, see brocolis.example.toml)\n$ brocolis run --config brocolis.toml\nBrocolis listening on http://127.0.0.1:8080 (HTTP/HTTPS proxy)",
     "s4.outro":
@@ -159,7 +196,7 @@ export const DICT = {
       "<strong>End-to-end</strong> encryption between users sharing the key — the remote service never sees the clear text.",
     "s6.li2": "No telemetry, no server, no account — everything runs locally.",
     "s6.li3":
-      "The CA is <strong>removed from the keychain</strong> automatically on exit if Brocolis added it.",
+      "The CA is <strong>removed from the trust store</strong> automatically on exit if Brocolis added it.",
     "s6.li4":
       "Source code available for audit (proprietary-licensed software).",
     "footer": "Brocolis — Rust MITM proxy",
@@ -167,10 +204,11 @@ export const DICT = {
   es: {
     "meta.title": "Brocolis 🥦 — Proxy MITM en Rust para cifrado selectivo",
     "meta.desc":
-      "Proxy MITM en Rust que cifra selectivamente el tráfico HTTP/HTTPS en Twitter, foros y mensajerías — sin cambiar nada del lado del servidor.",
+      "Proxy MITM en Rust que cifra selectivamente el tráfico HTTP/HTTPS en Twitter, foros y mensajerías. Configuración automática en macOS, Linux y Windows — sin cambiar nada del lado del servidor.",
     "meta.ogTitle": "Brocolis 🥦 — Cifrado selectivo de tu tráfico web",
     "meta.ogDesc":
-      "Un comando, cero configuración. AES-256-GCM en los segmentos que marques.",
+      "Un comando, cero configuración. AES-256-GCM en los segmentos que marques. macOS, Linux, Windows.",
+    "nav.platforms": "Plataformas",
     "nav.features": "Características",
     "nav.quickstart": "Inicio rápido",
     "nav.cli": "CLI",
@@ -182,25 +220,42 @@ export const DICT = {
       "Proxy MITM en Rust para el <strong>cifrado selectivo</strong> de tu tráfico web.",
     "hero.lead":
       'Marca <code class="inv">((tu secreto))</code> en tus mensajes: Brocolis lo cifra con AES-256-GCM antes de que salga de tu máquina, y lo descifra para los usuarios que comparten tu clave. Twitter, foros, mensajerías — sin cambiar nada del lado del servidor.',
-    "hero.cta": "Descargar para macOS",
+    "hero.cta": "Descargar",
+    "hero.cta.sub": "macOS · Linux · Windows",
     "switch.lang": "Idioma",
     "switch.theme": "Tema",
     "theme.green": "Verde",
     "theme.light": "Claro",
     "theme.dark": "Oscuro",
+    "platforms.h": "Plataformas soportadas",
+    "platforms.intro":
+      "<code>brocolis auto</code> detecta el SO y hace la configuración correcta — sin librería específica de plataforma del lado del código. Descarga la build para tu plataforma:",
+    "platforms.macos.t": "macOS",
+    "platforms.macos.d":
+      "Llavero del Sistema (Safari, Chrome, Edge) + política empresarial Firefox + perfil <code>.mobileconfig</code> alternativo + proxies web/HTTPS vía <code>networksetup</code>. Binario universal Intel + Apple Silicon.",
+    "platforms.macos.cta": "Descargar para macOS",
+    "platforms.linux.t": "Linux",
+    "platforms.linux.d":
+      "Almacén de confianza distro (Debian/Ubuntu, Fedora/RHEL, Arch detectados vía sus herramientas) + política empresarial Firefox + variables <code>http_proxy</code> en <code>/etc/profile.d/</code>. También disponible como paquetes <code>.deb</code> y <code>.rpm</code>.",
+    "platforms.linux.cta": "Descargar para Linux",
+    "platforms.windows.t": "Windows",
+    "platforms.windows.d":
+      "Almacén <em>Local Machine\\Trusted Root</em> vía <code>certutil</code> + política empresarial Firefox + proxy WinHTTP vía <code>netsh</code>. Scripts PowerShell <code>install.ps1</code> / <code>uninstall.ps1</code> para instalaciones persistentes.",
+    "platforms.windows.cta": "Descargar para Windows",
     "s1.h": "Un comando, cero configuración",
     "s1.li1":
-      "Contraseña de administrador solicitada <strong>una sola vez</strong> (frontera de seguridad de macOS)",
+      "Contraseña de administrador solicitada <strong>una sola vez</strong> (<code>sudo</code> en macOS/Linux, elevación UAC en Windows)",
     "s1.li2":
-      "Genera un certificado raíz y lo aprueba en el <strong>llavero del Sistema</strong> (Safari, Chrome)",
+      "Aprueba el CA en el almacén de confianza nativo: <strong>llavero del Sistema</strong> (macOS), <code>update-ca-certificates</code> / <code>update-ca-trust</code> / <code>trust extract-compat</code> (Linux), <code>certutil -addstore Root</code> (Windows)",
     "s1.li3":
-      "Activa la confianza empresarial para <strong>Firefox</strong> (todas las variantes detectadas), o deposita un perfil <code>brocolis-firefox.mobileconfig</code> para aprobar en <em>Ajustes del Sistema</em> — sin modificar el bundle de Firefox",
-    "s1.li4": "Configura el proxy <strong>web y HTTPS</strong> del sistema",
+      "Activa la confianza empresarial para <strong>Firefox</strong> (todas las variantes detectadas). En macOS, también genera un perfil <code>brocolis-firefox.mobileconfig</code> que no modifica el bundle de Firefox",
+    "s1.li4":
+      "Configura el proxy del sistema: <code>networksetup</code> (macOS), <code>/etc/profile.d/brocolis-proxy.sh</code> con <code>http_proxy</code>/<code>https_proxy</code> (Linux), <code>netsh winhttp set proxy</code> (Windows)",
     "s1.li5": "Inicia el cifrado selectivo AES-256-GCM",
     "s1.li6":
-      "<strong>Restaura exactamente el estado inicial</strong> al salir (Ctrl-C): CA retirado, perfil y políticas retirados, proxy restaurado",
+      "<strong>Restaura exactamente el estado inicial</strong> al salir (Ctrl-C): CA retirado, políticas/perfil/variables retiradas, proxy restaurado",
     "s1.note":
-      "Sin <code>sudo</code> o fuera de macOS, <code>brocolis auto</code> arranca el proxy <strong>sin tocar el sistema</strong> (equivalente a <code>--no-system</code>): apunta tu navegador a <code>127.0.0.1:&lt;puerto&gt;</code> manualmente.",
+      "Sin elevación de administrador, <code>brocolis auto</code> arranca el proxy <strong>sin tocar el sistema</strong> (equivalente a <code>--no-system</code>): apunta tu navegador a <code>127.0.0.1:&lt;puerto&gt;</code> manualmente.",
     "s2.h": "Características",
     "s2.c1.t": "Cifrado selectivo",
     "s2.c1.d":
@@ -210,22 +265,22 @@ export const DICT = {
       "Interceptación HTTPS vía <code>CONNECT</code>, certificados hoja forjados al vuelo por una autoridad interna (<em>rcgen</em>), TLS terminado del lado cliente con <em>rustls</em>.",
     "s2.c3.t": "Claves compartidas",
     "s2.c3.d":
-      "Una clave simétrica de 256 bits, compartida por un canal seguro. Rotación inmediata con <code>SIGHUP</code>, recarga con <code>SIGUSR1</code>.",
+      "Una clave simétrica de 256 bits, compartida por un canal seguro. Rotación inmediata con <code>SIGHUP</code>, recarga con <code>SIGUSR1</code> (Unix).",
     "s2.c4.t": "Multi-navegador",
     "s2.c4.d":
-      "Safari, Chrome (llavero del Sistema) y todas las variantes de Firefox (política empresarial o perfil <code>.mobileconfig</code> sin modificación del bundle) confían en el CA automáticamente.",
+      "Safari, Chrome, Edge, Chromium y todas las variantes de Firefox confían en el CA automáticamente — vía el almacén de confianza nativo del SO y la política empresarial Firefox.",
     "s3.h": "Inicio rápido",
     "s3.li1":
-      "Descarga el archivo <code>brocolis-macos-universal.tar.gz</code> mediante el botón de arriba (binario universal Intel + Apple Silicon).",
+      "Descarga la build para tu plataforma desde la sección de arriba (<code>.tar.gz</code> macOS universal, <code>.deb</code>/<code>.rpm</code> Linux, o <code>.zip</code> Windows x86_64).",
     "s3.li2":
-      "Ejecuta <code>sudo brocolis auto</code>. La contraseña de administrador solo se pide <strong>una vez</strong> (frontera de seguridad de macOS).",
+      "Ejecuta <code>sudo brocolis auto</code> (macOS / Linux) o <code>brocolis.exe auto</code> desde un terminal <em>Ejecutar como administrador</em> (Windows). La contraseña de administrador solo se pide <strong>una vez</strong>.",
     "s3.li3":
       "Escribe tus mensajes marcando lo que debe quedar privado: <code>((mi secreto))</code>. Los corresponsales que comparten la clave ven el texto en claro; el resto solo ve cifrado.",
     "s3.li4":
       "<code>Ctrl-C</code> para detener todo: Brocolis devuelve tu sistema exactamente a su estado inicial.",
     "s4.h": "Compilar desde las fuentes y CLI manual",
     "s4.intro":
-      "Para usar Brocolis fuera de macOS, o controlarlo todo a mano:",
+      "Para compilarlo tú mismo o controlarlo todo a mano (los comandos son idénticos en las tres plataformas):",
     "s4.code":
       "# Compilar (Rust estable, desde las fuentes)\ncargo build --release          # binario: target/release/brocolis\n\n# 1. Generar una clave simétrica AES-256 (a compartir por un canal seguro)\n$ brocolis keygen\nSomopQcHJyVQQAWedZFGY5E4+hxKjZemOB7aGnYr6kw=\n\n# 2. Exportar el certificado raíz para instalarlo en el navegador\n$ brocolis ca --export brocolis-ca.crt\n\n# 3. Lanzar el proxy (clave en brocolis.toml, cf. brocolis.example.toml)\n$ brocolis run --config brocolis.toml\nBrocolis escuchando en http://127.0.0.1:8080 (proxy HTTP/HTTPS)",
     "s4.outro":
@@ -241,7 +296,7 @@ export const DICT = {
     "s6.li2":
       "Sin telemetría, sin servidor, sin cuenta — todo se ejecuta localmente.",
     "s6.li3":
-      "El CA se <strong>retira del llavero</strong> automáticamente al salir si Brocolis lo añadió.",
+      "El CA se <strong>retira del almacén de confianza</strong> automáticamente al salir si Brocolis lo añadió.",
     "s6.li4":
       "Código fuente consultable para auditoría (software bajo licencia propietaria).",
     "footer": "Brocolis — proxy MITM en Rust",

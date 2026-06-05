@@ -2,6 +2,7 @@ import { LangProvider } from "./i18n/LangContext";
 import { ThemeProvider } from "./theme/ThemeContext";
 import { Navbar } from "./components/Navbar";
 import { Hero } from "./components/Hero";
+import { SectionPlatforms } from "./components/SectionPlatforms";
 import { SectionAuto } from "./components/SectionAuto";
 import { SectionFeatures } from "./components/SectionFeatures";
 import { SectionQuickstart } from "./components/SectionQuickstart";
@@ -17,6 +18,7 @@ export default function App() {
         <Navbar />
         <Hero />
         <main className="container">
+          <SectionPlatforms />
           <SectionAuto />
           <SectionFeatures />
           <SectionQuickstart />
