@@ -12,18 +12,59 @@ Ce dossier complète avec des installeurs shell pour les usages persistants
 | `install.sh`                         | Setup CA + politique Firefox + `.mobileconfig` + config. Flag `--enable-launchd` opt-in.          |
 | `uninstall.sh`                       | Annule ce que `install.sh` a fait, en respectant ce qui préexistait.                              |
 | `com.maxlestage.brocolis.plist`      | LaunchDaemon (tourne `brocolis run` comme service système).                                       |
+| `build-pkg.sh`                       | Construit l'installeur `.pkg` avec `pkgbuild`, sortie dans `macos/dist/`.                         |
+| `pkg/postinstall`                    | Wrapper de postinstall .pkg qui délègue à `install.sh --enable-launchd`.                          |
 | `test-install.sh`                    | Test d'intégration du chemin `install.sh` (équivalent de `linux/test-linux.sh`).                  |
 
 Note : `scripts/test-macos.sh` (à la racine) teste le chemin natif
 `brocolis auto`. Les deux tests sont complémentaires.
 
-## Trois modes au choix
+## Quatre modes au choix
 
 | Mode                             | Pour qui ?                                                                              |
 | -------------------------------- | --------------------------------------------------------------------------------------- |
 | **`sudo brocolis auto`**         | Test rapide / utilisation ad hoc. Tout configuré, restauré à Ctrl-C. **Recommandé** pour démarrer. |
-| **`install.sh --enable-launchd`** | Installation persistante : CA + Firefox + service LaunchDaemon. Idéal sur poste perso.  |
+| **Paquet `.pkg`**                | Installation persistante en un double-clic (ou `installer -pkg`). Service LaunchDaemon démarré automatiquement. Idéal sur poste perso. |
+| **`install.sh --enable-launchd`** | Équivalent du `.pkg` depuis les sources, sans passer par pkgbuild.                      |
 | **`install.sh` (sans flag)**     | Setup persistant côté trousseau + Firefox, on lance `brocolis run` à la main quand on veut. |
+
+## Usage : paquet `.pkg`
+
+Téléchargez depuis la release rolling [`cli-latest`](https://github.com/maxlestage/brocolis/releases/tag/cli-latest) (générée à chaque push sur `master`) ou construisez localement (macOS requis) :
+
+```sh
+bash macos/build-pkg.sh
+# → macos/dist/brocolis-0.1.0.pkg
+```
+
+Installation :
+
+```sh
+sudo installer -pkg macos/dist/brocolis-0.1.0.pkg -target /
+# ou double-cliquez le .pkg et suivez l'assistant
+```
+
+Le `.pkg` dépose :
+
+- `/usr/local/bin/brocolis` — le binaire (universel Intel + Apple Silicon dans la release CI).
+- `/usr/local/bin/brocolis-uninstall` — copie de `uninstall.sh` pour désinstaller.
+- `/Library/LaunchDaemons/com.maxlestage.brocolis.plist` — le service.
+- `/usr/local/share/doc/brocolis/{README.md,MACOS.md}` — la doc.
+
+Et son postinstall fait le reste : utilisateur, dossiers, CA, politique
+Firefox, `.mobileconfig`, `brocolis.toml`, chargement du LaunchDaemon.
+
+Désinstallation (le `.pkg` ne fournit pas d'uninstaller intégré sur
+macOS — c'est une limite de la techno, pas un oubli) :
+
+```sh
+sudo brocolis-uninstall           # garde /etc/brocolis/
+sudo brocolis-uninstall --purge   # supprime aussi /etc/brocolis/ et /var/log/brocolis/
+```
+
+Le `.pkg` n'est pas signé/notarisé par défaut (pas d'Apple Developer ID
+dans le repo). Gatekeeper n'empêche pas l'installation en CLI
+(`sudo installer -pkg …`) mais affiche un avertissement en GUI.
 
 ## Usage : `brocolis auto`
 
@@ -108,9 +149,11 @@ Configurez votre navigateur sur le proxy HTTP **et** HTTPS
 
 ## CI / déploiement
 
-Le binaire macOS est buildé par `.github/workflows/macos-cli-release.yml`
-(release rolling `cli-latest`, universel Intel + Apple Silicon). Aucun
-packaging `.pkg` automatisé pour l'instant — installation par script.
+`.github/workflows/macos-cli-release.yml` builde, à chaque push sur
+`master`, le binaire **universel** (Intel + Apple Silicon via `lipo`),
+puis le packagé comme `.tar.gz` et `.pkg` (`macos/build-pkg.sh`). Les
+deux sont publiés sur la release rolling `cli-latest`. Les tags `v*`
+produisent en plus une release versionnée `vX.Y.Z`.
 
 ## Côté Rust
 
