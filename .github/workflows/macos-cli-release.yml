@@ -43,20 +43,12 @@ jobs:
             target/x86_64-apple-darwin/release/brocolis \
             -output target/universal/brocolis
           lipo -info target/universal/brocolis
-      - name: Package tar.gz
+      - name: Package
         run: tar -czf brocolis-macos-universal.tar.gz -C target/universal brocolis
-      - name: Build .pkg (universel)
-        run: bash macos/build-pkg.sh target/universal/brocolis
-      - name: Stage release artifacts
-        run: |
-          mkdir -p out
-          cp brocolis-macos-universal.tar.gz out/
-          cp macos/dist/*.pkg out/
-          ls -lh out/
       - uses: actions/upload-artifact@v4
         with:
-          name: brocolis-macos
-          path: out/*
+          name: brocolis-macos-universal
+          path: brocolis-macos-universal.tar.gz
 
   release:
     needs: [build-macos]
@@ -68,7 +60,7 @@ jobs:
       - name: Collect files
         id: collect
         run: |
-          FILES=$(find artifacts -type f \( -name '*.tar.gz' -o -name '*.pkg' \) | tr '\n' ' ')
+          FILES=$(find artifacts -name '*.tar.gz' | tr '\n' ' ')
           echo "files=${FILES}" >> "$GITHUB_OUTPUT"
 
       - name: Publish rolling release
@@ -81,7 +73,7 @@ jobs:
             --repo "${GITHUB_REPOSITORY}" \
             --target "${GITHUB_SHA}" \
             --title "Brocolis CLI macOS (dernier ${GITHUB_REF_NAME})" \
-            --notes "Build automatique du dernier ${GITHUB_REF_NAME} (macOS universel Intel + Apple Silicon). Inclut le binaire (.tar.gz) et l'installeur .pkg." \
+            --notes "Build automatique du dernier ${GITHUB_REF_NAME} (macOS universel Intel + Apple Silicon)." \
             --prerelease
 
       - name: Publish tagged release
@@ -92,4 +84,4 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" ${{ steps.collect.outputs.files }} \
             --repo "${GITHUB_REPOSITORY}" \
             --title "Brocolis ${GITHUB_REF_NAME}" \
-            --notes "Release ${GITHUB_REF_NAME} pour macOS (universel Intel + Apple Silicon). Inclut le binaire (.tar.gz) et l'installeur .pkg."
+            --notes "Release ${GITHUB_REF_NAME} (macOS universel Intel + Apple Silicon)."

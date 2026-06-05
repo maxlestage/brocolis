@@ -9,6 +9,3 @@ brocolis-ca.*
 
 # Paquets Linux générés par linux/build-packages.sh
 /linux/dist/
-
-# Paquet macOS .pkg généré par macos/build-pkg.sh
-/macos/dist/
