@@ -1,0 +1,45 @@
+#!/bin/sh
+# Brocolis — Debian postrm.
+#
+# Exécuté après le retrait des fichiers du paquet. Deux modes :
+#   - "remove" : retire le CA du magasin de confiance et la politique
+#     Firefox (ces deux ne sont pas des fichiers de "config" stricto sensu :
+#     les laisser entraîne une confiance d'un CA dont le binaire n'existe
+#     plus, ce qui est dangereux).
+#   - "purge" : tout le reste — /etc/brocolis/, /var/lib/brocolis/,
+#     utilisateur brocolis.
+#
+# La gestion systemd (purge des liens) est ajoutée par cargo-deb via
+# le placeholder #DEBHELPER#.
+set -e
+
+ETC=/etc/brocolis
+TRUST=/usr/local/share/ca-certificates/brocolis-ca.crt
+FF_POLICY_DIR=/etc/firefox/policies
+FF_POLICY=$FF_POLICY_DIR/policies.json
+STATE=/var/lib/brocolis
+
+case "$1" in
+    remove|purge)
+        if [ -f "$TRUST" ]; then
+            rm -f "$TRUST"
+            update-ca-certificates >/dev/null 2>&1 || true
+        fi
+        if [ -f "$FF_POLICY" ]; then
+            rm -f "$FF_POLICY"
+            rmdir "$FF_POLICY_DIR" 2>/dev/null || true
+        fi
+        ;;
+esac
+
+if [ "$1" = "purge" ]; then
+    rm -rf "$ETC" "$STATE"
+    if id brocolis >/dev/null 2>&1; then
+        deluser --system brocolis >/dev/null 2>&1 \
+          || userdel brocolis >/dev/null 2>&1 \
+          || true
+    fi
+fi
+
+#DEBHELPER#
+exit 0

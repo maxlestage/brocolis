@@ -3,6 +3,10 @@ name = "brocolis"
 version = "0.1.0"
 edition = "2021"
 description = "Proxy MITM Rust pour le chiffrement sélectif du trafic HTTP/HTTPS"
+license = "LicenseRef-Proprietary"
+readme = "Readme.md"
+homepage = "https://maxlestage.github.io/brocolis/"
+repository = "https://github.com/maxlestage/brocolis"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -36,3 +40,54 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1"
 thiserror = "1"
+
+# ---------------------------------------------------------------------------
+# Packaging Linux (cargo deb / cargo generate-rpm). Voir linux/build-packages.sh.
+# ---------------------------------------------------------------------------
+
+[package.metadata.deb]
+maintainer = "Maxime Nathan LESTAGE <maxlestage@users.noreply.github.com>"
+copyright = "© Maxime Nathan LESTAGE — Logiciel propriétaire, voir Readme.md"
+license-file = ["Readme.md", "0"]
+extended-description = """\
+Brocolis chiffre sélectivement le trafic HTTP/HTTPS sur les services en ligne
+(Twitter, forums, messageries) sans rien changer côté serveur. Les segments
+((entre doubles parenthèses)) sont remplacés par un jeton chiffré
+[[BROCOLIS:v1:…]] en AES-256-GCM ; les utilisateurs partageant la clé voient
+le clair, le serveur ne stocke que du chiffré.
+
+Le post-install crée un utilisateur système brocolis, génère le CA et un
+brocolis.toml par défaut, ajoute le CA au magasin de confiance et active
+le service systemd. Configurez votre navigateur sur le proxy HTTP+HTTPS
+127.0.0.1:8080 (Firefox suit la politique entreprise déposée automatiquement).
+"""
+depends = "$auto, ca-certificates, adduser"
+section = "net"
+priority = "optional"
+assets = [
+    ["target/release/brocolis", "/usr/local/bin/", "755"],
+    ["linux/brocolis.service", "/lib/systemd/system/brocolis.service", "644"],
+    ["Readme.md", "/usr/share/doc/brocolis/README.md", "644"],
+    ["linux/README.md", "/usr/share/doc/brocolis/LINUX.md", "644"],
+]
+maintainer-scripts = "linux/debian/"
+
+[package.metadata.deb.systemd-units]
+unit-name = "brocolis"
+enable = true
+start = true
+restart-after-upgrade = true
+
+[package.metadata.generate-rpm]
+summary = "Proxy MITM Rust pour le chiffrement sélectif du trafic HTTP/HTTPS"
+license = "Proprietary"
+requires = { ca-certificates = "*" }
+post_install_script = "linux/rpm/post-install.sh"
+pre_uninstall_script = "linux/rpm/pre-uninstall.sh"
+post_uninstall_script = "linux/rpm/post-uninstall.sh"
+assets = [
+    { source = "target/release/brocolis", dest = "/usr/local/bin/brocolis", mode = "755" },
+    { source = "linux/brocolis.service", dest = "/lib/systemd/system/brocolis.service", mode = "644", config = false },
+    { source = "Readme.md", dest = "/usr/share/doc/brocolis/README.md", mode = "644", doc = true },
+    { source = "linux/README.md", dest = "/usr/share/doc/brocolis/LINUX.md", mode = "644", doc = true },
+]

@@ -6,14 +6,63 @@ macOS-only ; sur Linux, ce dossier fournit l'équivalent en shell.
 
 ## Fichiers
 
-| Fichier              | Rôle                                                                                              |
-| -------------------- | ------------------------------------------------------------------------------------------------- |
-| `install.sh`         | Setup CA + politique Firefox + config. Flags `--env-proxy` et `--enable-systemd` opt-in.          |
-| `uninstall.sh`       | Annule ce que `install.sh` a fait, en respectant ce qui préexistait.                              |
-| `brocolis.service`   | Unité systemd (durcie via `Protect*` / `Restrict*`) qui tourne `brocolis run` comme service.      |
-| `test-linux.sh`      | Test d'intégration équivalent à `scripts/test-macos.sh` (install, flux HTTPS réel, uninstall).    |
+| Fichier                 | Rôle                                                                                              |
+| ----------------------- | ------------------------------------------------------------------------------------------------- |
+| `install.sh`            | Setup CA + politique Firefox + config. Flags `--env-proxy` et `--enable-systemd` opt-in.          |
+| `uninstall.sh`          | Annule ce que `install.sh` a fait, en respectant ce qui préexistait.                              |
+| `brocolis.service`      | Unité systemd (durcie via `Protect*` / `Restrict*`) qui tourne `brocolis run` comme service.      |
+| `test-linux.sh`         | Test d'intégration équivalent à `scripts/test-macos.sh` (install, flux HTTPS réel, uninstall).    |
+| `build-packages.sh`     | Construit `.deb` (cargo-deb) + `.rpm` (cargo-generate-rpm) dans `linux/dist/`.                    |
+| `debian/{postinst,prerm,postrm}` | Maintainer scripts utilisés par le `.deb` (créent l'utilisateur, posent CA + Firefox + config). |
+| `rpm/{post-install,pre-uninstall,post-uninstall}.sh` | Scriptlets utilisés par le `.rpm` (équivalents, magasin Fedora/RHEL).            |
 
-## Usage
+## Deux modes : paquet ou scripts
+
+| Mode                             | Pour qui ?                                                                       |
+| -------------------------------- | -------------------------------------------------------------------------------- |
+| **Paquet (`.deb` / `.rpm`)**     | Recommandé. Installe via `apt` / `dnf`, gère mises à jour et désinstallation.    |
+| **Scripts (`install.sh`)**       | Pour démarrer sans packaging (depuis les sources), ou contrôler chaque étape.    |
+
+## Usage : paquet
+
+Téléchargez depuis la release rolling [`cli-latest-linux`](https://github.com/maxlestage/brocolis/releases/tag/cli-latest-linux) (générée à chaque push sur `master`) ou construisez localement :
+
+```sh
+bash linux/build-packages.sh        # produit .deb et .rpm dans linux/dist/
+bash linux/build-packages.sh deb    # juste le .deb
+bash linux/build-packages.sh rpm    # juste le .rpm
+```
+
+Installation :
+
+```sh
+# Debian / Ubuntu
+sudo apt install ./brocolis_*_amd64.deb
+
+# Fedora / RHEL
+sudo dnf install ./brocolis-*.x86_64.rpm
+```
+
+Le `postinst` (`.deb`) ou `%post` (`.rpm`) :
+- crée l'utilisateur système `brocolis` ;
+- génère le CA + un `brocolis.toml` avec une clé fraîche dans `/etc/brocolis/` ;
+- dépose le CA dans le magasin de confiance de la distribution ;
+- pose la politique entreprise Firefox dans `/etc/firefox/policies/` ;
+- démarre et active le service `brocolis.service`.
+
+Désinstallation :
+
+```sh
+# Debian / Ubuntu — retire CA, politique Firefox, service ; garde /etc/brocolis/.
+sudo apt remove brocolis
+# Purge complète (supprime aussi /etc/brocolis/ et l'utilisateur).
+sudo apt purge brocolis
+
+# Fedora / RHEL — équivalent direct (un seul mode = purge).
+sudo dnf remove brocolis
+```
+
+## Usage : scripts (depuis les sources)
 
 ```sh
 # Compilation (si pas déjà fait)
@@ -96,6 +145,17 @@ systemctl stop brocolis          # arrêt
 Sur une distribution inconnue, le script s'arrête proprement avec un
 message explicite.
 
+## CI / déploiement
+
+`.github/workflows/linux-cli-release.yml` builde le binaire, le `.deb` et
+le `.rpm` à chaque push sur `master`, et publie tout dans la release
+rolling `cli-latest-linux`. Les tags `v*` produisent en plus une release
+versionnée `vX.Y.Z-linux`.
+
+Les tests d'intégration (`linux/test-linux.sh`) ne tournent **pas** en CI :
+ils exigent root et modifient l'état du système (magasin de confiance,
+politique Firefox, proxy). À jouer sur une vraie machine.
+
 ## Limites volontaires
 
 - **Proxy GUI** (GSettings GNOME, KWrite KDE) : non automatisé.
@@ -107,8 +167,6 @@ message explicite.
   dans `/etc/firefox/policies/policies.json`, lu par les paquets
   natifs et Mozilla. Les versions confinées (Snap, Flatpak) ne lisent
   pas toujours cet emplacement.
-- **Packaging `.deb` / `.rpm`** : pas fourni — installation par script
-  pour l'instant.
 
 ## État côté Rust
 

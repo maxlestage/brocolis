@@ -1,0 +1,80 @@
+#!/bin/sh
+# Brocolis — Debian postinst.
+#
+# Exécuté par dpkg après l'extraction des fichiers. Configure :
+#   - utilisateur système brocolis (idempotent) ;
+#   - dossiers /etc/brocolis/ et /var/lib/brocolis/ ;
+#   - CA + clé + brocolis.toml par défaut (si absents) ;
+#   - permissions root:brocolis / brocolis:brocolis ;
+#   - CA déposé dans /usr/local/share/ca-certificates/ + update-ca-certificates ;
+#   - politique entreprise Firefox dans /etc/firefox/policies/policies.json.
+#
+# Le démarrage du service systemd est délégué au placeholder #DEBHELPER#
+# (cargo-deb le remplace par les appels deb-systemd-helper).
+#
+# Idempotent : safe sur upgrade. Les fichiers préexistants ne sont pas écrasés.
+set -e
+
+ETC=/etc/brocolis
+TRUST=/usr/local/share/ca-certificates/brocolis-ca.crt
+FF_POLICY_DIR=/etc/firefox/policies
+FF_POLICY=$FF_POLICY_DIR/policies.json
+BIN=/usr/local/bin/brocolis
+
+# 1. Utilisateur système.
+if ! id brocolis >/dev/null 2>&1; then
+    adduser --system --shell /usr/sbin/nologin \
+            --home /var/lib/brocolis --no-create-home \
+            --group brocolis >/dev/null
+fi
+
+# 2. Dossiers de travail.
+install -d -m 755 "$ETC"
+install -d -m 700 -o brocolis -g brocolis /var/lib/brocolis
+
+# 3. CA + config par défaut si absents.
+if [ ! -f "$ETC/brocolis-ca.crt" ] || [ ! -f "$ETC/brocolis-ca.key" ]; then
+    "$BIN" ca --ca-cert "$ETC/brocolis-ca.crt" --ca-key "$ETC/brocolis-ca.key" >/dev/null
+fi
+if [ ! -f "$ETC/brocolis.toml" ]; then
+    KEY="$("$BIN" keygen | head -1)"
+    cat > "$ETC/brocolis.toml" <<EOF
+listen = "127.0.0.1:8080"
+ca_cert = "$ETC/brocolis-ca.crt"
+ca_key = "$ETC/brocolis-ca.key"
+key = "$KEY"
+encrypt_hosts = []
+EOF
+fi
+
+# 4. Permissions cibles.
+chown root:brocolis "$ETC/brocolis-ca.key"
+chmod 640 "$ETC/brocolis-ca.key"
+chown brocolis:brocolis "$ETC/brocolis.toml"
+chmod 600 "$ETC/brocolis.toml"
+chmod 644 "$ETC/brocolis-ca.crt"
+
+# 5. Magasin de confiance système (Debian/Ubuntu).
+if [ ! -f "$TRUST" ]; then
+    cp "$ETC/brocolis-ca.crt" "$TRUST"
+    chmod 644 "$TRUST"
+    update-ca-certificates >/dev/null || true
+fi
+
+# 6. Politique entreprise Firefox (ne touche pas au bundle).
+if [ ! -f "$FF_POLICY" ]; then
+    install -d -m 755 "$FF_POLICY_DIR"
+    cat > "$FF_POLICY" <<'JSON'
+{
+  "policies": {
+    "Certificates": {
+      "ImportEnterpriseRoots": true
+    }
+  }
+}
+JSON
+    chmod 644 "$FF_POLICY"
+fi
+
+#DEBHELPER#
+exit 0

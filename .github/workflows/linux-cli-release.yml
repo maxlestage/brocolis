@@ -1,0 +1,98 @@
+name: Linux CLI release
+
+# Construit les paquets .deb et .rpm Linux pour brocolis et publie/actualise
+# automatiquement une release GitHub rolling « cli-latest-linux ».
+# Sur tag v*, produit aussi une release versionnée.
+#
+# Les tests d'intégration (linux/test-linux.sh) ne tournent PAS en CI : ils
+# requièrent root et modifient le magasin de confiance / la politique Firefox
+# / la config réseau. À jouer sur une vraie machine.
+
+on:
+  push:
+    branches:
+      - master
+      - claude/rust-mitm-proxy-JHKLR
+    tags:
+      - "v*"
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "linux/**"
+      - ".github/workflows/linux-cli-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            target
+          key: linux-cargo-${{ hashFiles('Cargo.lock') }}
+      - name: Install cargo-deb and cargo-generate-rpm
+        run: |
+          cargo deb --version >/dev/null 2>&1 || cargo install cargo-deb --locked
+          cargo generate-rpm --version >/dev/null 2>&1 || cargo install cargo-generate-rpm --locked
+      - name: Build release binary
+        run: cargo build --release --bin brocolis
+      - name: Build .deb
+        run: cargo deb --no-build
+      - name: Build .rpm
+        run: cargo generate-rpm
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts
+          cp target/debian/*.deb artifacts/
+          cp target/generate-rpm/*.rpm artifacts/
+          ls -lh artifacts/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: brocolis-linux-packages
+          path: artifacts/*
+
+  release:
+    needs: [build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Collect files
+        id: collect
+        run: |
+          FILES=$(find artifacts -type f \( -name '*.deb' -o -name '*.rpm' \) | tr '\n' ' ')
+          echo "files=${FILES}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish rolling release (branch)
+        if: github.ref_type == 'branch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete cli-latest-linux --yes --cleanup-tag --repo "${GITHUB_REPOSITORY}" || true
+          gh release create cli-latest-linux ${{ steps.collect.outputs.files }} \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title "Brocolis CLI Linux (dernier ${GITHUB_REF_NAME})" \
+            --notes "Build automatique du dernier ${GITHUB_REF_NAME} (.deb pour Debian/Ubuntu, .rpm pour Fedora/RHEL ; x86_64)." \
+            --prerelease
+
+      - name: Publish tagged release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}-linux" ${{ steps.collect.outputs.files }} \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "Brocolis ${GITHUB_REF_NAME} Linux" \
+            --notes "Release ${GITHUB_REF_NAME} pour Linux (.deb pour Debian/Ubuntu, .rpm pour Fedora/RHEL ; x86_64)."

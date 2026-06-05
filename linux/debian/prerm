@@ -1,0 +1,9 @@
+#!/bin/sh
+# Brocolis — Debian prerm.
+#
+# Exécuté avant le retrait des fichiers. La gestion systemd (arrêt + disable)
+# est ajoutée par cargo-deb via le placeholder #DEBHELPER#.
+set -e
+
+#DEBHELPER#
+exit 0
