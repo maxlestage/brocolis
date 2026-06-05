@@ -4,8 +4,14 @@ import { Switchers } from "./Switchers";
 
 const NAV_ITEMS: ReadonlyArray<{
   href: string;
-  key: "nav.features" | "nav.quickstart" | "nav.cli" | "nav.privacy";
+  key:
+    | "nav.platforms"
+    | "nav.features"
+    | "nav.quickstart"
+    | "nav.cli"
+    | "nav.privacy";
 }> = [
+  { href: "#platforms", key: "nav.platforms" },
   { href: "#features", key: "nav.features" },
   { href: "#quickstart", key: "nav.quickstart" },
   { href: "#cli", key: "nav.cli" },

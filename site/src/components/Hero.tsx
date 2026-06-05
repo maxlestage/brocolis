@@ -29,12 +29,15 @@ export function Hero() {
             dangerouslySetInnerHTML={{ __html: t("hero.lead") }}
           />
           <div className="cta">
-            <a
-              className="btn primary"
-              href="https://github.com/maxlestage/brocolis/releases"
-            >
-              {t("hero.cta")}
-            </a>
+            <div className="cta-stack">
+              <a
+                className="btn primary"
+                href="https://github.com/maxlestage/brocolis/releases"
+              >
+                {t("hero.cta")}
+              </a>
+              <span className="cta-sub">{t("hero.cta.sub")}</span>
+            </div>
           </div>
         </div>
       </div>
