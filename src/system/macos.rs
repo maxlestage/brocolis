@@ -31,13 +31,22 @@ fn ns(args: &[&str]) -> anyhow::Result<String> {
 }
 
 fn primary_service() -> anyhow::Result<String> {
-    for line in ns(&["-listallnetworkservices"])?.lines().skip(1) {
+    parse_primary_service(&ns(&["-listallnetworkservices"])?)
+        .ok_or_else(|| anyhow::anyhow!("aucun service réseau actif"))
+}
+
+/// Analyse la sortie de `networksetup -listallnetworkservices` et renvoie
+/// le premier service réseau actif (non préfixé par `*` qui marque les
+/// services désactivés). La première ligne, qui est un en-tête d'avis, est
+/// ignorée.
+pub(super) fn parse_primary_service(out: &str) -> Option<String> {
+    for line in out.lines().skip(1) {
         let l = line.trim();
         if !l.is_empty() && !l.starts_with('*') {
-            return Ok(l.to_string());
+            return Some(l.to_string());
         }
     }
-    anyhow::bail!("aucun service réseau actif")
+    None
 }
 
 fn get(service: &str, secure: bool) -> anyhow::Result<ProxyState> {
@@ -268,4 +277,63 @@ pub(super) fn revert(
     }
     disable_firefox(firefox_policies, mobileconfig);
     tracing::info!("Proxy système restauré");
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn picks_first_active_service() {
+        let out = "An asterisk (*) denotes that a network service is disabled.\n\
+                   Wi-Fi\n\
+                   Bluetooth PAN\n";
+        assert_eq!(parse_primary_service(out).as_deref(), Some("Wi-Fi"));
+    }
+
+    #[test]
+    fn skips_disabled_services() {
+        let out = "An asterisk (*) denotes that a network service is disabled.\n\
+                   *Ethernet\n\
+                   *Wi-Fi\n\
+                   Thunderbolt Bridge\n";
+        assert_eq!(parse_primary_service(out).as_deref(), Some("Thunderbolt Bridge"));
+    }
+
+    #[test]
+    fn skips_blank_lines() {
+        let out = "Header\n\n   \nMy Service\n";
+        assert_eq!(parse_primary_service(out).as_deref(), Some("My Service"));
+    }
+
+    #[test]
+    fn returns_none_when_all_disabled() {
+        let out = "Header\n*Wi-Fi\n*Ethernet\n";
+        assert_eq!(parse_primary_service(out), None);
+    }
+
+    #[test]
+    fn returns_none_on_header_only() {
+        assert_eq!(parse_primary_service("Header only\n"), None);
+        assert_eq!(parse_primary_service(""), None);
+    }
+
+    #[test]
+    fn firefox_apps_lists_known_variants() {
+        let names: Vec<&str> = FIREFOX_APPS
+            .iter()
+            .map(|p| p.rsplit(/).next().unwrap_or(""))
+            .collect();
+        assert!(names.contains(&"Firefox.app"));
+        assert!(names.contains(&"Firefox Developer Edition.app"));
+        assert!(names.contains(&"Firefox Nightly.app"));
+        assert!(names.contains(&"Firefox ESR.app"));
+    }
+
+    #[test]
+    fn ca_cn_matches_root_params() {
+        // Sanity : si on renomme le CA dans ca.rs, ce test bougera ici aussi.
+        assert_eq!(CA_CN, "Brocolis Root CA");
+    }
 }

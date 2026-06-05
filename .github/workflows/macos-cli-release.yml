@@ -31,6 +31,8 @@ jobs:
             ~/.cargo/git
             target
           key: macos-cargo-${{ hashFiles('Cargo.lock') }}
+      - name: Run unit tests (Apple Silicon target)
+        run: cargo test --lib --no-fail-fast
       - name: Build (Apple Silicon)
         run: cargo build --release --bin brocolis --target aarch64-apple-darwin
       - name: Build (Intel)
@@ -45,6 +47,18 @@ jobs:
           lipo -info target/universal/brocolis
       - name: Package
         run: tar -czf brocolis-macos-universal.tar.gz -C target/universal brocolis
+      - name: CLI smoke test (universal)
+        run: |
+          set -e
+          target/universal/brocolis --help | grep -q 'brocolis'
+          KEY=$(target/universal/brocolis keygen | head -1)
+          test "${#KEY}" -ge 40 || { echo "clé trop courte: $KEY" >&2; exit 1; }
+          TMP=$(mktemp -d)
+          target/universal/brocolis ca --ca-cert "$TMP/ca.crt" --ca-key "$TMP/ca.key" >/dev/null
+          openssl x509 -in "$TMP/ca.crt" -noout -subject | grep -q 'Brocolis'
+          file target/universal/brocolis | grep -q 'universal binary'
+          rm -rf "$TMP"
+          echo "✓ CLI smoke test OK"
       - uses: actions/upload-artifact@v4
         with:
           name: brocolis-macos-universal

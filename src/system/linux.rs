@@ -295,4 +295,48 @@ mod tests {
         assert!(r.is_absolute());
         assert!(a.is_absolute());
     }
+
+    #[test]
+    fn env_proxy_uses_lf_line_endings() {
+        // Important pour /etc/profile.d/*.sh : pas de CRLF.
+        let s = env_proxy_content(8080);
+        assert!(!s.contains('\r'), "le contenu env-proxy contient des CR");
+    }
+
+    #[test]
+    fn env_proxy_bypass_covers_loopback_only() {
+        let s = env_proxy_content(8080);
+        // Doit lister localhost, 127.0.0.1 et ::1, et ne PAS contenir d'IP
+        // RFC1918 ou de domaine externe (ce serait suspect).
+        assert!(s.contains("localhost,127.0.0.1,::1"));
+        assert!(!s.contains("10.0.0"));
+        assert!(!s.contains("192.168"));
+        assert!(!s.contains(".com"));
+    }
+
+    #[test]
+    fn ff_policy_dir_is_etc_firefox() {
+        assert_eq!(FF_POLICY_DIR, "/etc/firefox/policies");
+        assert_eq!(FF_POLICY, "/etc/firefox/policies/policies.json");
+        assert_eq!(ENV_PROXY, "/etc/profile.d/brocolis-proxy.sh");
+        // Le fichier env-proxy doit terminer en .sh pour être source-able
+        // par /etc/profile (qui ne charge que *.sh).
+        assert!(ENV_PROXY.ends_with(".sh"));
+    }
+
+    #[test]
+    fn distro_trust_dirs_have_expected_paths() {
+        assert_eq!(
+            Distro::Debian.trust_dir().to_str(),
+            Some("/usr/local/share/ca-certificates"),
+        );
+        assert_eq!(
+            Distro::Rhel.trust_dir().to_str(),
+            Some("/etc/pki/ca-trust/source/anchors"),
+        );
+        assert_eq!(
+            Distro::Arch.trust_dir().to_str(),
+            Some("/etc/ca-certificates/trust-source/anchors"),
+        );
+    }
 }
