@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    Brocolis — LaunchDaemon plist.
+
+    Installé par macos/install.sh (option `enable-launchd`) dans
+    /Library/LaunchDaemons/com.maxlestage.brocolis.plist, puis chargé via
+    `launchctl bootstrap system /Library/LaunchDaemons/com.maxlestage.brocolis.plist`.
+
+    Tourne en tant que root (comme la plupart des LaunchDaemons système).
+    Le binaire est copié dans /usr/local/bin/brocolis par install.sh.
+    Le SIGUSR1 pour recharger la clé partagée se fait via
+    `sudo launchctl kill USR1 system/com.maxlestage.brocolis`.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.maxlestage.brocolis</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/brocolis</string>
+        <string>run</string>
+        <string>--config</string>
+        <string>/etc/brocolis/brocolis.toml</string>
+    </array>
+
+    <!-- Démarre dès le chargement et au boot. -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Redémarrage seulement sur sortie anormale. -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <!-- Logs accessibles via /var/log/brocolis/. -->
+    <key>StandardOutPath</key>
+    <string>/var/log/brocolis/brocolis.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/log/brocolis/brocolis.err</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>RUST_LOG</key>
+        <string>info</string>
+    </dict>
+
+    <!-- Verrouille les sessions utilisateur : seul root parle au démon. -->
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>
