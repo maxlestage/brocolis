@@ -160,13 +160,15 @@ cargo build --release      # binaire: target/release/brocolis
 
 ## Utilisation (CLI)
 
-### Tout-en-un : `brocolis auto` (macOS)
+### Tout-en-un : `brocolis auto` (macOS, Linux)
 
-La façon la plus simple, **sur macOS**. Une seule commande :
+La façon la plus simple. Une seule commande :
 
 ```
 $ sudo brocolis auto --config brocolis.toml
 ```
+
+#### Sur macOS
 
 Elle exécute, sans rien d'autre à faire :
 
@@ -198,18 +200,47 @@ fourni est l'alternative sans modification de bundle).
 
 #### Pourquoi `sudo` ?
 
-Écrire dans le trousseau **Système** et modifier le **proxy système**
-exige les droits administrateur. macOS demande donc le mot de passe
-administrateur **une seule fois** au lancement de `sudo brocolis auto` :
-c'est une frontière de sécurité imposée par macOS, qu'aucun logiciel ne
-peut contourner. Sans `sudo`, `brocolis auto` détecte l'absence de
-droits, l'indique clairement et démarre le proxy **sans** toucher au
-système (équivalent à `--no-system`).
+Écrire dans le magasin de confiance système (trousseau macOS,
+`/usr/local/share/ca-certificates/` ou équivalent sur Linux) et
+modifier le proxy système exige les droits administrateur. macOS
+demande donc le mot de passe administrateur **une seule fois** au
+lancement de `sudo brocolis auto` ; c'est une frontière de sécurité
+imposée par l'OS, qu'aucun logiciel ne peut contourner. Sans `sudo`,
+`brocolis auto` détecte l'absence de droits, l'indique clairement et
+démarre le proxy **sans** toucher au système (équivalent à
+`--no-system`).
 
-> Plateformes non-macOS : la configuration système automatique n'est
-> **pas** prise en charge. `brocolis auto` lance le proxy et signale
-> qu'il faut pointer le client sur `127.0.0.1:<port>` manuellement.
-> `--no-system` lance le proxy sans aucune modification système.
+#### Sur Linux
+
+`brocolis auto` détecte la famille de distribution (Debian/Ubuntu,
+Fedora/RHEL ou Arch) via la présence des outils standard
+(`update-ca-certificates`, `update-ca-trust`, `trust extract-compat`).
+Il dépose alors :
+
+1. Le CA dans le magasin de confiance distro
+   (`/usr/local/share/ca-certificates/` sur Debian,
+   `/etc/pki/ca-trust/source/anchors/` sur RHEL,
+   `/etc/ca-certificates/trust-source/anchors/` sur Arch) +
+   commande de mise à jour ;
+2. La politique entreprise Firefox dans
+   `/etc/firefox/policies/policies.json` (sans modifier le bundle) ;
+3. Un fichier `/etc/profile.d/brocolis-proxy.sh` qui exporte
+   `http_proxy`/`https_proxy` pour les **nouvelles** sessions shell
+   (`source` ce fichier pour la session courante).
+
+L'arrêt (Ctrl-C / SIGTERM) restaure exactement l'état initial : CA
+retiré du magasin, politique Firefox retirée, `/etc/profile.d/`
+nettoyé. Les ressources préexistantes (CA déjà présent, politique
+déjà déposée) ne sont **jamais** touchées.
+
+Pour une installation persistante avec service systemd, voir le
+dossier [`linux/`](linux/) (`.deb` / `.rpm` ou `install.sh`).
+
+> Autres OS (Windows, BSD, …) : la configuration système automatique
+> n'est **pas** prise en charge. `brocolis auto` lance le proxy et
+> signale qu'il faut pointer le client sur `127.0.0.1:<port>`
+> manuellement. `--no-system` lance le proxy sans aucune modification
+> système.
 
 ### Commandes de base
 

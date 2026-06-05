@@ -1,8 +1,11 @@
 # Brocolis sur Linux
 
-Scripts d'installation système, unité systemd et test d'intégration
-spécifiques à Linux. L'intégration native (`brocolis auto`) reste
-macOS-only ; sur Linux, ce dossier fournit l'équivalent en shell.
+`brocolis auto` fonctionne **nativement sur Linux** (cf.
+`src/system/linux.rs`) — Debian/Ubuntu, Fedora/RHEL et Arch détectés
+automatiquement. Ce dossier complète avec :
+des installeurs shell (pour les usages manuels), une unité systemd
+durcie, des paquets `.deb` / `.rpm` (avec maintainer-scripts),
+et un test d'intégration équivalent à `scripts/test-macos.sh`.
 
 ## Fichiers
 
@@ -16,12 +19,28 @@ macOS-only ; sur Linux, ce dossier fournit l'équivalent en shell.
 | `debian/{postinst,prerm,postrm}` | Maintainer scripts utilisés par le `.deb` (créent l'utilisateur, posent CA + Firefox + config). |
 | `rpm/{post-install,pre-uninstall,post-uninstall}.sh` | Scriptlets utilisés par le `.rpm` (équivalents, magasin Fedora/RHEL).            |
 
-## Deux modes : paquet ou scripts
+## Trois modes au choix
 
-| Mode                             | Pour qui ?                                                                       |
-| -------------------------------- | -------------------------------------------------------------------------------- |
-| **Paquet (`.deb` / `.rpm`)**     | Recommandé. Installe via `apt` / `dnf`, gère mises à jour et désinstallation.    |
-| **Scripts (`install.sh`)**       | Pour démarrer sans packaging (depuis les sources), ou contrôler chaque étape.    |
+| Mode                             | Pour qui ?                                                                              |
+| -------------------------------- | --------------------------------------------------------------------------------------- |
+| **`sudo brocolis auto`**         | Test rapide / utilisation ad hoc. Tout est configuré au lancement, restauré à Ctrl-C.   |
+| **Paquet (`.deb` / `.rpm`)**     | Installation persistante avec service systemd. Idéal sur poste de travail.              |
+| **Scripts (`install.sh`)**       | Depuis les sources, ou contrôle fin sur chaque étape.                                   |
+
+## Usage : `brocolis auto`
+
+Strictement le même que sur macOS — la même CLI, la même UX :
+
+```sh
+sudo brocolis auto --config brocolis.toml
+```
+
+`engage` détecte la famille de distribution (Debian/Ubuntu, Fedora/RHEL
+ou Arch), dépose le CA dans le magasin de confiance, pose la politique
+entreprise Firefox dans `/etc/firefox/policies/policies.json`, et écrit
+`/etc/profile.d/brocolis-proxy.sh` (variables `http_proxy`/`https_proxy`
+sur les nouvelles sessions shell). `revert` (Ctrl-C) annule tout ce qui
+a été réellement modifié — les fichiers préexistants sont conservés.
 
 ## Usage : paquet
 
@@ -168,8 +187,19 @@ politique Firefox, proxy). À jouer sur une vraie machine.
   natifs et Mozilla. Les versions confinées (Snap, Flatpak) ne lisent
   pas toujours cet emplacement.
 
-## État côté Rust
+## Côté Rust
 
-`src/system.rs` ne touche au système qu'en macOS. Sur Linux,
-`brocolis auto` lance le proxy en mode `--no-system` ; ces scripts
-font le reste.
+`src/system/` est découpé par plateforme :
+
+- `mod.rs` : code partagé (`ProxyState`, `parse_getproxy`,
+  `firefox_policy_json`, `firefox_mobileconfig`, `SystemProxy`,
+  dispatch `engage` / `revert` via `cfg(target_os)`) + tests.
+- `macos.rs` : trousseau Système + `networksetup` + variantes Firefox
+  + `.mobileconfig`.
+- `linux.rs` : détection Debian/RHEL/Arch + magasin de confiance distro
+  + politique Firefox + `/etc/profile.d/brocolis-proxy.sh`.
+
+Les scripts shell et les paquets `.deb`/`.rpm` ne sont **pas** rendus
+obsolètes par le support natif : ils restent l'option idéale pour une
+installation persistante avec service systemd, là où `brocolis auto`
+est conçu pour un usage interactif (Ctrl-C restaure tout).
