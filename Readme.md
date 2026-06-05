@@ -334,6 +334,13 @@ Seul le contenu **explicitement marqué** est chiffré : tout segment
 déchiffrés à la volée. Le service distant ne stocke donc que du chiffré, alors
 que les utilisateurs partageant la clé voient le texte en clair.
 
+Le jeton encode `nonce (12 octets) || ciphertext || tag (16 octets)` en base64,
+soit exactement la représentation `combined` de CryptoKit (`AES.GCM.SealedBox`).
+Ce format est donc **interopérable** avec des clients tiers (p. ex. une
+extension iOS). Un **vecteur figé** verrouille cette compatibilité binaire dans
+`tests/interop_ios.rs` (`cargo test --test interop_ios`) : si le format dérivait
+(préfixe, base64, ordre nonce/tag), le test échouerait.
+
 # Organisation du code avec Git
 
 ## Branches

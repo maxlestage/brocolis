@@ -41,6 +41,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1"
 thiserror = "1"
 
+# Dépendances de test uniquement.
+[dev-dependencies]
+base64 = "0.22"
+
 # ---------------------------------------------------------------------------
 # Packaging Linux (cargo deb / cargo generate-rpm). Voir linux/build-packages.sh.
 # ---------------------------------------------------------------------------
