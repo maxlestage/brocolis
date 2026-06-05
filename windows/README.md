@@ -12,6 +12,7 @@ une vraie machine.
 | `install.ps1`        | Setup CA + politique Firefox + config. Flag `-SystemProxy` opt-in (WinHTTP via netsh).     |
 | `uninstall.ps1`      | Annule ce que `install.ps1` a fait, en respectant ce qui préexistait.                      |
 | `test-auto.ps1`      | Test d'intégration de `brocolis auto` natif (équivalent direct de `linux/test-auto.sh`).   |
+| `test-install.ps1`   | Test d'intégration du chemin `install.ps1` / `uninstall.ps1` (équivalent de `macos/test-install.sh`). |
 
 ## Tester `brocolis auto`
 

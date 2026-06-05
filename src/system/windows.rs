@@ -355,4 +355,53 @@ mod tests {
         assert!(names.iter().any(|n| n == "Firefox Developer Edition"));
         assert!(names.iter().any(|n| n == "Firefox Nightly"));
     }
+
+    #[test]
+    fn handles_crlf_line_endings() {
+        // netsh sur Windows peut sortir du CRLF — vérifions que ça passe.
+        let out = "Current WinHTTP proxy settings:\r\n\
+                   \tProxy Server(s) :  10.0.0.1:8080\r\n\
+                   \tBypass List     :  *.local\r\n";
+        let s = parse_winhttp_show(out);
+        assert!(!s.was_direct);
+        assert_eq!(s.server, "10.0.0.1:8080");
+        assert_eq!(s.bypass, "*.local");
+    }
+
+    #[test]
+    fn bypass_none_treated_as_empty() {
+        let out = "Current WinHTTP proxy settings:\n\
+                   \tProxy Server(s) :  192.168.1.1:3128\n\
+                   \tBypass List     :  (none)\n";
+        let s = parse_winhttp_show(out);
+        assert!(!s.was_direct);
+        assert_eq!(s.server, "192.168.1.1:3128");
+        assert_eq!(s.bypass, "");
+    }
+
+    #[test]
+    fn proxy_none_treated_as_direct() {
+        // « (none) » dans la section Proxy Server -> traité comme direct.
+        let out = "Current WinHTTP proxy settings:\n\
+                   \tProxy Server(s) :  (none)\n\
+                   \tBypass List     :  (none)\n";
+        let s = parse_winhttp_show(out);
+        assert!(s.was_direct);
+        assert_eq!(s.server, "");
+    }
+
+    #[test]
+    fn ca_cn_matches_root_params() {
+        assert_eq!(CA_CN, "Brocolis Root CA");
+    }
+
+    #[test]
+    fn firefox_variants_constants() {
+        // Les variantes connues doivent être les noms exacts de dossiers
+        // utilisés par Mozilla. Un changement ici doit être conscient.
+        assert_eq!(FIREFOX_VARIANTS.len(), 3);
+        assert!(FIREFOX_VARIANTS.contains(&"Mozilla Firefox"));
+        assert!(FIREFOX_VARIANTS.contains(&"Firefox Developer Edition"));
+        assert!(FIREFOX_VARIANTS.contains(&"Firefox Nightly"));
+    }
 }

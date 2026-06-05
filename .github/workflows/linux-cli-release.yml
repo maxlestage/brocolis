@@ -44,8 +44,23 @@ jobs:
         run: |
           cargo deb --version >/dev/null 2>&1 || cargo install cargo-deb --locked
           cargo generate-rpm --version >/dev/null 2>&1 || cargo install cargo-generate-rpm --locked
+      - name: Run unit tests
+        run: cargo test --lib --no-fail-fast
       - name: Build release binary
         run: cargo build --release --bin brocolis
+      - name: CLI smoke test
+        run: |
+          set -e
+          # Sans accès admin, on vérifie au moins que la CLI répond et que
+          # les sous-commandes pures fonctionnent.
+          ./target/release/brocolis --help | grep -q 'brocolis'
+          KEY=$(./target/release/brocolis keygen | head -1)
+          test "${#KEY}" -ge 40 || { echo "clé trop courte: $KEY" >&2; exit 1; }
+          TMP=$(mktemp -d)
+          ./target/release/brocolis ca --ca-cert "$TMP/ca.crt" --ca-key "$TMP/ca.key" >/dev/null
+          openssl x509 -in "$TMP/ca.crt" -noout -subject | grep -q 'Brocolis'
+          rm -rf "$TMP"
+          echo "✓ CLI smoke test OK"
       - name: Build .deb
         run: cargo deb --no-build
       - name: Build .rpm

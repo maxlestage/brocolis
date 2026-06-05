@@ -39,8 +39,29 @@ jobs:
             ~/.cargo/git
             target
           key: windows-cargo-${{ hashFiles('Cargo.lock') }}
+      - name: Run unit tests
+        run: cargo test --lib --no-fail-fast
       - name: Build
         run: cargo build --release --bin brocolis
+      - name: CLI smoke test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bin = "target/release/brocolis.exe"
+          $help = & $bin --help
+          if ($help -notmatch 'brocolis') { throw "--help n'a pas retourné l'aide attendue" }
+          $key = (& $bin keygen | Select-Object -First 1).Trim()
+          if ($key.Length -lt 40) { throw "clé trop courte : $key" }
+          $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString())
+          New-Item -ItemType Directory -Path $tmp | Out-Null
+          $caCrt = Join-Path $tmp 'ca.crt'
+          $caKey = Join-Path $tmp 'ca.key'
+          & $bin ca --ca-cert $caCrt --ca-key $caKey | Out-Null
+          if (-not (Test-Path $caCrt)) { throw "ca.crt non généré" }
+          $subj = (& certutil.exe -dump $caCrt | Out-String)
+          if ($subj -notmatch 'Brocolis') { throw "subject CA ne contient pas 'Brocolis'" }
+          Remove-Item -Recurse -Force $tmp
+          Write-Host '✓ CLI smoke test OK'
       - name: Stage release artifact
         shell: pwsh
         run: |
