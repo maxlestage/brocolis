@@ -6,3 +6,6 @@
 *-ca.crt
 *-ca.key
 brocolis-ca.*
+
+# Paquets Linux générés par linux/build-packages.sh
+/linux/dist/
