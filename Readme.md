@@ -160,7 +160,7 @@ cargo build --release      # binaire: target/release/brocolis
 
 ## Utilisation (CLI)
 
-### Tout-en-un : `brocolis auto` (macOS, Linux)
+### Tout-en-un : `brocolis auto` (macOS, Linux, Windows)
 
 La façon la plus simple. Une seule commande :
 
@@ -236,11 +236,41 @@ déjà déposée) ne sont **jamais** touchées.
 Pour une installation persistante avec service systemd, voir le
 dossier [`linux/`](linux/) (`.deb` / `.rpm` ou `install.sh`).
 
-> Autres OS (Windows, BSD, …) : la configuration système automatique
-> n'est **pas** prise en charge. `brocolis auto` lance le proxy et
-> signale qu'il faut pointer le client sur `127.0.0.1:<port>`
-> manuellement. `--no-system` lance le proxy sans aucune modification
-> système.
+#### Sur Windows
+
+Depuis un terminal **Exécuter en tant qu'administrateur** :
+
+```
+> brocolis.exe auto --config brocolis.toml
+```
+
+`auto` :
+
+1. Approuve le CA dans **Local Machine\Trusted Root Certification
+   Authorities** via `certutil -addstore -f Root <ca>` ;
+2. Dépose la politique entreprise Firefox dans chaque variante
+   détectée (`<install>\distribution\policies.json`) ;
+3. Règle le proxy **WinHTTP** système (`netsh winhttp set proxy
+   proxy-server="127.0.0.1:<port>" bypass-list="<local>"`), après
+   sauvegarde de l'état initial.
+
+`Ctrl-C` restaure l'état initial : CA retiré du magasin, politique
+Firefox retirée, WinHTTP remis comme avant. Les ressources préexistantes
+(CA déjà présent, politique déjà déposée) ne sont jamais touchées.
+
+Pour une installation persistante, voir le dossier
+[`windows/`](windows/) (`install.ps1` / `uninstall.ps1`).
+
+> **WinHTTP** couvre les apps qui utilisent l'API WinHTTP (services,
+> certains outils CLI). Les navigateurs **WinINet** (Edge, Chrome) lisent
+> `HKCU\…\Internet Settings`, par utilisateur — non automatisé par
+> `auto`. Configurez-les à la main, ou comptez sur la politique Firefox
+> déjà déposée.
+
+> Autres OS (BSD, …) : la configuration système automatique n'est
+> **pas** prise en charge. `brocolis auto` lance le proxy et signale
+> qu'il faut pointer le client sur `127.0.0.1:<port>` manuellement.
+> `--no-system` lance le proxy sans aucune modification système.
 
 ### Commandes de base
 
