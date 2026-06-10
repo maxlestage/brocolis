@@ -31,28 +31,35 @@ Un proxy MITM nécessite des mécanismes d'interception du trafic et de resignin
 
 ## Fonctionnement
 
-Le proxy MITM est implémenté avec **Actix**. Il écoute les connexions entrantes, analyse le trafic et applique la logique métier de chiffrement/déchiffrement.
+Le proxy MITM est implémenté avec **hyper** (sur le runtime asynchrone
+**Tokio**). Il écoute les connexions entrantes, analyse le trafic et applique la
+logique métier de chiffrement/déchiffrement. Pour le HTTPS, la requête
+`CONNECT` est interceptée et le TLS est terminé localement à l'aide d'un
+certificat feuille signé à la volée par le CA de Brocolis (**rustls** +
+**rcgen**).
 
-**Reqwest** est utilisé par le proxy Actix pour effectuer les requêtes HTTP/HTTPS sortantes vers les serveurs distants.
+**Reqwest** est utilisé par le proxy pour effectuer les requêtes HTTP/HTTPS
+sortantes vers les serveurs distants.
 
 ```mermaid
 sequenceDiagram
 Participant Client
-Participant Actix 
+Participant Hyper
 Participant Reqwest
 Participant Serveur
 
-Client ->> Actix: Requête entrante
-Actix -->> Reqwest: Requête sortante  
+Client ->> Hyper: Requête entrante
+Hyper -->> Reqwest: Requête sortante
 Reqwest ->> Serveur: Requête chiffrée
 Serveur -->> Reqwest: Réponse chiffrée
-Reqwest -->> Actix: Réponse 
-Actix -->> Client: Réponse déchiffrée
+Reqwest -->> Hyper: Réponse
+Hyper -->> Client: Réponse déchiffrée
 ```
 
 Cette architecture permet de séparer clairement les responsabilités :
 
-- **Actix** gère la partie serveur du proxy (connexions, chiffrement, etc)
+- **hyper / Tokio** gèrent la partie serveur du proxy (connexions, TLS,
+  chiffrement, etc.)
 
 - **Reqwest** permet d'interagir avec les API/serveurs externes
 
@@ -138,15 +145,16 @@ L'architecture interne comprend :
 - Une interface en ligne de commande (CLI)  
 - Fichiers de configuration au format TOML
 - Gestionnaire des clés en mémoire
-- Proxy MITM implémenté en Rust/Actix/Reqwest
+- Proxy MITM implémenté en Rust (hyper + Tokio côté serveur, Reqwest côté client)
 
 ## Architecture du code
 
 Le cœur est une **bibliothèque** Rust (`src/lib.rs` : modules `ca`, `config`,
 `crypto`, `keys`, `proxy`, `system`) exposée via un unique frontend, la
 **ligne de commande** `brocolis`. La configuration système automatique
-(`brocolis auto`) cible **macOS** ; le proxy et le chiffrement eux-mêmes
-fonctionnent partout où Rust compile.
+(`brocolis auto`) est prise en charge nativement sur **macOS, Linux et
+Windows** (module `system`, un sous-module par OS) ; le proxy et le
+chiffrement eux-mêmes fonctionnent partout où Rust compile.
 
 ## Installation
 
@@ -303,28 +311,45 @@ le fichier de configuration.
 
 ## Binaires précompilés
 
-**Aucune manipulation requise.** À chaque push sur `master`, le workflow
-`.github/workflows/macos-cli-release.yml` compile le binaire `brocolis`
-pour **macOS** (universel Intel + Apple Silicon) et publie/actualise
-automatiquement la release GitHub **`cli-latest`**. Il suffit de
-télécharger `brocolis-macos-universal.tar.gz` depuis l'onglet
+**Aucune manipulation requise.** À chaque push sur `master`, des workflows
+GitHub Actions compilent le binaire `brocolis` pour les **trois OS** et
+publient/actualisent automatiquement la release GitHub **`cli-latest`** :
+
+| OS      | Workflow                                  | Artefact                          |
+| ------- | ----------------------------------------- | --------------------------------- |
+| macOS   | `.github/workflows/macos-cli-release.yml` | `brocolis-macos-universal.tar.gz` (universel Intel + Apple Silicon) |
+| Linux   | `.github/workflows/linux-cli-release.yml` | paquets `.deb` (Debian/Ubuntu) et `.rpm` (Fedora/RHEL), x86_64 |
+| Windows | `.github/workflows/windows-cli-release.yml` | `brocolis-windows-x86_64.zip` (`brocolis.exe` + `install.ps1` / `uninstall.ps1`) |
+
+Il suffit de télécharger l'artefact correspondant à votre OS depuis l'onglet
 *Releases*. Un tag `v*` produit en plus une release versionnée.
 
-## Test d'intégration macOS
+## Tests d'intégration système
 
-Le script `scripts/test-macos.sh` valide, sur une vraie machine macOS, le
-cycle complet de `brocolis auto` : ajout **puis retrait** du CA du
-trousseau Système, réglage **puis restauration** du proxy système, pose
-et retrait de la politique Firefox et du `.mobileconfig`, un vrai flux
-HTTPS au travers du proxy, et le round-trip du chiffrement sélectif.
+Chaque OS dispose d'un script qui valide, sur une vraie machine, le cycle
+complet de `brocolis auto` : ajout **puis retrait** du CA du magasin de
+confiance, réglage **puis restauration** du proxy système, pose et retrait
+de la politique Firefox, un vrai flux HTTPS au travers du proxy, et le
+round-trip du chiffrement sélectif. Chaque script **restaure l'état
+initial** du système à la fin et se termine avec un code non nul si une
+vérification échoue.
+
+| OS      | Script                                  |
+| ------- | --------------------------------------- |
+| macOS   | `bash scripts/test-macos.sh` (ajoute aussi le `.mobileconfig`) |
+| Linux   | `sudo bash linux/test-auto.sh`          |
+| Windows | `windows/test-auto.ps1` (terminal administrateur) |
+
+Sur macOS/Linux, le script demande **une fois** le mot de passe
+administrateur (`sudo`).
+
+En complément, la logique pure (format de jeton, parsing de configuration,
+détection système) est couverte par les tests unitaires et d'intégration
+Rust :
 
 ```
-bash scripts/test-macos.sh
+cargo test
 ```
-
-Il compile la CLI, demande **une fois** le mot de passe administrateur,
-exécute les vérifications, puis **restaure l'état initial** du système.
-Il se termine avec un code non nul si une vérification échoue.
 
 ## Chiffrement sélectif
 
