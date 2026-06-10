@@ -323,7 +323,7 @@ mod tests {
     fn firefox_apps_lists_known_variants() {
         let names: Vec<&str> = FIREFOX_APPS
             .iter()
-            .map(|p| p.rsplit(/).next().unwrap_or(""))
+            .map(|p| p.rsplit('/').next().unwrap_or(""))
             .collect();
         assert!(names.contains(&"Firefox.app"));
         assert!(names.contains(&"Firefox Developer Edition.app"));
