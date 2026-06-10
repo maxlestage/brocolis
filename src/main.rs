@@ -11,6 +11,7 @@
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
+#[cfg(unix)]
 use std::sync::Arc;
 
 use clap::{Parser, Subcommand};
@@ -18,6 +19,7 @@ use clap::{Parser, Subcommand};
 use brocolis::ca::Ca;
 use brocolis::config::Config;
 use brocolis::crypto::SymKey;
+#[cfg(unix)]
 use brocolis::keys::KeyManager;
 
 #[derive(Parser)]

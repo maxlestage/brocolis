@@ -42,7 +42,7 @@ fn ios_vector_layout_is_nonce_ct_tag() {
         .expect("préfixe/suffixe BROCOLIS:v1");
     let packed = B64.decode(inner).expect("base64 standard");
 
-    let pt_len = PLAINTEXT.as_bytes().len();
+    let pt_len = PLAINTEXT.len();
     assert_eq!(packed.len(), 12 + pt_len + 16, "nonce + ciphertext + tag");
 
     let expected_nonce: Vec<u8> = (0u8..12).collect();
