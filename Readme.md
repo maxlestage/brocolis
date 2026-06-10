@@ -334,12 +334,52 @@ Seul le contenu **explicitement marqué** est chiffré : tout segment
 déchiffrés à la volée. Le service distant ne stocke donc que du chiffré, alors
 que les utilisateurs partageant la clé voient le texte en clair.
 
-Le jeton encode `nonce (12 octets) || ciphertext || tag (16 octets)` en base64,
-soit exactement la représentation `combined` de CryptoKit (`AES.GCM.SealedBox`).
-Ce format est donc **interopérable** avec des clients tiers (p. ex. une
-extension iOS). Un **vecteur figé** verrouille cette compatibilité binaire dans
-`tests/interop_ios.rs` (`cargo test --test interop_ios`) : si le format dérivait
-(préfixe, base64, ordre nonce/tag), le test échouerait.
+### Format de jeton (contrat d'interopérabilité)
+
+Un jeton est `[[BROCOLIS:v1:<base64>]]`, où `<base64>` encode la charge
+binaire :
+
+```
+nonce (12 octets) || ciphertext || tag (16 octets)
+```
+
+- **Chiffrement** : AES-256-GCM, clé de 32 octets partagée, **tag de 128 bits**.
+- **Nonce / IV** : 12 octets (96 bits), aléatoire à chaque jeton.
+- **Empaquetage** : c'est exactement la représentation `combined` de CryptoKit
+  (`AES.GCM.SealedBox`) côté iOS, et `iv + Cipher.doFinal(...)` côté Android.
+- **Base64** : brocolis **émet** l'alphabet standard avec padding, mais
+  **accepte** en entrée le standard comme l'URL-safe, avec ou sans padding —
+  un client Android utilisant `Base64.URL_SAFE` reste donc compatible.
+
+Ce format est **interopérable** avec n'importe quel client tiers, notamment les
+apps **iOS** (CryptoKit) et **Android** (`javax.crypto.Cipher`). Des **vecteurs
+figés** verrouillent la compatibilité binaire :
+`tests/interop_ios.rs` et `tests/interop_android.rs`
+(`cargo test --test interop_ios --test interop_android`). Si le format dérivait
+(préfixe, base64, ordre nonce/tag, longueur de tag), ces tests échoueraient.
+
+#### Client iOS (Swift / CryptoKit)
+
+```swift
+import CryptoKit
+let key = SymmetricKey(data: sharedKey)            // 32 octets
+let sealed = try AES.GCM.seal(Data(plaintext.utf8), using: key)
+let token = "[[BROCOLIS:v1:" + sealed.combined!.base64EncodedString() + "]]"
+// Déchiffrement : AES.GCM.open(AES.GCM.SealedBox(combined: data), using: key)
+```
+
+#### Client Android (Kotlin / `javax.crypto`)
+
+```kotlin
+val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
+cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(sharedKey, "AES"),
+            GCMParameterSpec(128, iv))             // tag 128 bits
+val packed = iv + cipher.doFinal(plaintext.toByteArray())   // nonce || ct || tag
+val token = "[[BROCOLIS:v1:" +
+    Base64.encodeToString(packed, Base64.NO_WRAP) + "]]"
+// Déchiffrement : séparer iv(12) du reste, GCMParameterSpec(128, iv), doFinal.
+```
 
 # Organisation du code avec Git
 
