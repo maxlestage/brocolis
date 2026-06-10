@@ -8,13 +8,22 @@
 //! - Côté réponse (ce que l'utilisateur reçoit), tout jeton
 //!   `[[BROCOLIS:v1:<base64>]]` est déchiffré et remplacé par le texte clair.
 //!
-//! Le jeton encode `nonce (12 octets) || ciphertext || tag`. Deux utilisateurs
-//! qui partagent la même clé symétrique voient ainsi le contenu en clair, alors
-//! que le service distant (Twitter, forum, ...) ne stocke que le jeton chiffré.
+//! Le jeton encode `nonce (12 octets) || ciphertext || tag (16 octets)`. Deux
+//! utilisateurs qui partagent la même clé symétrique voient ainsi le contenu en
+//! clair, alors que le service distant (Twitter, forum, ...) ne stocke que le
+//! jeton chiffré.
+//!
+//! Ce format est interopérable avec les clients iOS (CryptoKit,
+//! `AES.GCM.SealedBox.combined`) et Android (`javax.crypto.Cipher`,
+//! `iv || doFinal`). À l'émission, brocolis encode en base64 standard ; au
+//! décodage, il accepte aussi l'URL-safe et l'absence de padding (cf.
+//! [`decode_payload`]) pour rester compatible avec les divers encodeurs mobiles.
 
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
-use base64::engine::general_purpose::STANDARD as B64;
+use base64::engine::general_purpose::{
+    STANDARD as B64, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD,
+};
 use base64::Engine;
 use rand::RngCore;
 
@@ -85,7 +94,7 @@ impl SymKey {
 
     /// Déchiffre la partie base64 d'un jeton (sans préfixe/suffixe).
     fn decrypt_b64(&self, b64: &str) -> Result<Vec<u8>, CryptoError> {
-        let packed = B64.decode(b64).map_err(|_| CryptoError::BadToken)?;
+        let packed = decode_payload(b64).ok_or(CryptoError::BadToken)?;
         if packed.len() < NONCE_LEN {
             return Err(CryptoError::BadToken);
         }
@@ -95,6 +104,27 @@ impl SymKey {
             .decrypt(nonce, ct)
             .map_err(|_| CryptoError::Aead)
     }
+}
+
+/// Décode la charge base64 d'un jeton en tolérant les variantes que peuvent
+/// émettre les clients tiers (iOS, Android, Web).
+///
+/// brocolis **émet** toujours du base64 standard avec padding (cf.
+/// [`SymKey::encrypt_token`]), mais **accepte** en entrée :
+/// l'alphabet standard (`+`/`/`) comme l'alphabet URL-safe (`-`/`_`), avec
+/// ou sans padding `=`. Cela maximise l'interopérabilité : un jeton produit
+/// par un client Android via `Base64.URL_SAFE`, ou ayant transité par un
+/// service qui échappe `+`/`/`/`=`, reste déchiffrable.
+fn decode_payload(b64: &str) -> Option<Vec<u8>> {
+    // Ordre : standard d'abord (forme émise par brocolis et l'app iOS), puis
+    // les variantes. Les moteurs sans padding rejettent le `=`, et
+    // inversement, donc l'essai successif couvre les quatre combinaisons.
+    for engine in [B64, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD] {
+        if let Ok(bytes) = engine.decode(b64) {
+            return Some(bytes);
+        }
+    }
+    None
 }
 
 /// Remplace chaque `((secret))` par un jeton chiffré.
@@ -222,5 +252,64 @@ mod tests {
         let (enc, n) = encrypt_marked("debut ((pas ferme", &k);
         assert_eq!(n, 0);
         assert_eq!(enc, "debut ((pas ferme");
+    }
+
+    #[test]
+    fn encrypt_emits_standard_base64_with_padding() {
+        // Contrat d'émission : brocolis (et l'app iOS) produisent du base64
+        // STANDARD. C'est la forme que tout client tiers doit savoir lire.
+        let k = SymKey::generate();
+        let t = k.encrypt_token(b"hello").unwrap();
+        let inner = &t[TOKEN_PREFIX.len()..t.len() - TOKEN_SUFFIX.len()];
+        // 12 + 5 + 16 = 33 octets -> 44 caractères base64 (avec padding).
+        assert!(B64.decode(inner).is_ok(), "doit décoder en base64 standard");
+        assert!(!inner.contains('-') && !inner.contains('_'), "pas d'URL-safe");
+    }
+
+    #[test]
+    fn decrypt_accepts_url_safe_base64() {
+        // Un client (p. ex. Android `Base64.URL_SAFE`) peut émettre la même
+        // charge en alphabet URL-safe : brocolis doit la déchiffrer.
+        let k = SymKey::generate();
+        let std_token = k.encrypt_token("café Android".as_bytes()).unwrap();
+        let inner = &std_token[TOKEN_PREFIX.len()..std_token.len() - TOKEN_SUFFIX.len()];
+        let packed = B64.decode(inner).unwrap();
+
+        let url_token = format!(
+            "{TOKEN_PREFIX}{}{TOKEN_SUFFIX}",
+            URL_SAFE.encode(&packed)
+        );
+        let (dec, n) = decrypt_tokens(&url_token, &k);
+        assert_eq!(n, 1);
+        assert_eq!(dec, "café Android");
+    }
+
+    #[test]
+    fn decrypt_accepts_url_safe_without_padding() {
+        let k = SymKey::generate();
+        let std_token = k.encrypt_token(b"no padding").unwrap();
+        let inner = &std_token[TOKEN_PREFIX.len()..std_token.len() - TOKEN_SUFFIX.len()];
+        let packed = B64.decode(inner).unwrap();
+
+        let url_token = format!(
+            "{TOKEN_PREFIX}{}{TOKEN_SUFFIX}",
+            URL_SAFE_NO_PAD.encode(&packed)
+        );
+        let (dec, n) = decrypt_tokens(&url_token, &k);
+        assert_eq!(n, 1);
+        assert_eq!(dec, "no padding");
+    }
+
+    #[test]
+    fn decode_payload_covers_four_variants() {
+        let packed: Vec<u8> = (0u8..40).collect();
+        for encoded in [
+            B64.encode(&packed),
+            STANDARD_NO_PAD.encode(&packed),
+            URL_SAFE.encode(&packed),
+            URL_SAFE_NO_PAD.encode(&packed),
+        ] {
+            assert_eq!(decode_payload(&encoded).as_deref(), Some(&packed[..]));
+        }
     }
 }
