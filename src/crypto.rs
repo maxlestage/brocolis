@@ -16,8 +16,8 @@
 //! Ce format est interopérable avec les clients iOS (CryptoKit,
 //! `AES.GCM.SealedBox.combined`) et Android (`javax.crypto.Cipher`,
 //! `iv || doFinal`). À l'émission, brocolis encode en base64 standard ; au
-//! décodage, il accepte aussi l'URL-safe et l'absence de padding (cf.
-//! [`decode_payload`]) pour rester compatible avec les divers encodeurs mobiles.
+//! décodage, il accepte aussi l'URL-safe et l'absence de padding (fonction
+//! `decode_payload`) pour rester compatible avec les divers encodeurs mobiles.
 
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
