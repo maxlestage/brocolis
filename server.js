@@ -40,8 +40,20 @@ function sendFile(res, filePath, status) {
       return;
     }
     const ext = path.extname(filePath).toLowerCase();
+    // Cache : les assets Vite sont fingerprintés (hash dans le nom) donc
+    // immuables ; le HTML doit être revalidé à chaque visite, sinon un
+    // navigateur garde un index.html périmé qui pointe vers des assets
+    // supprimés au déploiement suivant (page blanche).
+    const isHashedAsset = filePath.includes(`${path.sep}assets${path.sep}`);
+    const cacheControl =
+      ext === ".html"
+        ? "no-cache"
+        : isHashedAsset
+          ? "public, max-age=31536000, immutable"
+          : "public, max-age=3600";
     res.writeHead(status, {
       "Content-Type": MIME[ext] || "application/octet-stream",
+      "Cache-Control": cacheControl,
     });
     res.end(data);
   });
@@ -49,6 +61,19 @@ function sendFile(res, filePath, status) {
 
 const server = http.createServer((req, res) => {
   let urlPath = decodeURIComponent((req.url || "/").split("?")[0]);
+
+  // Anciennes URLs (site multi-pages) et routes applicatives : on redirige
+  // vers la route HashRouter correspondante pour ne casser aucun lien ou
+  // favori existant.
+  if (urlPath === "/telecharger.html" || urlPath === "/telecharger") {
+    res.writeHead(302, {
+      Location: "/#/telecharger",
+      "Cache-Control": "no-cache",
+    });
+    res.end();
+    return;
+  }
+
   if (urlPath.endsWith("/")) urlPath += "index.html";
 
   const filePath = path.normalize(path.join(DIST, urlPath));
