@@ -60,6 +60,15 @@ export function Navbar() {
                 </a>
               </li>
             ))}
+            <li>
+              <a
+                className="nav-download"
+                href="./telecharger.html"
+                onClick={close}
+              >
+                {t("nav.download")}
+              </a>
+            </li>
           </ul>
           <div className="nav-switchers">
             <Switchers />

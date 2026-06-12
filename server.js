@@ -64,10 +64,18 @@ const server = http.createServer((req, res) => {
       sendFile(res, filePath, 200);
       return;
     }
-    // Repli : une route sans extension renvoie index.html (SPA) ; une
-    // ressource avec extension manquante reste un 404 franc.
+    // Une route sans extension : on tente d'abord <route>.html (pages
+    // multi-entrées comme /telecharger), sinon repli SPA sur index.html.
+    // Une ressource avec extension manquante reste un 404 franc.
     if (path.extname(filePath) === "") {
-      sendFile(res, path.join(DIST, "index.html"), 200);
+      const htmlCandidate = filePath + ".html";
+      fs.stat(htmlCandidate, (e2, s2) => {
+        if (!e2 && s2.isFile()) {
+          sendFile(res, htmlCandidate, 200);
+        } else {
+          sendFile(res, path.join(DIST, "index.html"), 200);
+        }
+      });
     } else {
       res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
       res.end("Not found");

@@ -1,6 +1,7 @@
 import { useT } from "../i18n/LangContext";
 
-const RELEASE_BASE = "https://github.com/maxlestage/brocolis/releases/tag";
+// Les CTA mènent à la page dédiée de téléchargement (liens directs par OS).
+const DOWNLOAD_PAGE = "./telecharger.html";
 
 const PLATFORMS = [
   {
@@ -8,21 +9,21 @@ const PLATFORMS = [
     desc: "platforms.macos.d",
     cta: "platforms.macos.cta",
     icon: "🍎",
-    href: `${RELEASE_BASE}/cli-latest`,
+    href: DOWNLOAD_PAGE,
   },
   {
     title: "platforms.linux.t",
     desc: "platforms.linux.d",
     cta: "platforms.linux.cta",
     icon: "🐧",
-    href: `${RELEASE_BASE}/cli-latest-linux`,
+    href: DOWNLOAD_PAGE,
   },
   {
     title: "platforms.windows.t",
     desc: "platforms.windows.d",
     cta: "platforms.windows.cta",
     icon: "🪟",
-    href: `${RELEASE_BASE}/cli-latest-windows`,
+    href: DOWNLOAD_PAGE,
   },
 ] as const;
 
