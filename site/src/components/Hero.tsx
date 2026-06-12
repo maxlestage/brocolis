@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useT } from "../i18n/LangContext";
 
 export function Hero() {
@@ -30,9 +31,9 @@ export function Hero() {
           />
           <div className="cta">
             <div className="cta-stack">
-              <a className="btn primary" href="./telecharger.html">
+              <Link className="btn primary" to="/telecharger">
                 {t("hero.cta")}
-              </a>
+              </Link>
               <span className="cta-sub">{t("hero.cta.sub")}</span>
             </div>
           </div>
