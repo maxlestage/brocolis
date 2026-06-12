@@ -1,0 +1,13 @@
+{
+  "name": "brocolis-site-heroku",
+  "private": true,
+  "description": "Déploiement Heroku du site vitrine Brocolis (build site/, servi en statique).",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "build": "npm --prefix site ci --include=dev && npm --prefix site run build",
+    "heroku-postbuild": "npm --prefix site ci --include=dev && npm --prefix site run build",
+    "start": "node server.js"
+  }
+}

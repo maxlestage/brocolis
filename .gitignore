@@ -9,3 +9,6 @@ brocolis-ca.*
 
 # Paquets Linux générés par linux/build-packages.sh
 /linux/dist/
+
+# Déploiement Node / Heroku (le site est reconstruit au build)
+/node_modules
