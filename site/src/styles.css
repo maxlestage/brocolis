@@ -620,7 +620,7 @@ footer {
 }
 
 /* ----------------------------------------------------------------------- */
-/* Page de téléchargement (telecharger.html)                               */
+/* Page de téléchargement (route React /telecharger)                        */
 /* ----------------------------------------------------------------------- */
 
 .nav-download {
@@ -645,6 +645,9 @@ footer {
 
 .dl-title {
   margin: 0 0 12px;
+  font-size: 34px;
+  line-height: 1.15;
+  letter-spacing: -0.5px;
 }
 
 .dl-intro {
@@ -681,4 +684,37 @@ footer {
 .dl-all a {
   color: var(--green-dark);
   font-weight: 600;
+}
+
+/* Page de téléchargement — mobile : la barre du haut n'a pas de menu
+   hamburger (juste marque + sélecteurs). Sur petit écran, on laisse les
+   sélecteurs passer SOUS la marque au lieu de déborder sur le titre. */
+@media (max-width: 760px) {
+  .dl-navbar .nav-inner {
+    height: auto;
+    min-height: 56px;
+    flex-wrap: wrap;
+    row-gap: 10px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .dl-navbar .nav-switchers {
+    margin-left: 0;
+    width: 100%;
+  }
+  .dl-navbar .switchers {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 600px) {
+  .dl-main {
+    padding: 28px 0 48px;
+  }
+  .dl-title {
+    font-size: 27px;
+  }
+  .dl-intro {
+    font-size: 16px;
+  }
 }

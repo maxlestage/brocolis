@@ -26,7 +26,7 @@ export function DownloadPage() {
 
   return (
     <>
-      <nav className="navbar">
+      <nav className="navbar dl-navbar">
         <div className="container nav-inner">
           <Link className="nav-brand" to="/">
             <span className="nav-leaf" aria-hidden="true">
