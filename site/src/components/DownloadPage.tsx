@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+import { Link } from "react-router-dom";
 import { useT } from "../i18n/LangContext";
 import { Switchers } from "./Switchers";
 
@@ -14,16 +16,24 @@ const DL = {
 
 export function DownloadPage() {
   const t = useT();
+
+  // En SPA, le titre et le scroll ne changent pas tout seuls au changement de
+  // route : on remonte en haut et on met à jour le titre de l'onglet.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    document.title = `${t("dl.h")} — Brocolis 🥦`;
+  }, [t]);
+
   return (
     <>
       <nav className="navbar">
         <div className="container nav-inner">
-          <a className="nav-brand" href="./">
+          <Link className="nav-brand" to="/">
             <span className="nav-leaf" aria-hidden="true">
               🥦
             </span>
             <span>Brocolis</span>
-          </a>
+          </Link>
           <div className="nav-switchers">
             <Switchers />
           </div>
@@ -31,9 +41,9 @@ export function DownloadPage() {
       </nav>
 
       <main className="container dl-main">
-        <a className="dl-back" href="./">
+        <Link className="dl-back" to="/">
           ← {t("dl.back")}
-        </a>
+        </Link>
         <h1 className="dl-title">{t("dl.h")}</h1>
         <p className="dl-intro" dangerouslySetInnerHTML={{ __html: t("dl.intro") }} />
         <p className="dl-version" dangerouslySetInnerHTML={{ __html: t("dl.version") }} />

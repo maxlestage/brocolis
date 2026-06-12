@@ -64,18 +64,11 @@ const server = http.createServer((req, res) => {
       sendFile(res, filePath, 200);
       return;
     }
-    // Une route sans extension : on tente d'abord <route>.html (pages
-    // multi-entrées comme /telecharger), sinon repli SPA sur index.html.
-    // Une ressource avec extension manquante reste un 404 franc.
+    // SPA React (HashRouter) : toute route applicative passe par index.html.
+    // Une route sans extension retombe donc sur index.html ; une ressource
+    // avec extension manquante reste un 404 franc.
     if (path.extname(filePath) === "") {
-      const htmlCandidate = filePath + ".html";
-      fs.stat(htmlCandidate, (e2, s2) => {
-        if (!e2 && s2.isFile()) {
-          sendFile(res, htmlCandidate, 200);
-        } else {
-          sendFile(res, path.join(DIST, "index.html"), 200);
-        }
-      });
+      sendFile(res, path.join(DIST, "index.html"), 200);
     } else {
       res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
       res.end("Not found");

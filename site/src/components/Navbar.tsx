@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
+import { Link } from "react-router-dom";
 import { useT } from "../i18n/LangContext";
 import { Switchers } from "./Switchers";
 
 const NAV_ITEMS: ReadonlyArray<{
-  href: string;
+  id: string;
   key:
     | "nav.platforms"
     | "nav.features"
@@ -11,11 +12,11 @@ const NAV_ITEMS: ReadonlyArray<{
     | "nav.cli"
     | "nav.privacy";
 }> = [
-  { href: "#platforms", key: "nav.platforms" },
-  { href: "#features", key: "nav.features" },
-  { href: "#quickstart", key: "nav.quickstart" },
-  { href: "#cli", key: "nav.cli" },
-  { href: "#privacy", key: "nav.privacy" },
+  { id: "platforms", key: "nav.platforms" },
+  { id: "features", key: "nav.features" },
+  { id: "quickstart", key: "nav.quickstart" },
+  { id: "cli", key: "nav.cli" },
+  { id: "privacy", key: "nav.privacy" },
 ];
 
 export function Navbar() {
@@ -33,11 +34,29 @@ export function Navbar() {
 
   const close = () => setOpen(false);
 
+  // Défilement doux vers une section. HashRouter occupe déjà le hash de
+  // l'URL, donc on gère le scroll en JS plutôt que par ancres #id.
+  const scrollTo = (e: MouseEvent, id: string) => {
+    e.preventDefault();
+    close();
+    if (id === "top") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+  };
+
   return (
     <nav className="navbar">
       <div className="container nav-inner">
-        <a className="nav-brand" href="#top" onClick={close}>
-          <span className="nav-leaf" aria-hidden="true">🥦</span>
+        <a
+          className="nav-brand"
+          href="#top"
+          onClick={(e) => scrollTo(e, "top")}
+        >
+          <span className="nav-leaf" aria-hidden="true">
+            🥦
+          </span>
           <span>Brocolis</span>
         </a>
         <button
@@ -54,20 +73,16 @@ export function Navbar() {
         <div className={`nav-drawer ${open ? "open" : ""}`}>
           <ul className="nav-links">
             {NAV_ITEMS.map((item) => (
-              <li key={item.href}>
-                <a href={item.href} onClick={close}>
+              <li key={item.id}>
+                <a href={`#${item.id}`} onClick={(e) => scrollTo(e, item.id)}>
                   {t(item.key)}
                 </a>
               </li>
             ))}
             <li>
-              <a
-                className="nav-download"
-                href="./telecharger.html"
-                onClick={close}
-              >
+              <Link className="nav-download" to="/telecharger" onClick={close}>
                 {t("nav.download")}
-              </a>
+              </Link>
             </li>
           </ul>
           <div className="nav-switchers">
