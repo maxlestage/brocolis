@@ -70,6 +70,10 @@ jobs:
           mkdir -p artifacts
           cp target/debian/*.deb artifacts/
           cp target/generate-rpm/*.rpm artifacts/
+          # Copies à nom STABLE (indépendant de la version) pour des liens de
+          # téléchargement direct fiables depuis le site (page Télécharger).
+          cp target/debian/*.deb artifacts/brocolis-linux-amd64.deb
+          cp target/generate-rpm/*.rpm artifacts/brocolis-linux-x86_64.rpm
           ls -lh artifacts/
       - uses: actions/upload-artifact@v4
         with:

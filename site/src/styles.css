@@ -618,3 +618,67 @@ footer {
     padding: 36px 0;
   }
 }
+
+/* ----------------------------------------------------------------------- */
+/* Page de téléchargement (telecharger.html)                               */
+/* ----------------------------------------------------------------------- */
+
+.nav-download {
+  font-weight: 700;
+  color: var(--green-dark);
+}
+
+.dl-main {
+  padding: 40px 0 64px;
+}
+
+.dl-back {
+  display: inline-block;
+  margin-bottom: 18px;
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 600;
+}
+.dl-back:hover {
+  color: var(--green-dark);
+}
+
+.dl-title {
+  margin: 0 0 12px;
+}
+
+.dl-intro {
+  max-width: 60ch;
+  color: var(--ink);
+}
+
+.dl-version {
+  max-width: 60ch;
+  color: var(--muted);
+  font-size: 15px;
+  margin-bottom: 28px;
+}
+
+.dl-grid {
+  margin-top: 8px;
+}
+
+.dl-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dl-note {
+  margin-top: 12px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.dl-all {
+  margin-top: 32px;
+}
+.dl-all a {
+  color: var(--green-dark);
+  font-weight: 600;
+}
