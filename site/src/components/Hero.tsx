@@ -30,10 +30,7 @@ export function Hero() {
           />
           <div className="cta">
             <div className="cta-stack">
-              <a
-                className="btn primary"
-                href="https://github.com/maxlestage/brocolis/releases"
-              >
+              <a className="btn primary" href="./telecharger.html">
                 {t("hero.cta")}
               </a>
               <span className="cta-sub">{t("hero.cta.sub")}</span>

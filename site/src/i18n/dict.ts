@@ -43,6 +43,32 @@ export const DICT = {
     "platforms.windows.d":
       "Magasin <em>Local Machine\\Trusted Root</em> via <code>certutil</code> + politique entreprise Firefox + proxy WinHTTP via <code>netsh</code>. Scripts PowerShell <code>install.ps1</code> / <code>uninstall.ps1</code> pour les installs persistantes.",
     "platforms.windows.cta": "Télécharger pour Windows",
+    "nav.download": "Télécharger",
+    "dl.back": "Accueil",
+    "dl.h": "Télécharger Brocolis",
+    "dl.intro":
+      "Choisissez votre système d'exploitation. <code>brocolis auto</code> fait ensuite tout le réglage système — il suffit de lancer la commande.",
+    "dl.version":
+      "Ce sont les <strong>dernières builds</strong>, recompilées automatiquement à chaque mise à jour. Pour une version précise ou l'historique, voir toutes les releases.",
+    "dl.macos.t": "macOS",
+    "dl.macos.d":
+      "Binaire universel Intel + Apple Silicon (<code>.tar.gz</code>).",
+    "dl.macos.btn": "Télécharger (.tar.gz)",
+    "dl.macos.note": "Décompressez, puis <code>sudo ./brocolis auto</code>.",
+    "dl.linux.t": "Linux",
+    "dl.linux.d":
+      "Paquets x86_64 : <code>.deb</code> pour Debian/Ubuntu, <code>.rpm</code> pour Fedora/RHEL.",
+    "dl.linux.deb": "Télécharger .deb",
+    "dl.linux.rpm": "Télécharger .rpm",
+    "dl.linux.note":
+      "Installez le paquet, puis <code>sudo brocolis auto</code>.",
+    "dl.windows.t": "Windows",
+    "dl.windows.d":
+      "Exécutable x86_64 + scripts d'installation (<code>.zip</code>).",
+    "dl.windows.btn": "Télécharger (.zip)",
+    "dl.windows.note":
+      "Décompressez, puis lancez <code>brocolis auto</code> dans un terminal administrateur.",
+    "dl.all": "Voir toutes les versions sur GitHub →",
     "s1.h": "Une commande, zéro configuration",
     "s1.li1":
       "Mot de passe administrateur demandé <strong>une seule fois</strong> (<code>sudo</code> sur macOS/Linux, élévation UAC sur Windows)",
@@ -143,6 +169,31 @@ export const DICT = {
     "platforms.windows.d":
       "<em>Local Machine\\Trusted Root</em> store via <code>certutil</code> + Firefox enterprise policy + WinHTTP proxy via <code>netsh</code>. PowerShell scripts <code>install.ps1</code> / <code>uninstall.ps1</code> for persistent installs.",
     "platforms.windows.cta": "Download for Windows",
+    "nav.download": "Download",
+    "dl.back": "Home",
+    "dl.h": "Download Brocolis",
+    "dl.intro":
+      "Pick your operating system. <code>brocolis auto</code> then handles the whole system setup — just run the command.",
+    "dl.version":
+      "These are the <strong>latest builds</strong>, recompiled automatically on every update. For a specific version or the history, see all releases.",
+    "dl.macos.t": "macOS",
+    "dl.macos.d":
+      "Universal Intel + Apple Silicon binary (<code>.tar.gz</code>).",
+    "dl.macos.btn": "Download (.tar.gz)",
+    "dl.macos.note": "Unpack, then <code>sudo ./brocolis auto</code>.",
+    "dl.linux.t": "Linux",
+    "dl.linux.d":
+      "x86_64 packages: <code>.deb</code> for Debian/Ubuntu, <code>.rpm</code> for Fedora/RHEL.",
+    "dl.linux.deb": "Download .deb",
+    "dl.linux.rpm": "Download .rpm",
+    "dl.linux.note": "Install the package, then <code>sudo brocolis auto</code>.",
+    "dl.windows.t": "Windows",
+    "dl.windows.d":
+      "x86_64 executable + install scripts (<code>.zip</code>).",
+    "dl.windows.btn": "Download (.zip)",
+    "dl.windows.note":
+      "Unzip, then run <code>brocolis auto</code> in an administrator terminal.",
+    "dl.all": "See all versions on GitHub →",
     "s1.h": "One command, zero configuration",
     "s1.li1":
       "Admin password requested <strong>only once</strong> (<code>sudo</code> on macOS/Linux, UAC elevation on Windows)",
@@ -242,6 +293,31 @@ export const DICT = {
     "platforms.windows.d":
       "Almacén <em>Local Machine\\Trusted Root</em> vía <code>certutil</code> + política empresarial Firefox + proxy WinHTTP vía <code>netsh</code>. Scripts PowerShell <code>install.ps1</code> / <code>uninstall.ps1</code> para instalaciones persistentes.",
     "platforms.windows.cta": "Descargar para Windows",
+    "nav.download": "Descargar",
+    "dl.back": "Inicio",
+    "dl.h": "Descargar Brocolis",
+    "dl.intro":
+      "Elige tu sistema operativo. <code>brocolis auto</code> se encarga de toda la configuración del sistema — solo ejecuta el comando.",
+    "dl.version":
+      "Estas son las <strong>últimas builds</strong>, recompiladas automáticamente en cada actualización. Para una versión concreta o el historial, mira todas las releases.",
+    "dl.macos.t": "macOS",
+    "dl.macos.d":
+      "Binario universal Intel + Apple Silicon (<code>.tar.gz</code>).",
+    "dl.macos.btn": "Descargar (.tar.gz)",
+    "dl.macos.note": "Descomprime y luego <code>sudo ./brocolis auto</code>.",
+    "dl.linux.t": "Linux",
+    "dl.linux.d":
+      "Paquetes x86_64: <code>.deb</code> para Debian/Ubuntu, <code>.rpm</code> para Fedora/RHEL.",
+    "dl.linux.deb": "Descargar .deb",
+    "dl.linux.rpm": "Descargar .rpm",
+    "dl.linux.note": "Instala el paquete y luego <code>sudo brocolis auto</code>.",
+    "dl.windows.t": "Windows",
+    "dl.windows.d":
+      "Ejecutable x86_64 + scripts de instalación (<code>.zip</code>).",
+    "dl.windows.btn": "Descargar (.zip)",
+    "dl.windows.note":
+      "Descomprime y ejecuta <code>brocolis auto</code> en una terminal de administrador.",
+    "dl.all": "Ver todas las versiones en GitHub →",
     "s1.h": "Un comando, cero configuración",
     "s1.li1":
       "Contraseña de administrador solicitada <strong>una sola vez</strong> (<code>sudo</code> en macOS/Linux, elevación UAC en Windows)",
