@@ -364,6 +364,13 @@ body {
   background: var(--btn-primary-bg);
   color: var(--btn-primary-ink);
 }
+/* Variante secondaire (bouton .rpm) : contour vert, pas de fond — sinon un
+   .btn nu hérite du bleu lien par défaut. */
+.btn:not(.primary) {
+  border-color: var(--green-dark);
+  color: var(--green-dark);
+  background: transparent;
+}
 .btn.primary:hover {
   background: var(--btn-primary-hover);
 }
@@ -595,6 +602,21 @@ footer {
 }
 
 @media (max-width: 600px) {
+  /* Contenu plus compact sur téléphone : texte courant, boutons et cartes
+     réduits d'un cran pour densifier la page. */
+  body {
+    font-size: 15px;
+  }
+  h3 {
+    font-size: 16px;
+  }
+  .btn {
+    padding: 10px 16px;
+    font-size: 15px;
+  }
+  .card {
+    padding: 14px 16px;
+  }
   .hero {
     padding: 48px 0 40px;
   }
@@ -709,12 +731,26 @@ footer {
 
 @media (max-width: 600px) {
   .dl-main {
-    padding: 28px 0 48px;
+    padding: 22px 0 44px;
+  }
+  .dl-back {
+    font-size: 14px;
+    margin-bottom: 14px;
   }
   .dl-title {
-    font-size: 27px;
+    font-size: 23px;
   }
   .dl-intro {
-    font-size: 16px;
+    font-size: 15px;
+  }
+  .dl-version {
+    font-size: 13.5px;
+    margin-bottom: 20px;
+  }
+  .dl-note {
+    font-size: 13px;
+  }
+  .platform-icon {
+    font-size: 18px;
   }
 }
