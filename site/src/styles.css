@@ -650,8 +650,10 @@ footer {
   color: var(--green-dark);
 }
 
+/* On garde les 24px horizontaux de .container : sinon le raccourci « padding »
+   les remet à 0 et les cartes touchent les bords (contrairement à l'accueil). */
 .dl-main {
-  padding: 32px 0 64px;
+  padding: 32px 24px 64px;
 }
 
 .dl-back {
@@ -698,8 +700,13 @@ footer {
   margin-bottom: 28px;
 }
 
+/* La grille est un <section>, elle hérite donc du padding/bordure de
+   « main section ». On les neutralise pour coller au rendu de l'accueil,
+   où les cartes suivent directement l'intro sans grand vide. */
 .dl-grid {
   margin-top: 8px;
+  padding: 0;
+  border-bottom: none;
 }
 
 .dl-btn-row {
@@ -745,7 +752,7 @@ footer {
 
 @media (max-width: 600px) {
   .dl-main {
-    padding: 18px 0 44px;
+    padding: 18px 24px 44px;
   }
   .dl-back {
     font-size: 14px;
