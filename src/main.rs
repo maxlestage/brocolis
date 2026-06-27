@@ -1,10 +1,12 @@
 //! Brocolis 🥦 — interface en ligne de commande.
 //!
 //! Sous-commandes :
-//! - `brocolis run`    : démarre le proxy.
-//! - `brocolis keygen` : génère une clé symétrique AES-256 partageable.
-//! - `brocolis ca`     : génère/exporte le certificat racine à installer dans
-//!   le navigateur.
+//! - `brocolis run`        : démarre le proxy.
+//! - `brocolis keygen`     : génère une clé symétrique AES-256 partageable.
+//! - `brocolis pair`       : appairage automatique X25519 à deux (rendez-vous).
+//! - `brocolis pair-group` : appairage de groupe (clé de groupe distribuée).
+//! - `brocolis ca`         : génère/exporte le certificat racine à installer
+//!   dans le navigateur.
 //!
 //! L'interface graphique équivalente est `brocolis-gui`
 //! (`cargo run --features gui --bin brocolis-gui`).
@@ -103,6 +105,31 @@ enum Command {
         #[arg(long, default_value_t = 120)]
         timeout: u64,
     },
+    /// Appairage de GROUPE (multi-membres) via le serveur de rendez-vous : un
+    /// fondateur (`--found`) génère une clé de groupe et la distribue, emballée
+    /// X25519, à chaque membre appairé ; les membres la récupèrent. Toute la
+    /// clé est ajoutée au trousseau — le groupe lit/écrit sans recopier de clé.
+    PairGroup {
+        /// Code court convenu de vive voix avec le groupe.
+        #[arg(long)]
+        code: String,
+        /// URL du serveur de rendez-vous.
+        #[arg(long, default_value_t = brocolis::pairing::DEFAULT_SERVER.to_string())]
+        server: String,
+        /// Fichier de configuration TOML où ajouter la clé de groupe.
+        #[arg(long, default_value = "brocolis.toml")]
+        config: PathBuf,
+        /// Fichier de la clé privée X25519 locale (créé s'il n'existe pas).
+        #[arg(long, default_value = "brocolis-x25519.key")]
+        identity: PathBuf,
+        /// Mode fondateur : génère la clé de groupe et la distribue aux membres.
+        #[arg(long)]
+        found: bool,
+        /// Délai max (secondes) : côté fondateur, fenêtre de rassemblement des
+        /// membres ; côté membre, attente de la clé de groupe.
+        #[arg(long, default_value_t = 120)]
+        timeout: u64,
+    },
     /// Génère/charge le CA et l'exporte pour le navigateur.
     Ca {
         #[arg(long, default_value = "brocolis-ca.crt")]
@@ -139,6 +166,14 @@ fn main() -> anyhow::Result<()> {
             identity,
             timeout,
         } => run_pair(&code, &server, &config, &identity, timeout),
+        Command::PairGroup {
+            code,
+            server,
+            config,
+            identity,
+            found,
+            timeout,
+        } => run_pair_group(&code, &server, &config, &identity, found, timeout),
         Command::Ca {
             ca_cert,
             ca_key,
@@ -398,5 +433,107 @@ async fn run_pair(
         "   Clé ajoutée à {} (champ `keys`). Redémarrez brocolis pour l'activer.",
         config.display()
     );
+    Ok(())
+}
+
+/// Appairage de groupe : le fondateur génère une clé de groupe et l'emballe pour
+/// chaque membre (X25519) ; chaque membre la récupère et la déballe. La clé est
+/// ajoutée au trousseau de chacun.
+#[tokio::main]
+async fn run_pair_group(
+    code: &str,
+    server: &str,
+    config: &Path,
+    identity: &Path,
+    found: bool,
+    timeout_secs: u64,
+) -> anyhow::Result<()> {
+    use brocolis::agreement::{generate_group_key_base64, group_fingerprint};
+    use brocolis::pairing::{random_peer_id, RendezvousClient, WrapItem};
+    use std::time::{Duration, Instant};
+
+    let priv_key = load_or_create_identity(identity)?;
+    let my_pub = priv_key.public_key_base64();
+    let peer_id = random_peer_id();
+    let client = RendezvousClient::new(server)?;
+
+    // Tout le monde publie sa clé publique sous le code.
+    let mut peers = client.publish(code, &peer_id, &my_pub).await?;
+    let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+
+    if found {
+        // Fondateur : rassemble les membres (jusqu'au délai, ou arrêt anticipé
+        // si la liste est stable ~6 s avec au moins un membre), puis distribue.
+        tracing::info!("Fondateur : attente des membres (code « {code} »)…");
+        let mut stable_since = Instant::now();
+        let mut last_count = peers.len();
+        loop {
+            peers = client.fetch(code, &peer_id).await?;
+            if peers.len() != last_count {
+                last_count = peers.len();
+                stable_since = Instant::now();
+            }
+            let stable = stable_since.elapsed() >= Duration::from_secs(6);
+            if (!peers.is_empty() && stable) || Instant::now() >= deadline {
+                break;
+            }
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        }
+        if peers.is_empty() {
+            anyhow::bail!("aucun membre n'a rejoint le code « {code} »");
+        }
+
+        let group_key = generate_group_key_base64();
+        let fp = group_fingerprint(&group_key);
+
+        let mut items = Vec::with_capacity(peers.len());
+        for p in &peers {
+            match priv_key.wrap_group_key(&group_key, &p.public_key) {
+                Ok(blob) => items.push(WrapItem {
+                    to_peer_id: p.peer_id.clone(),
+                    blob,
+                }),
+                Err(e) => tracing::warn!("membre {} ignoré (emballage impossible): {e}", p.peer_id),
+            }
+        }
+        let served = items.len();
+        client.post_wraps(code, &peer_id, &my_pub, &items).await?;
+
+        println!("✅ Groupe créé pour {served} membre(s).");
+        println!("   Empreinte de groupe : {fp}");
+        println!("   ⚠️  Comparez-la de vive voix avec tous les membres.");
+        add_key_to_config(config, &group_key)?;
+        println!(
+            "   Clé de groupe ajoutée à {} (champ `keys`). Redémarrez brocolis pour l'activer.",
+            config.display()
+        );
+    } else {
+        // Membre : attend que le fondateur ait déposé la clé de groupe emballée.
+        let _ = peers; // la liste a juste servi à confirmer la publication
+        tracing::info!("Membre : attente de la clé de groupe (code « {code} »)…");
+        let inbox = loop {
+            if let Some(w) = client.fetch_wrap(code, &peer_id).await? {
+                break w;
+            }
+            if Instant::now() >= deadline {
+                anyhow::bail!("le fondateur n'a pas déposé de clé de groupe dans le délai imparti");
+            }
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        };
+
+        let group_key = priv_key
+            .unwrap_group_key(&inbox.blob, &inbox.from_pub)
+            .map_err(|e| anyhow::anyhow!("déballage de la clé de groupe: {e}"))?;
+        let fp = group_fingerprint(&group_key);
+
+        println!("✅ Clé de groupe reçue.");
+        println!("   Empreinte de groupe : {fp}");
+        println!("   ⚠️  Comparez-la de vive voix avec les autres membres.");
+        add_key_to_config(config, &group_key)?;
+        println!(
+            "   Clé de groupe ajoutée à {} (champ `keys`). Redémarrez brocolis pour l'activer.",
+            config.display()
+        );
+    }
     Ok(())
 }
