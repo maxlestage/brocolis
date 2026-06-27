@@ -4,6 +4,7 @@
 //! plusieurs frontends : la CLI (`src/main.rs`) et l'application de bureau
 //! (`src/bin/brocolis-gui.rs`).
 
+pub mod agreement;
 pub mod ca;
 pub mod config;
 pub mod crypto;
@@ -17,7 +18,7 @@ use std::time::Duration;
 pub use config::Config;
 pub use crypto::SymKey;
 pub use keys::KeyManager;
-pub use proxy::{AppState, run, run_until};
+pub use proxy::{run, run_until, AppState};
 
 /// Construit l'état applicatif (CA, gestionnaire de clés, client HTTP) à
 /// partir d'une configuration. Renvoie aussi un handle vers le gestionnaire de
@@ -29,18 +30,36 @@ pub fn build_app_state(cfg: Config) -> anyhow::Result<(Arc<AppState>, Arc<KeyMan
 
     let ca = Arc::new(ca::Ca::load_or_generate(&cfg.ca_cert, &cfg.ca_key)?);
 
-    let keys = Arc::new(match &cfg.key {
-        Some(b64) => KeyManager::from_base64(b64)
-            .map_err(|e| anyhow::anyhow!("clé invalide dans la configuration: {e}"))?,
-        None => {
-            let km = KeyManager::ephemeral();
-            tracing::warn!(
-                "Aucune clé configurée — clé éphémère générée: {}",
-                km.current().to_base64()
+    let key_b64s = cfg.all_key_b64();
+    let keys = Arc::new(if key_b64s.is_empty() {
+        let km = KeyManager::ephemeral();
+        tracing::warn!(
+            "Aucune clé configurée — clé éphémère générée: {}",
+            km.current().to_base64()
+        );
+        tracing::warn!("Le contenu chiffré ne sera lisible que durant cette session.");
+        km
+    } else {
+        let mut parsed = Vec::with_capacity(key_b64s.len());
+        for b64 in &key_b64s {
+            parsed.push(
+                SymKey::from_base64(b64)
+                    .map_err(|e| anyhow::anyhow!("clé invalide dans la configuration: {e}"))?,
             );
-            tracing::warn!("Le contenu chiffré ne sera lisible que durant cette session.");
-            km
         }
+        let n = parsed.len();
+        let km = KeyManager::from_keys(parsed, cfg.encrypt_multi);
+        if n > 1 {
+            tracing::info!(
+                "Trousseau: {n} clés — déchiffrement multi-clés{}.",
+                if cfg.encrypt_multi {
+                    ", chiffrement v2 multi-destinataire"
+                } else {
+                    ""
+                }
+            );
+        }
+        km
     });
 
     let http = reqwest::Client::builder()

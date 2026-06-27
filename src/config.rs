@@ -27,14 +27,38 @@ pub struct Config {
     /// Chemin de la clé privée du CA.
     #[serde(default = "default_ca_key")]
     pub ca_key: PathBuf,
-    /// Clé symétrique partagée (base64, 32 octets). Si absente, une clé
-    /// éphémère est générée au démarrage.
+    /// Clé symétrique partagée primaire (base64, 32 octets). Si absente, une clé
+    /// éphémère est générée au démarrage. Sert au chiffrement par défaut.
     #[serde(default)]
     pub key: Option<String>,
+    /// Clés supplémentaires (base64, 32 octets) — typiquement une par
+    /// correspondant. Ajoutées au trousseau en plus de `key`. Au déchiffrement,
+    /// brocolis essaie TOUTES les clés : on lit ce que chacun nous envoie sans
+    /// jamais changer de clé active.
+    #[serde(default)]
+    pub keys: Vec<String>,
+    /// Si vrai, chaque `((secret))` est chiffré pour TOUTES les clés du
+    /// trousseau (jeton `v2` multi-destinataire, lisible par tous les
+    /// correspondants). Défaut : faux (jeton `v1`, compatible proxy/iOS).
+    #[serde(default)]
+    pub encrypt_multi: bool,
     /// Hôtes dont le trafic doit être traité (sous-chaîne du nom d'hôte).
     /// Vide = tous les hôtes.
     #[serde(default)]
     pub encrypt_hosts: Vec<String>,
+}
+
+impl Config {
+    /// Toutes les clés base64 du trousseau, dans l'ordre : `key` (primaire)
+    /// d'abord, puis `keys`. Les chaînes vides sont ignorées.
+    pub fn all_key_b64(&self) -> Vec<String> {
+        self.key
+            .iter()
+            .chain(self.keys.iter())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
+    }
 }
 
 fn default_listen() -> SocketAddr {
@@ -54,6 +78,8 @@ impl Default for Config {
             ca_cert: default_ca_cert(),
             ca_key: default_ca_key(),
             key: None,
+            keys: Vec::new(),
+            encrypt_multi: false,
             encrypt_hosts: Vec::new(),
         }
     }
