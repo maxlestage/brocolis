@@ -9,6 +9,7 @@ pub mod ca;
 pub mod config;
 pub mod crypto;
 pub mod keys;
+pub mod pairing;
 pub mod proxy;
 pub mod system;
 

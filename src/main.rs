@@ -10,7 +10,7 @@
 //! (`cargo run --features gui --bin brocolis-gui`).
 
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::sync::Arc;
 
@@ -23,7 +23,11 @@ use brocolis::crypto::SymKey;
 use brocolis::keys::KeyManager;
 
 #[derive(Parser)]
-#[command(name = "brocolis", version, about = "Proxy MITM de chiffrement sélectif")]
+#[command(
+    name = "brocolis",
+    version,
+    about = "Proxy MITM de chiffrement sélectif"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -79,6 +83,26 @@ enum Command {
     },
     /// Génère une nouvelle clé symétrique AES-256 (base64) à partager.
     Keygen,
+    /// Appairage automatique X25519 via le serveur de rendez-vous : échange les
+    /// clés publiques avec un correspondant partageant le même CODE, dérive la
+    /// clé partagée et l'ajoute au trousseau (`keys` de brocolis.toml).
+    Pair {
+        /// Code court convenu de vive voix avec le correspondant.
+        #[arg(long)]
+        code: String,
+        /// URL du serveur de rendez-vous.
+        #[arg(long, default_value_t = brocolis::pairing::DEFAULT_SERVER.to_string())]
+        server: String,
+        /// Fichier de configuration TOML où ajouter la clé dérivée.
+        #[arg(long, default_value = "brocolis.toml")]
+        config: PathBuf,
+        /// Fichier de la clé privée X25519 locale (créé s'il n'existe pas).
+        #[arg(long, default_value = "brocolis-x25519.key")]
+        identity: PathBuf,
+        /// Délai max d'attente du correspondant, en secondes.
+        #[arg(long, default_value_t = 120)]
+        timeout: u64,
+    },
     /// Génère/charge le CA et l'exporte pour le navigateur.
     Ca {
         #[arg(long, default_value = "brocolis-ca.crt")]
@@ -108,6 +132,13 @@ fn main() -> anyhow::Result<()> {
             println!("# puis placez-la dans brocolis.toml (champ `key`).");
             Ok(())
         }
+        Command::Pair {
+            code,
+            server,
+            config,
+            identity,
+            timeout,
+        } => run_pair(&code, &server, &config, &identity, timeout),
         Command::Ca {
             ca_cert,
             ca_key,
@@ -281,4 +312,91 @@ async fn run_auto(cfg: Config, config_path: PathBuf, system: bool) -> anyhow::Re
         sys.revert();
     }
     result
+}
+
+/// Charge la clé privée X25519 locale depuis `path`, ou en crée une (persistée
+/// en base64, droits `0600` sous Unix).
+fn load_or_create_identity(path: &Path) -> anyhow::Result<brocolis::agreement::PrivateKey> {
+    use brocolis::agreement::PrivateKey;
+
+    if path.exists() {
+        let raw = std::fs::read_to_string(path)?;
+        return PrivateKey::from_base64(raw.trim()).map_err(|e| {
+            anyhow::anyhow!("clé d'identité X25519 invalide ({}): {e}", path.display())
+        });
+    }
+    let key = PrivateKey::generate();
+    std::fs::write(path, key.to_base64())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    }
+    tracing::info!("Nouvelle identité X25519 créée: {}", path.display());
+    Ok(key)
+}
+
+/// Ajoute une clé base64 au champ `keys` du fichier de configuration (créé si
+/// absent), en préservant commentaires et mise en forme.
+fn add_key_to_config(path: &Path, key_b64: &str) -> anyhow::Result<()> {
+    let existing = std::fs::read_to_string(path).unwrap_or_default();
+    let updated = brocolis::pairing::append_key_to_toml(&existing, key_b64)
+        .map_err(|e| anyhow::anyhow!("écriture de la clé dans {}: {e}", path.display()))?;
+    std::fs::write(path, updated)?;
+    Ok(())
+}
+
+/// Appairage automatique : publie ma clé publique sous `code`, attend le
+/// correspondant, dérive la clé partagée et l'ajoute au trousseau.
+#[tokio::main]
+async fn run_pair(
+    code: &str,
+    server: &str,
+    config: &Path,
+    identity: &Path,
+    timeout_secs: u64,
+) -> anyhow::Result<()> {
+    use brocolis::pairing::{random_peer_id, RendezvousClient};
+    use std::time::{Duration, Instant};
+
+    let priv_key = load_or_create_identity(identity)?;
+    let my_pub = priv_key.public_key_base64();
+    let peer_id = random_peer_id();
+
+    let client = RendezvousClient::new(server)?;
+
+    tracing::info!("Publication de la clé publique (code « {code} ») sur {server}…");
+    let mut peers = client.publish(code, &peer_id, &my_pub).await?;
+
+    let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+    while peers.is_empty() {
+        if Instant::now() >= deadline {
+            anyhow::bail!(
+                "aucun correspondant n'a rejoint le code « {code} » dans le délai imparti"
+            );
+        }
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        peers = client.fetch(code, &peer_id).await?;
+    }
+
+    // Appairage à deux : on dérive avec le premier correspondant arrivé.
+    let peer = &peers[0];
+    let derived = priv_key
+        .derive(&peer.public_key)
+        .map_err(|e| anyhow::anyhow!("dérivation de la clé partagée: {e}"))?;
+
+    println!("✅ Appairé.");
+    println!("   Empreinte : {}", derived.fingerprint);
+    println!("   ⚠️  Comparez-la de vive voix avec votre correspondant avant tout secret.");
+    println!(
+        "   Clé partagée (base64) : {}",
+        derived.symmetric_key_base64
+    );
+
+    add_key_to_config(config, &derived.symmetric_key_base64)?;
+    println!(
+        "   Clé ajoutée à {} (champ `keys`). Redémarrez brocolis pour l'activer.",
+        config.display()
+    );
+    Ok(())
 }

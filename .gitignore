@@ -6,6 +6,9 @@
 *-ca.crt
 *-ca.key
 brocolis-ca.*
+# Clé privée X25519 d'appairage (générée par `brocolis pair`).
+*-x25519.key
+brocolis-x25519.*
 
 # Paquets Linux générés par linux/build-packages.sh
 /linux/dist/
