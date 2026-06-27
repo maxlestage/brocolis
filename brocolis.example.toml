@@ -14,10 +14,25 @@ listen = "127.0.0.1:8080"
 ca_cert = "brocolis-ca.crt"
 ca_key = "brocolis-ca.key"
 
-# Clé symétrique AES-256 partagée (base64, 32 octets), obtenue via
+# Clé symétrique AES-256 partagée PRIMAIRE (base64, 32 octets), obtenue via
 # `brocolis keygen`. À transmettre par un canal sûr aux utilisateurs
-# autorisés. Si absente, une clé éphémère est générée au démarrage.
+# autorisés. Si absente, une clé éphémère est générée au démarrage. Sert au
+# chiffrement par défaut.
 # key = "REMPLACEZ_PAR_VOTRE_CLE_BASE64"
+
+# Clés supplémentaires — typiquement une par correspondant. brocolis garde
+# tout le trousseau : au déchiffrement il essaie TOUTES les clés, donc on lit
+# ce que chacun nous envoie sans jamais changer de clé active (aligné sur la
+# messagerie iOS). Au chiffrement, c'est la clé `key` (primaire) qui sert.
+# keys = [
+#   "CLE_BASE64_D_ALICE",
+#   "CLE_BASE64_DE_BOB",
+# ]
+
+# Si vrai, chaque ((secret)) est chiffré pour TOUTES les clés du trousseau
+# (jeton v2 multi-destinataire, lisible par tous les correspondants listés).
+# Défaut : false (jeton v1, une seule clé, compatible proxy/iOS).
+# encrypt_multi = false
 
 # Hôtes dont le trafic doit subir le chiffrement sélectif.
 # Liste vide = tous les hôtes.
