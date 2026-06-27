@@ -10,6 +10,10 @@
 #   brocolis pair --code 4291  # échange les clés publiques X25519 avec le
 #                              # correspondant qui tape le même code, dérive la
 #                              # clé partagée et l'ajoute à `keys` ci-dessous.
+# Appairage de GROUPE (multi-membres) :
+#   brocolis pair-group --code 4291 --found   # fondateur : crée + distribue
+#   brocolis pair-group --code 4291           # membre : récupère la clé
+#                              # la clé de groupe est ajoutée à `keys`.
 
 # Adresse d'écoute du proxy (HTTP et HTTPS via CONNECT).
 listen = "127.0.0.1:8080"
