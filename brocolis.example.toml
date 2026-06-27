@@ -5,6 +5,11 @@
 #   brocolis keygen            # génère une clé à coller dans `key`
 #   brocolis ca                # génère le CA à installer dans le navigateur
 #   brocolis run               # démarre le proxy
+#
+# Appairage automatique (sans recopier de clé), aligné sur la messagerie iOS :
+#   brocolis pair --code 4291  # échange les clés publiques X25519 avec le
+#                              # correspondant qui tape le même code, dérive la
+#                              # clé partagée et l'ajoute à `keys` ci-dessous.
 
 # Adresse d'écoute du proxy (HTTP et HTTPS via CONNECT).
 listen = "127.0.0.1:8080"
