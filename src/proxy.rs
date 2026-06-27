@@ -23,7 +23,7 @@ use tokio_rustls::TlsAcceptor;
 
 use crate::ca::Ca;
 use crate::config::Config;
-use crate::crypto::{decrypt_tokens, encrypt_marked};
+use crate::crypto::{decrypt_tokens_multi, encrypt_marked_multi};
 use crate::keys::KeyManager;
 
 type ResBody = http_body_util::combinators::BoxBody<Bytes, Infallible>;
@@ -223,7 +223,7 @@ async fn forward_http(
     let out_body: Bytes = if in_scope && is_textual(&parts.headers) {
         match std::str::from_utf8(&body_bytes) {
             Ok(text) => {
-                let (transformed, n) = encrypt_marked(text, &state.keys.current());
+                let (transformed, n) = encrypt_marked_multi(text, &state.keys.encryption_keys());
                 if n > 0 {
                     tracing::info!("{method} {host}: {n} segment(s) chiffré(s)");
                 }
@@ -256,7 +256,7 @@ async fn forward_http(
     let final_body: Bytes = if in_scope && is_textual(&resp_headers) {
         match std::str::from_utf8(&resp_body) {
             Ok(text) => {
-                let (transformed, n) = decrypt_tokens(text, &state.keys.current());
+                let (transformed, n) = decrypt_tokens_multi(text, &state.keys.all_keys());
                 if n > 0 {
                     tracing::info!("{method} {host} -> {status}: {n} segment(s) déchiffré(s)");
                 }
@@ -408,8 +408,7 @@ mod tests {
     #[test]
     fn target_url_tls_origin_form() {
         let uri: hyper::Uri = "/api/tweets?x=2".parse().unwrap();
-        let (url, host) =
-            build_target_url(&uri, &HeaderMap::new(), Some("twitter.com")).unwrap();
+        let (url, host) = build_target_url(&uri, &HeaderMap::new(), Some("twitter.com")).unwrap();
         assert_eq!(host, "twitter.com");
         assert_eq!(url.as_str(), "https://twitter.com/api/tweets?x=2");
     }
