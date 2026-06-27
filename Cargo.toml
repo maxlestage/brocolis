@@ -29,7 +29,7 @@ tokio-rustls = "0.26"
 rustls = "0.23"
 rustls-pemfile = "2"
 rcgen = "0.12"
-reqwest = { version = "0.12", default-features = false, features = ["default-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["default-tls", "json"] }
 aes-gcm = "0.10"
 rand = "0.8"
 base64 = "0.22"
@@ -38,6 +38,10 @@ base64 = "0.22"
 x25519-dalek = { version = "2", features = ["static_secrets"] }
 hkdf = "0.12"
 sha2 = "0.10"
+# Client du serveur de rendez-vous (appairage automatique) + édition TOML qui
+# préserve commentaires/format lors de l'ajout d'une clé dérivée au trousseau.
+serde_json = "1"
+toml_edit = "0.22"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
