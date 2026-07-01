@@ -213,7 +213,9 @@ enum Backend {
 impl SystemProxy {
     /// Applique la configuration système. Renvoie `Ok(None)` si rien n'a
     /// été modifié (OS non pris en charge, ou pas de droits administrateur).
-    #[allow(unused_variables)]
+    // `return` dans chaque bloc `#[cfg]` par OS : nécessaire (les autres blocs
+    // sont retirés à la compilation), mais clippy le voit comme superflu.
+    #[allow(unused_variables, clippy::needless_return)]
     pub fn engage(ca_cert: &Path, port: u16) -> anyhow::Result<Option<Self>> {
         #[cfg(target_os = "macos")]
         {
