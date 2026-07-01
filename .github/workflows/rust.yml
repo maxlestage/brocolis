@@ -1,0 +1,45 @@
+name: Rust CI
+
+# Compile le proxy, lance la suite de tests (unitaires + interop) et clippy.
+# Tourne à chaque push/PR touchant au code Rust ou au manifeste.
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/rust.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/rust.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: rust-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build, test & clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Composant clippy
+        run: rustup component add clippy
+
+      - name: Cache des dépendances
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build & tests
+        run: cargo test --locked --all-targets
+
+      - name: Clippy (zéro warning)
+        run: cargo clippy --all-targets -- -D warnings
