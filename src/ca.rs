@@ -18,14 +18,20 @@ use rcgen::{
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::ServerConfig;
 
+/// Erreurs de l'autorité de certification (génération du CA, forge des
+/// certificats feuilles, construction de la configuration TLS).
 #[derive(Debug, thiserror::Error)]
 pub enum CaError {
+    /// Échec de génération d'un certificat ou d'une clé via `rcgen`.
     #[error("erreur rcgen: {0}")]
     Rcgen(#[from] rcgen::Error),
+    /// Échec de lecture/écriture des fichiers de certificat ou de clé.
     #[error("erreur d'entrée/sortie: {0}")]
     Io(#[from] std::io::Error),
+    /// Échec côté `rustls` lors de la construction de la configuration TLS.
     #[error("erreur rustls: {0}")]
     Rustls(#[from] rustls::Error),
+    /// Contenu PEM invalide ou vide (certificat ou clé illisible).
     #[error("PEM invalide: {0}")]
     Pem(String),
 }

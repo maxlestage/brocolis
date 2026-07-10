@@ -51,8 +51,12 @@ use std::path::Path;
 /// État d'un proxy `networksetup` (web ou sécurisé).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProxyState {
+    /// Vrai si le proxy est activé pour ce service réseau.
     pub enabled: bool,
+    /// Adresse du serveur proxy configuré (par ex. `127.0.0.1`).
     pub server: String,
+    /// Port du serveur proxy configuré (chaîne, tel que rapporté par
+    /// `networksetup`).
     pub port: String,
 }
 

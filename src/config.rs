@@ -15,6 +15,11 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+/// Configuration du proxy, désérialisée depuis un fichier `brocolis.toml`.
+///
+/// Tous les champs ont une valeur par défaut : un fichier vide produit une
+/// configuration valide. Les champs inconnus sont rejetés
+/// (`deny_unknown_fields`) pour repérer les fautes de frappe.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
