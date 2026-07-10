@@ -30,9 +30,16 @@ type ResBody = http_body_util::combinators::BoxBody<Bytes, Infallible>;
 
 /// État partagé entre toutes les connexions.
 pub struct AppState {
+    /// Autorité de certification interne, qui forge à la volée les certificats
+    /// feuilles servis lors de l'interception HTTPS.
     pub ca: Arc<Ca>,
+    /// Trousseau de clés symétriques utilisé pour chiffrer/déchiffrer le
+    /// contenu marqué ; partagé et modifiable à chaud (rotation).
     pub keys: Arc<KeyManager>,
+    /// Configuration effective du proxy (adresse d'écoute, hôtes à chiffrer, …).
     pub cfg: Arc<Config>,
+    /// Client HTTP sortant réutilisé pour relayer les requêtes vers les serveurs
+    /// distants.
     pub http: reqwest::Client,
 }
 

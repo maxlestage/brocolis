@@ -24,6 +24,8 @@ pub struct KeyManager {
 }
 
 impl KeyManager {
+    /// Crée un trousseau ne contenant qu'une seule clé, qui devient la clé
+    /// primaire. Le chiffrement multi-destinataire est désactivé.
     pub fn new(key: SymKey) -> Self {
         Self {
             keys: RwLock::new(vec![key]),
