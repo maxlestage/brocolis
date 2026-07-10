@@ -29,8 +29,11 @@ const PUB_LEN: usize = 32;
 /// Erreur d'accord de clé.
 #[derive(Debug, thiserror::Error)]
 pub enum AgreementError {
+    /// La clé publique du correspondant est absente, mal encodée ou n'a pas la
+    /// taille attendue (32 octets).
     #[error("clé publique du correspondant invalide")]
     BadPeerKey,
+    /// Erreur remontée par la couche de chiffrement (dérivation/emballage).
     #[error(transparent)]
     Crypto(#[from] CryptoError),
 }
@@ -43,7 +46,11 @@ pub struct PrivateKey {
 
 /// Résultat d'une dérivation : clé symétrique partagée (base64) + empreinte.
 pub struct Derived {
+    /// Clé symétrique AES-256 partagée, encodée en base64 standard (32 octets).
+    /// Identique des deux côtés de l'accord.
     pub symmetric_key_base64: String,
+    /// Empreinte courte lisible dérivée des deux clés publiques ; à comparer de
+    /// vive voix avec le correspondant pour détecter un intercepteur (MITM).
     pub fingerprint: String,
 }
 

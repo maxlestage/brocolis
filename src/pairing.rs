@@ -24,10 +24,13 @@ use toml_edit::{Array, DocumentMut, Item, Value};
 /// `BrocolisKeyStore.serverURL` côté iOS).
 pub const DEFAULT_SERVER: &str = "https://brocolis-serveur-839b43057467.herokuapp.com";
 
+/// Erreurs de l'appairage automatique via le serveur de rendez-vous.
 #[derive(Debug, thiserror::Error)]
 pub enum PairingError {
+    /// Le serveur a répondu avec un code HTTP d'erreur ; contient ce code.
     #[error("le serveur a répondu {0}")]
     Server(u16),
+    /// La requête réseau a échoué (connexion, TLS, corps illisible, …).
     #[error("erreur réseau : {0}")]
     Network(String),
 }
@@ -35,8 +38,11 @@ pub enum PairingError {
 /// Clé publique d'un participant (réponse du serveur).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PairingPeer {
+    /// Identifiant éphémère du participant, aléatoire et propre à la session
+    /// d'appairage.
     #[serde(rename = "peerId")]
     pub peer_id: String,
+    /// Clé publique X25519 du participant, encodée en base64.
     #[serde(rename = "pub")]
     pub public_key: String,
 }
@@ -50,9 +56,13 @@ struct PairingResponse {
 /// Clé de groupe emballée reçue (key-wrapping X25519).
 #[derive(Debug, Clone, Deserialize)]
 pub struct WrapInbox {
+    /// Identifiant du membre expéditeur ayant emballé la clé de groupe.
     pub from: String,
+    /// Clé publique X25519 de l'expéditeur (base64), nécessaire pour dériver la
+    /// clé d'emballage et ouvrir le `blob`.
     #[serde(rename = "fromPub")]
     pub from_pub: String,
+    /// Clé de groupe scellée (AES-GCM « combined »), encodée en base64.
     pub blob: String,
 }
 
@@ -64,8 +74,11 @@ struct WrapResponse {
 /// Une clé de groupe emballée à destination d'un membre.
 #[derive(Debug, Clone, Serialize)]
 pub struct WrapItem {
+    /// Identifiant du membre destinataire de cette clé emballée.
     #[serde(rename = "toPeerId")]
     pub to_peer_id: String,
+    /// Clé de groupe scellée pour ce destinataire (AES-GCM « combined »,
+    /// base64).
     pub blob: String,
 }
 

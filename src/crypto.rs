@@ -27,6 +27,7 @@ use base64::engine::general_purpose::{
 use base64::Engine;
 use rand::RngCore;
 
+/// Taille d'une clé symétrique AES-256, en octets (32).
 pub const KEY_LEN: usize = 32;
 const NONCE_LEN: usize = 12;
 const TAG_LEN: usize = 16;
@@ -40,14 +41,22 @@ const TOKEN_SUFFIX: &str = "]]";
 const PLAIN_OPEN: &str = "((";
 const PLAIN_CLOSE: &str = "))";
 
+/// Erreurs des opérations de chiffrement/déchiffrement sélectif.
 #[derive(Debug, thiserror::Error)]
 pub enum CryptoError {
+    /// La clé brute n'a pas la taille attendue de [`KEY_LEN`] octets ; contient
+    /// la taille reçue.
     #[error("la clé doit faire {KEY_LEN} octets, reçu {0}")]
     BadKeyLen(usize),
+    /// La clé fournie en base64 n'a pas pu être décodée.
     #[error("clé base64 invalide: {0}")]
     BadKeyB64(String),
+    /// Le scellement ou l'ouverture AES-256-GCM a échoué (clé fausse, données
+    /// altérées ou tag d'authentification invalide).
     #[error("échec du (dé)chiffrement AES-256-GCM")]
     Aead,
+    /// Un jeton `[[BROCOLIS:…]]` est malformé : base64 illisible ou charge utile
+    /// trop courte pour contenir nonce et tag.
     #[error("jeton chiffré corrompu")]
     BadToken,
 }
@@ -66,6 +75,8 @@ impl SymKey {
         Self { bytes }
     }
 
+    /// Charge une clé depuis sa représentation base64 standard (32 octets une
+    /// fois décodée). Les espaces en tête/fin sont ignorés.
     pub fn from_base64(s: &str) -> Result<Self, CryptoError> {
         let raw = B64
             .decode(s.trim())
@@ -80,6 +91,8 @@ impl SymKey {
         Ok(Self { bytes })
     }
 
+    /// Renvoie la clé encodée en base64 standard, forme partageable et
+    /// stockable dans `brocolis.toml`.
     pub fn to_base64(&self) -> String {
         B64.encode(self.bytes)
     }
