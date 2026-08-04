@@ -32,7 +32,11 @@ rcgen = "0.12"
 reqwest = { version = "0.12", default-features = false, features = ["default-tls", "json"] }
 aes-gcm = "0.10"
 rand = "0.9"
-base64 = "0.23"
+# base64 0.23 active `simd-unsafe` par défaut, ce qui fait entrer du code
+# `unsafe` dans le décodeur. Ce proxy décode du base64 issu du réseau, donc
+# non fiable : on garde l'implémentation sûre. Le décodage n'est pas un
+# goulot d'étranglement ici (jetons de quelques centaines d'octets).
+base64 = { version = "0.23", default-features = false, features = ["std"] }
 # Accord de clé X25519 + HKDF-SHA256 (appairage automatique, clés de groupe),
 # byte-compatible avec CryptoKit côté iOS.
 x25519-dalek = { version = "2", features = ["static_secrets"] }
@@ -52,7 +56,7 @@ thiserror = "2"
 
 # Dépendances de test uniquement.
 [dev-dependencies]
-base64 = "0.23"
+base64 = { version = "0.23", default-features = false, features = ["std"] }
 
 # ---------------------------------------------------------------------------
 # Packaging Linux (cargo deb / cargo generate-rpm). Voir linux/build-packages.sh.
