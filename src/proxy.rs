@@ -400,9 +400,17 @@ async fn forward_http(
     // Même règle au retour : on ne bufferise que ce qu'on va réellement
     // déchiffrer. Un téléchargement binaire traverse le proxy sans jamais
     // occuper la mémoire.
-    let final_body: ResBody = if should_rewrite(in_scope, &resp_headers) {
+    // Vrai UNIQUEMENT si le corps a réellement été réécrit. Les en-têtes qui le
+    // décrivent (taille, encodage) ne doivent être retirés que dans ce cas.
+    let mut body_rewritten = false;
+    // Une réponse à HEAD n'a pas de corps : le « réécrire » ne produirait qu'un
+    // corps vide, tout en faisant perdre les en-têtes qui décrivent la
+    // ressource — or c'est précisément ce que HEAD sert à consulter.
+    let head_request = method == Method::HEAD;
+    let final_body: ResBody = if !head_request && should_rewrite(in_scope, &resp_headers) {
         match collect_capped(upstream, MAX_REWRITE_BYTES as usize).await {
             Capped::Whole(resp_body) => {
+                body_rewritten = true;
                 let out = match std::str::from_utf8(&resp_body) {
                     Ok(text) => {
                         let (transformed, n) = decrypt_tokens_escaped(
@@ -432,6 +440,23 @@ async fn forward_http(
     let mut builder = Response::builder().status(status);
     if let Some(hs) = builder.headers_mut() {
         *hs = sanitized_headers(&resp_headers, false);
+        if !body_rewritten {
+            // Corps relayé tel quel : `Content-Encoding` et `Content-Length` le
+            // décrivent toujours correctement, il faut donc les restituer.
+            //
+            // Les retirer sans toucher au corps livrait au navigateur des
+            // octets compressés présentés comme du texte : la page s'affichait
+            // en binaire. Le cas se produit dès qu'un serveur compresse alors
+            // qu'on ne l'a pas demandé.
+            for name in [
+                hyper::header::CONTENT_ENCODING,
+                hyper::header::CONTENT_LENGTH,
+            ] {
+                if let Some(v) = resp_headers.get(&name) {
+                    hs.insert(name, v.clone());
+                }
+            }
+        }
     }
     builder
         .body(final_body)

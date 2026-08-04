@@ -354,6 +354,19 @@ Read** suffit. Sans lui, le site fonctionne normalement mais `/dl/*` répond
 
 ## Limites connues
 
+> ### Ce que le chiffrement protège — et ce qu'il ne protège pas
+>
+> Le serveur ne **stocke** que du chiffré : c'est la garantie de l'outil, et
+> elle tient. Mais au moment où vous consultez la page, brocolis réinjecte le
+> clair **dans le document**, donc le **JavaScript du site peut le lire** (via
+> le DOM) et le renvoyer à son serveur.
+>
+> Autrement dit : brocolis protège vos messages d'un serveur qui les archive,
+> pas d'un site activement hostile qui inspecte ce que votre navigateur
+> affiche. C'est inhérent au principe d'un proxy qui déchiffre dans la page ;
+> aucun réglage ne le contourne.
+
+
 - **WebSocket non relayé.** Brocolis ne sait pas suivre un changement de
   protocole : les en-têtes `Connection`/`Upgrade` sont retirés et une réponse
   `101` n'est pas traitée. Les fonctions temps réel d'un site (chat, flux live)
