@@ -26,9 +26,16 @@ use crate::config::Config;
 use crate::crypto::{decrypt_tokens_multi, encrypt_marked_multi};
 use crate::keys::KeyManager;
 
+type BoxError = Box<dyn std::error::Error + Send + Sync>;
+
 // `UnsyncBoxBody` et non `BoxBody` : un corps relayé au fil de l'eau enveloppe
 // le flux de reqwest, qui n'est pas `Sync`. Hyper n'exige pas `Sync` du corps.
-type ResBody = http_body_util::combinators::UnsyncBoxBody<Bytes, Infallible>;
+//
+// L'erreur n'est PAS `Infallible` : une coupure amont en plein corps doit
+// pouvoir remonter jusqu'à hyper, qui abandonne alors la réponse au lieu de la
+// terminer proprement. Sinon le client reçoit « 200 OK » avec un corps tronqué
+// et n'a aucun moyen de s'en apercevoir.
+type ResBody = http_body_util::combinators::UnsyncBoxBody<Bytes, BoxError>;
 
 /// État partagé entre toutes les connexions.
 pub struct AppState {
@@ -71,18 +78,21 @@ fn declared_len(headers: &HeaderMap) -> Option<u64> {
 }
 
 /// Décide si un corps doit être mis en mémoire pour être réécrit. Un corps hors
-/// portée, non textuel, ou trop gros passe en relais direct.
+/// portée ou non textuel passe en relais direct.
+///
+/// Une taille annoncée au-dessus du plafond tranche sans rien lire. En son
+/// absence (réponse « chunked »), on ne peut pas savoir d'avance : la lecture
+/// est alors plafonnée à la volée par [`collect_capped`].
 fn should_rewrite(in_scope: bool, headers: &HeaderMap) -> bool {
     if !in_scope || !is_textual(headers) {
         return false;
     }
-    // Une taille annoncée trop grande suffit à trancher sans rien lire.
     declared_len(headers).is_none_or(|n| n <= MAX_REWRITE_BYTES)
 }
 
 fn full(body: impl Into<Bytes>) -> ResBody {
     Full::new(body.into())
-        .map_err(|never| match never {})
+        .map_err(|e: Infallible| -> BoxError { match e {} })
         .boxed_unsync()
 }
 
@@ -92,17 +102,68 @@ fn stream_body(
 ) -> ResBody {
     use http_body_util::StreamBody;
     use hyper::body::Frame;
-    let mapped = futures_util::StreamExt::map(stream, |chunk| match chunk {
-        Ok(b) => Ok(Frame::data(b)),
-        // Le corps ne peut pas porter d'erreur (Infallible) : une coupure amont
-        // se traduit par une fin de flux, et le client voit une réponse
-        // tronquée — comme avec n'importe quel intermédiaire.
-        Err(e) => {
-            tracing::warn!("flux amont interrompu: {e}");
-            Ok(Frame::data(Bytes::new()))
-        }
+    let mapped = futures_util::StreamExt::map(stream, |chunk| {
+        chunk
+            .map(Frame::data)
+            .map_err(|e| -> BoxError { Box::new(e) })
     });
     StreamBody::new(mapped).boxed_unsync()
+}
+
+/// Résultat d'une lecture plafonnée.
+enum Capped {
+    /// Le corps tient sous le plafond : il est entièrement en mémoire.
+    Whole(Bytes),
+    /// Le corps dépasse le plafond. Il n'est PAS réécrit ; ce qui a déjà été lu
+    /// est restitué en tête, puis le reste continue au fil de l'eau.
+    TooBig(ResBody),
+}
+
+/// Lit un corps de réponse en s'arrêtant net au-dessus de `cap`.
+///
+/// Sans cela, une réponse « chunked » (donc sans `Content-Length`) échappait
+/// totalement au plafond : elle était bufferisée intégralement, quelle que soit
+/// sa taille.
+async fn collect_capped(resp: reqwest::Response, cap: usize) -> Capped {
+    use bytes::BytesMut;
+    use futures_util::StreamExt;
+    use http_body_util::StreamBody;
+    use hyper::body::Frame;
+
+    let mut stream = resp.bytes_stream();
+    let mut buf = BytesMut::new();
+
+    while let Some(chunk) = stream.next().await {
+        match chunk {
+            Ok(c) => {
+                buf.extend_from_slice(&c);
+                if buf.len() > cap {
+                    tracing::warn!(
+                        "corps textuel au-delà de {} Mio sans taille annoncée : \
+                         relayé sans réécriture",
+                        cap / 1024 / 1024
+                    );
+                    let prefix = buf.freeze();
+                    let head = futures_util::stream::once(async move {
+                        Ok::<_, BoxError>(Frame::data(prefix))
+                    });
+                    let tail = stream.map(|c| {
+                        c.map(Frame::data).map_err(|e| -> BoxError { Box::new(e) })
+                    });
+                    return Capped::TooBig(StreamBody::new(head.chain(tail)).boxed_unsync());
+                }
+            }
+            Err(e) => {
+                // Erreur amont pendant la lecture : on la propage pour que le
+                // client ne prenne pas un corps partiel pour un succès.
+                let err = futures_util::stream::once(async move {
+                    Err::<Frame<Bytes>, BoxError>(Box::new(e) as BoxError)
+                });
+                return Capped::TooBig(StreamBody::new(err).boxed_unsync());
+            }
+        }
+    }
+    Capped::Whole(buf.freeze())
 }
 
 fn empty() -> ResBody {
@@ -305,22 +366,25 @@ async fn forward_http(
     // déchiffrer. Un téléchargement binaire traverse le proxy sans jamais
     // occuper la mémoire.
     let final_body: ResBody = if should_rewrite(in_scope, &resp_headers) {
-        let resp_body = match upstream.bytes().await {
-            Ok(b) => b,
-            Err(e) => return bad_gateway(&format!("lecture réponse {url}: {e}")),
-        };
-        let out = match std::str::from_utf8(&resp_body) {
-            Ok(text) => {
-                let (transformed, n) = decrypt_tokens_multi(text, &state.keys.all_keys());
-                if n > 0 {
-                    tracing::info!("{method} {host} -> {status}: {n} segment(s) déchiffré(s)");
-                }
-                Bytes::from(transformed.into_bytes())
+        match collect_capped(upstream, MAX_REWRITE_BYTES as usize).await {
+            Capped::Whole(resp_body) => {
+                let out = match std::str::from_utf8(&resp_body) {
+                    Ok(text) => {
+                        let (transformed, n) = decrypt_tokens_multi(text, &state.keys.all_keys());
+                        if n > 0 {
+                            tracing::info!(
+                                "{method} {host} -> {status}: {n} segment(s) déchiffré(s)"
+                            );
+                        }
+                        Bytes::from(transformed.into_bytes())
+                    }
+                    Err(_) => resp_body,
+                };
+                tracing::debug!("{method} {url} -> {status} ({} octets)", out.len());
+                full(out)
             }
-            Err(_) => resp_body,
-        };
-        tracing::debug!("{method} {url} -> {status} ({} octets)", out.len());
-        full(out)
+            Capped::TooBig(body) => body,
+        }
     } else {
         tracing::debug!("{method} {url} -> {status} (relais au fil de l'eau)");
         stream_body(upstream.bytes_stream())
