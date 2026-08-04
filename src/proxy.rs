@@ -248,13 +248,25 @@ async fn handle(
     }
 }
 
+/// Depuis l'autorité d'un `CONNECT`, renvoie
+/// `(nom d'hôte pour le certificat, autorité complète pour l'URL amont)`.
+///
+/// Les deux diffèrent, et c'est tout l'enjeu : un SAN de certificat ne porte
+/// pas de port, alors que l'URL amont DOIT le conserver. Le port était
+/// auparavant jeté ici même, si bien qu'un `CONNECT hôte:8443` repartait vers
+/// le 443 de l'hôte — tout site servi en HTTPS sur un autre port était
+/// silencieusement relayé au mauvais endroit.
+fn tunnel_targets(authority: &hyper::http::uri::Authority) -> (String, String) {
+    (authority.host().to_string(), authority.to_string())
+}
+
 /// Gère `CONNECT hôte:port` : répond 200 puis termine le TLS côté client.
 fn handle_connect(req: Request<Incoming>, state: Arc<AppState>) -> Response<ResBody> {
     let authority = match req.uri().authority().cloned() {
         Some(a) => a,
         None => return bad_gateway("CONNECT sans autorité"),
     };
-    let host = authority.host().to_string();
+    let (host, target_authority) = tunnel_targets(&authority);
 
     tokio::spawn(async move {
         let upgraded = match hyper::upgrade::on(req).await {
@@ -280,12 +292,12 @@ fn handle_connect(req: Request<Incoming>, state: Arc<AppState>) -> Response<ResB
             }
         };
 
-        let host_for_service = host.clone();
+        let authority_for_service = target_authority.clone();
         let inner_state = state.clone();
         let service = service_fn(move |inner_req| {
             let st = inner_state.clone();
-            let h = host_for_service.clone();
-            async move { Ok::<_, Infallible>(forward_http(inner_req, st, Some(h)).await) }
+            let a = authority_for_service.clone();
+            async move { Ok::<_, Infallible>(forward_http(inner_req, st, Some(a)).await) }
         });
 
         if let Err(e) = hyper::server::conn::http1::Builder::new()
@@ -306,19 +318,19 @@ fn handle_connect(req: Request<Incoming>, state: Arc<AppState>) -> Response<ResB
 
 /// Relaie une requête HTTP(S) en clair vers le serveur distant.
 ///
-/// `tls_host` est `Some(hôte)` quand la requête provient d'un tunnel HTTPS
+/// `tls_authority` est `Some(hôte:port)` quand la requête provient d'un tunnel HTTPS
 /// intercepté (URI en forme d'origine), `None` pour le proxy HTTP classique
 /// (URI en forme absolue).
 async fn forward_http(
     req: Request<Incoming>,
     state: Arc<AppState>,
-    tls_host: Option<String>,
+    tls_authority: Option<String>,
 ) -> Response<ResBody> {
     let method = req.method().clone();
     let (parts, body) = req.into_parts();
 
     // Reconstruit l'URL cible absolue.
-    let (url, host) = match build_target_url(&parts.uri, &parts.headers, tls_host.as_deref()) {
+    let (url, host) = match build_target_url(&parts.uri, &parts.headers, tls_authority.as_deref()) {
         Some(v) => v,
         None => return bad_gateway("URL cible introuvable"),
     };
@@ -399,17 +411,24 @@ async fn forward_http(
         .unwrap_or_else(|e| bad_gateway(&format!("construction réponse: {e}")))
 }
 
-/// Construit l'URL absolue + le nom d'hôte cible.
+/// Construit l'URL absolue + le nom d'hôte cible (sans port).
+///
+/// `tls_authority` porte l'autorité COMPLÈTE du `CONNECT`, port compris. Elle
+/// ne contenait auparavant que le nom d'hôte : le port était donc perdu et tout
+/// le trafic repartait vers le 443, ce qui cassait silencieusement les sites
+/// servis en HTTPS sur un autre port.
 fn build_target_url(
     uri: &hyper::Uri,
     headers: &HeaderMap,
-    tls_host: Option<&str>,
+    tls_authority: Option<&str>,
 ) -> Option<(reqwest::Url, String)> {
-    if let Some(host) = tls_host {
+    if let Some(authority) = tls_authority {
         // Tunnel HTTPS : URI en forme d'origine (chemin seul).
         let pq = uri.path_and_query().map(|p| p.as_str()).unwrap_or("/");
-        let url = reqwest::Url::parse(&format!("https://{host}{pq}")).ok()?;
-        Some((url, host.to_string()))
+        let url = reqwest::Url::parse(&format!("https://{authority}{pq}")).ok()?;
+        // Le nom d'hôte renvoyé sert à la portée et aux journaux : sans port.
+        let host = url.host_str()?.to_string();
+        Some((url, host))
     } else if uri.authority().is_some() {
         // Proxy HTTP : URI en forme absolue.
         let host = uri.host()?.to_string();
@@ -477,6 +496,40 @@ fn is_textual(headers: &HeaderMap) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Le port du `CONNECT` doit survivre jusqu'à l'URL amont.
+    ///
+    /// Il était perdu : seul le nom d'hôte était transmis, donc `https://hôte`
+    /// — c'est-à-dire le port 443 — quel que soit le port demandé. Tout site
+    /// servi en HTTPS sur un autre port était silencieusement relayé au mauvais
+    /// endroit.
+    #[test]
+    fn le_port_du_tunnel_est_conserve() {
+        let a: hyper::http::uri::Authority = "example.com:8443".parse().unwrap();
+        let (cert_host, cible) = tunnel_targets(&a);
+        assert_eq!(cert_host, "example.com", "le certificat se fait sans port");
+        assert_eq!(cible, "example.com:8443", "l'URL amont garde le port");
+
+        // Et l'URL effectivement construite pointe bien vers ce port.
+        let uri: hyper::Uri = "/chemin?a=1".parse().unwrap();
+        let h = HeaderMap::new();
+        let (url, host) = build_target_url(&uri, &h, Some(&cible)).unwrap();
+        assert_eq!(url.as_str(), "https://example.com:8443/chemin?a=1");
+        assert_eq!(url.port(), Some(8443));
+        assert_eq!(host, "example.com", "la portée s'évalue sans le port");
+    }
+
+    /// Une adresse IPv6 littérale dans le `CONNECT` doit rester exploitable.
+    #[test]
+    fn une_autorite_ipv6_reste_valide() {
+        let uri: hyper::Uri = "/".parse().unwrap();
+        let h = HeaderMap::new();
+        let a: hyper::http::uri::Authority = "[::1]:8443".parse().unwrap();
+        let (_, cible) = tunnel_targets(&a);
+        let (url, host) = build_target_url(&uri, &h, Some(&cible)).unwrap();
+        assert_eq!(url.port(), Some(8443));
+        assert_eq!(host, "[::1]");
+    }
 
     #[test]
     fn textual_detection() {
