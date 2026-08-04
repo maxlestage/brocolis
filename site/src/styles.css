@@ -534,11 +534,14 @@ code {
 }
 
 /* Platform cards */
+/* Pas de `padding` ici : ces cartes portent aussi la classe .card, déclarée
+   plus bas avec la même spécificité — c'est donc .card qui l'emporte, et le
+   padding qui figurait ici n'a jamais rien fait. Le retrait ne change donc
+   rien au rendu ; il évite de croire que la valeur s'applique. */
 .platform-card {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 22px 22px 20px;
 }
 .platform-head {
   display: flex;
@@ -558,7 +561,12 @@ code {
   font-size: 14.5px;
   line-height: 1.55;
 }
-.btn.primary.platform-cta {
+/* `.btn.platform-cta` et non `.btn.primary.platform-cta` : le bouton .rpm est
+   la variante secondaire (pas de classe `primary`), il échappait donc à cette
+   règle et gardait la taille d'un bouton normal — 54px de haut à côté des 42px
+   du bouton .deb, juste à côté de lui. Les deux CTA d'une carte ont désormais
+   la même taille. */
+.btn.platform-cta {
   align-self: flex-start;
   padding: 8px 16px;
   font-size: 14px;
@@ -697,7 +705,10 @@ footer {
 /* Page de téléchargement (route React /telecharger)                        */
 /* ----------------------------------------------------------------------- */
 
-.nav-download {
+/* Sélecteur porté à `.nav-links a.nav-download` : la classe seule (0-1-0) était
+   battue par `.nav-links a` (0-1-1), donc l'entrée « Télécharger » du menu
+   s'affichait exactement comme les autres — ni verte, ni en gras. */
+.nav-links a.nav-download {
   font-weight: 700;
   color: var(--green-dark);
 }
