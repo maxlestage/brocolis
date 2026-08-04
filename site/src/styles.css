@@ -1,3 +1,29 @@
+/* ==========================================================================
+   Feuille de style — écrite EN MOBILE FIRST.
+
+   Les règles de base décrivent le téléphone : c'est le rendu par défaut, celui
+   qu'on obtient sans qu'aucune media query ne s'applique. Les écrans plus
+   larges sont ensuite ENRICHIS via des `min-width`, jamais corrigés via des
+   `max-width`.
+
+   Paliers :
+     ≥ 601px  — tablette et plus : typographie et espacements desservis d'un cran
+     ≥ 761px  — barre de la page de téléchargement (marque + sélecteurs) sur
+                une seule ligne : ce contenu-là tient dès cette largeur
+     ≥ 960px  — accueil : la navigation passe du tiroir au menu horizontal.
+                Mesuré : le menu déroulé demande 904px en français (871 en
+                espagnol, 779 en anglais). L'ancien palier de 761px le
+                déclenchait trop tôt et la barre débordait, ce qui provoquait un
+                défilement horizontal de toute la page entre 761 et 904px.
+
+   Pourquoi c'est important ici : en desktop-first, une règle mobile ne
+   s'applique que si elle bat la règle de base en spécificité. Deux règles
+   étaient de fait mortes (`h2` battu par `main section > h2`, `.dl-note` battu
+   par `.platform-card p`), et les titres restaient donc en 30px sur téléphone.
+   En mobile first ce piège disparaît : le mobile est la base, il n'a rien à
+   battre.
+   ========================================================================== */
+
 :root,
 :root[data-theme="green"] {
   --green: #2f9e4a;
@@ -130,6 +156,8 @@ html {
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui,
     sans-serif;
+  /* Base = téléphone. Les écrans ≥601px repassent à 16px. */
+  font-size: 15px;
   background: var(--bg);
   color: var(--ink);
   line-height: 1.6;
@@ -143,7 +171,7 @@ body {
   padding: 0 24px;
 }
 
-/* Navbar */
+/* Navbar — base : marque + bouton hamburger, liens dans un tiroir replié. */
 .navbar {
   position: sticky;
   top: 0;
@@ -177,36 +205,50 @@ body {
   line-height: 1;
 }
 .nav-drawer {
+  display: none;
+  position: absolute;
+  top: 56px;
+  left: 0;
+  right: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--nav-border);
+  padding: 14px 24px 18px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+.nav-drawer.open {
   display: flex;
-  align-items: center;
-  gap: 18px;
-  flex: 1;
 }
 .nav-links {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
-  gap: 4px;
+  flex-direction: column;
+  gap: 2px;
 }
 .nav-links a {
   display: inline-block;
-  padding: 7px 12px;
+  padding: 10px 12px;
   border-radius: 6px;
   color: var(--nav-ink);
   text-decoration: none;
-  font-size: 14.5px;
+  font-size: 15px;
   font-weight: 500;
   transition: background 0.15s ease;
 }
 .nav-links a:hover {
   background: var(--nav-link-hover-bg);
 }
+/* `justify-content` n'a rien à faire ici : .nav-switchers est un bloc, pas un
+   conteneur flex — c'est .switchers (plus bas) qui aligne réellement. */
 .nav-switchers {
-  margin-left: auto;
+  margin-left: 0;
 }
 .nav-toggle {
-  display: none;
+  display: block;
   background: transparent;
   border: 0;
   cursor: pointer;
@@ -239,7 +281,7 @@ body {
 .hero {
   background: var(--hero-bg);
   color: var(--hero-ink);
-  padding: 64px 0 60px;
+  padding: 48px 0 40px;
   overflow: hidden;
   position: relative;
 }
@@ -255,8 +297,8 @@ body {
   min-width: 0;
 }
 .hero-art {
-  width: 200px;
-  height: 200px;
+  width: 160px;
+  height: 160px;
   border-radius: 50%;
   overflow: hidden;
   background: var(--hero-art-bg);
@@ -270,17 +312,17 @@ body {
   display: block;
 }
 .hero h1 {
-  font-size: 60px;
+  font-size: 42px;
   margin: 0 0 8px;
   letter-spacing: -1.5px;
   font-weight: 800;
 }
 .hero .emoji {
-  font-size: 52px;
+  font-size: 36px;
   vertical-align: 4px;
 }
 .hero .tagline {
-  font-size: 22px;
+  font-size: 18px;
   margin: 0 0 20px;
   color: var(--hero-ink);
   opacity: 0.95;
@@ -352,11 +394,11 @@ body {
 }
 .btn {
   display: inline-block;
-  padding: 12px 22px;
+  padding: 10px 16px;
   border-radius: 8px;
   text-decoration: none;
   font-weight: 600;
-  font-size: 16px;
+  font-size: 15px;
   border: 2px solid transparent;
   transition: transform 0.08s ease, background 0.15s ease, color 0.15s ease;
 }
@@ -380,7 +422,7 @@ body {
 
 /* Sections */
 main section {
-  padding: 48px 0;
+  padding: 36px 0;
   border-bottom: 1px solid var(--border);
   scroll-margin-top: 72px;
 }
@@ -388,7 +430,7 @@ main section:last-child {
   border-bottom: none;
 }
 main section > h2 {
-  font-size: 30px;
+  font-size: 24px;
   margin: 0 0 18px;
   letter-spacing: -0.3px;
   color: var(--ink);
@@ -406,7 +448,7 @@ main section > h2::before {
   background: var(--accent-bar, var(--green));
 }
 h3 {
-  font-size: 17px;
+  font-size: 16px;
   margin: 0 0 8px;
   color: var(--ink);
 }
@@ -480,7 +522,7 @@ code {
   top: 0;
 }
 
-/* Cards grid */
+/* Cards grid — une colonne sur téléphone, `auto-fit` élargit ensuite tout seul. */
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -504,7 +546,7 @@ code {
   gap: 10px;
 }
 .platform-icon {
-  font-size: 22px;
+  font-size: 18px;
   line-height: 1;
 }
 .platform-card h3 {
@@ -527,7 +569,7 @@ code {
   border: 1px solid var(--border);
   border-top: 3px solid var(--green);
   border-radius: 10px;
-  padding: 18px 20px;
+  padding: 14px 16px;
   transition: transform 0.1s ease, border-color 0.15s ease,
     box-shadow 0.15s ease;
 }
@@ -565,79 +607,89 @@ footer {
   border-top: 1px solid var(--border);
 }
 
-/* Mobile */
-@media (max-width: 760px) {
-  .nav-toggle {
-    display: block;
+/* -------------------------------------------------------------------------
+   ≥ 601px — tablette et bureau : on desserre la typographie et les espacements.
+   ------------------------------------------------------------------------- */
+@media (min-width: 601px) {
+  body {
+    font-size: 16px;
   }
-  .nav-drawer {
-    display: none;
-    position: absolute;
-    top: 56px;
-    left: 0;
-    right: 0;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 14px;
-    background: var(--bg);
-    border-bottom: 1px solid var(--nav-border);
-    padding: 14px 24px 18px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  h3 {
+    font-size: 17px;
   }
-  .nav-drawer.open {
-    display: flex;
+  .btn {
+    padding: 12px 22px;
+    font-size: 16px;
   }
-  .nav-links {
-    flex-direction: column;
-    gap: 2px;
+  .card {
+    padding: 18px 20px;
   }
-  .nav-links a {
-    padding: 10px 12px;
-    font-size: 15px;
+  .hero {
+    padding: 64px 0 60px;
   }
-  .nav-switchers {
-    margin-left: 0;
-    justify-content: flex-start;
+  .hero-art {
+    width: 200px;
+    height: 200px;
+  }
+  .hero h1 {
+    font-size: 60px;
+  }
+  .hero .emoji {
+    font-size: 52px;
+  }
+  .hero .tagline {
+    font-size: 22px;
+  }
+  main section {
+    padding: 48px 0;
+  }
+  main section > h2 {
+    font-size: 30px;
+  }
+  .platform-icon {
+    font-size: 22px;
   }
 }
 
-@media (max-width: 600px) {
-  /* Contenu plus compact sur téléphone : texte courant, boutons et cartes
-     réduits d'un cran pour densifier la page. */
-  body {
-    font-size: 15px;
+/* -------------------------------------------------------------------------
+   ≥ 960px — bureau : le tiroir devient un menu horizontal, plus de hamburger.
+   Voir l'en-tête du fichier : 904px sont nécessaires en français, d'où ce
+   palier et non 761px.
+   ------------------------------------------------------------------------- */
+@media (min-width: 960px) {
+  .nav-toggle {
+    display: none;
   }
-  h3 {
-    font-size: 16px;
+  /* Filet de sécurité : si une traduction future rallonge le menu au point de
+     ne plus tenir, la barre passe à la ligne au lieu de déborder et de rendre
+     la page entière défilable horizontalement. */
+  .nav-inner {
+    height: auto;
+    min-height: 56px;
+    flex-wrap: wrap;
   }
-  .btn {
-    padding: 10px 16px;
-    font-size: 15px;
+  .nav-drawer {
+    display: flex;
+    position: static;
+    flex-direction: row;
+    align-items: center;
+    gap: 18px;
+    flex: 1;
+    background: none;
+    border-bottom: 0;
+    padding: 0;
+    box-shadow: none;
   }
-  .card {
-    padding: 14px 16px;
+  .nav-links {
+    flex-direction: row;
+    gap: 4px;
   }
-  .hero {
-    padding: 48px 0 40px;
+  .nav-links a {
+    padding: 7px 12px;
+    font-size: 14.5px;
   }
-  .hero-art {
-    width: 160px;
-    height: 160px;
-  }
-  .hero h1 {
-    font-size: 42px;
-  }
-  .hero .emoji {
-    font-size: 36px;
-  }
-  .hero .tagline {
-    font-size: 18px;
-  }
-  h2 {
-    font-size: 24px;
-  }
-  main section {
-    padding: 36px 0;
+  .nav-switchers {
+    margin-left: auto;
   }
 }
 
@@ -650,15 +702,35 @@ footer {
   color: var(--green-dark);
 }
 
+/* La barre du haut de cette page n'a pas de hamburger (juste marque +
+   sélecteurs) : sur téléphone on laisse les sélecteurs passer SOUS la marque
+   plutôt que de déborder sur le titre. */
+.dl-navbar .nav-inner {
+  height: auto;
+  min-height: 56px;
+  flex-wrap: wrap;
+  row-gap: 10px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.dl-navbar .nav-switchers {
+  margin-left: 0;
+  width: 100%;
+}
+.dl-navbar .switchers {
+  justify-content: flex-start;
+}
+
 /* On garde les 24px horizontaux de .container : sinon le raccourci « padding »
    les remet à 0 et les cartes touchent les bords (contrairement à l'accueil). */
 .dl-main {
-  padding: 32px 24px 64px;
+  padding: 18px 24px 44px;
 }
 
 .dl-back {
   display: inline-block;
-  margin-bottom: 18px;
+  font-size: 14px;
+  margin-bottom: 14px;
   color: var(--muted);
   text-decoration: none;
   font-weight: 600;
@@ -671,11 +743,11 @@ footer {
    même barre verte à gauche, pour une page de téléchargement plus compacte. */
 .dl-title {
   margin: 0 0 14px;
-  font-size: 30px;
+  font-size: 24px;
   line-height: 1.15;
   letter-spacing: -0.3px;
   position: relative;
-  padding-left: 16px;
+  padding-left: 14px;
 }
 .dl-title::before {
   content: "";
@@ -690,14 +762,15 @@ footer {
 
 .dl-intro {
   max-width: 60ch;
+  font-size: 15px;
   color: var(--ink);
 }
 
 .dl-version {
   max-width: 60ch;
   color: var(--muted);
-  font-size: 15px;
-  margin-bottom: 28px;
+  font-size: 13.5px;
+  margin-bottom: 20px;
 }
 
 /* La grille est un <section>, elle hérite donc du padding/bordure de
@@ -715,9 +788,12 @@ footer {
   gap: 10px;
 }
 
-.dl-note {
+/* Sélecteur volontairement porté à la même spécificité que `.platform-card p`
+   (0-1-1) : sinon la taille de la note ne s'applique jamais, la règle de la
+   carte gagnant sur la classe seule. */
+.platform-card .dl-note {
   margin-top: 12px;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--muted);
 }
 
@@ -729,50 +805,46 @@ footer {
   font-weight: 600;
 }
 
-/* Page de téléchargement — mobile : la barre du haut n'a pas de menu
-   hamburger (juste marque + sélecteurs). Sur petit écran, on laisse les
-   sélecteurs passer SOUS la marque au lieu de déborder sur le titre. */
-@media (max-width: 760px) {
-  .dl-navbar .nav-inner {
-    height: auto;
-    min-height: 56px;
-    flex-wrap: wrap;
-    row-gap: 10px;
-    padding-top: 10px;
-    padding-bottom: 10px;
+@media (min-width: 601px) {
+  .dl-main {
+    padding: 32px 24px 64px;
   }
-  .dl-navbar .nav-switchers {
-    margin-left: 0;
-    width: 100%;
+  .dl-back {
+    font-size: inherit;
+    margin-bottom: 18px;
   }
-  .dl-navbar .switchers {
-    justify-content: flex-start;
+  .dl-title {
+    font-size: 30px;
+    padding-left: 16px;
+  }
+  .dl-intro {
+    font-size: inherit;
+  }
+  .dl-version {
+    font-size: 15px;
+    margin-bottom: 28px;
+  }
+  .platform-card .dl-note {
+    font-size: 14px;
   }
 }
 
-@media (max-width: 600px) {
-  .dl-main {
-    padding: 18px 24px 44px;
+@media (min-width: 761px) {
+  .dl-navbar .nav-inner {
+    height: 56px;
+    min-height: 0;
+    flex-wrap: nowrap;
+    /* `gap` et non `row-gap: 0` : on restaure la valeur de .nav-inner, sinon
+       la gouttière calculée devient « 0px 18px » au lieu de « 18px ». */
+    gap: 18px;
+    padding-top: 0;
+    padding-bottom: 0;
   }
-  .dl-back {
-    font-size: 14px;
-    margin-bottom: 14px;
+  .dl-navbar .nav-switchers {
+    margin-left: auto;
+    width: auto;
   }
-  .dl-title {
-    font-size: 24px;
-    padding-left: 14px;
-  }
-  .dl-intro {
-    font-size: 15px;
-  }
-  .dl-version {
-    font-size: 13.5px;
-    margin-bottom: 20px;
-  }
-  .dl-note {
-    font-size: 13px;
-  }
-  .platform-icon {
-    font-size: 18px;
+  .dl-navbar .switchers {
+    justify-content: flex-end;
   }
 }
