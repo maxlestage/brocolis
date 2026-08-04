@@ -219,6 +219,43 @@ mod tests {
             .collect()
     }
 
+    /// Vecteur figé de la dérivation complète X25519 + HKDF-SHA256.
+    ///
+    /// `public_key_matches_rfc7748_vector` ne verrouille que la multiplication
+    /// scalaire ; `derive_is_symmetric` ne compare que les deux côtés entre eux
+    /// et passerait donc même si HKDF changeait des deux côtés à la fois. Ici on
+    /// fige la SORTIE pour les clés RFC 7748 d'Alice et Bob : si le sel, l'info,
+    /// l'ordre de concaténation ou la fonction de dérivation bougent, ce test
+    /// casse — et avec lui la compatibilité des clés de groupe avec iOS.
+    #[test]
+    fn derive_matches_frozen_vector() {
+        let alice = PrivateKey::from_base64(&B64.encode(hex(
+            "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a",
+        )))
+        .unwrap();
+        let bob = PrivateKey::from_base64(&B64.encode(hex(
+            "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb",
+        )))
+        .unwrap();
+
+        let d = alice.derive(&bob.public_key_base64()).unwrap();
+        assert_eq!(
+            d.symmetric_key_base64, "BQpdh50P8dL/dviLgZUEBhww21f1AT0MkIzGAweqwyE=",
+            "la clé pairwise dérivée doit rester identique octet à octet"
+        );
+        assert_eq!(
+            d.fingerprint, "9962-5B51-D4FD-490E",
+            "l'empreinte affichée à l'utilisateur doit rester stable"
+        );
+    }
+
+    /// Empreinte SHA-256 figée : verrouille la troncature à 8 octets et le
+    /// formatage en groupes de 4, tels que les affiche aussi le client iOS.
+    #[test]
+    fn fingerprint_matches_frozen_vector() {
+        assert_eq!(fingerprint(b"brocolis"), "AFC5-22D8-1B62-E36B");
+    }
+
     /// Vecteur RFC 7748 §6.1 : la clé publique dérivée de la clé privée d'Alice
     /// doit être EXACTEMENT la clé publique standard. Cela verrouille la
     /// compatibilité de la représentation X25519 avec CryptoKit (qui utilise le
