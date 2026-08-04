@@ -299,6 +299,96 @@ pub fn encrypt_marked_multi(input: &str, keys: &[SymKey]) -> (String, usize) {
     (out, count)
 }
 
+// ---------------------------------------------------------------------------
+// Corps de formulaire (application/x-www-form-urlencoded)
+// ---------------------------------------------------------------------------
+//
+// Un navigateur qui soumet <input value="((mon secret))"> n'envoie PAS ces
+// caractères tels quels : il émet `t=%28%28mon+secret%29%29`. Les marqueurs
+// étaient donc invisibles pour la détection, et le secret partait en clair —
+// exactement le cas d'usage principal de l'outil (écrire un secret dans un
+// champ de formulaire).
+//
+// On décode donc chaque valeur de champ, on y cherche les marqueurs, et on ne
+// réencode QUE les champs réellement modifiés : un formulaire sans marqueur
+// ressort octet pour octet identique, ce qui limite au strict minimum le risque
+// d'abîmer un envoi.
+
+/// Décode une valeur de champ `application/x-www-form-urlencoded`.
+fn form_decode(s: &str) -> Option<String> {
+    let b = s.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b'%' => {
+                // Un `%` non suivi de deux chiffres hexa rend la valeur
+                // indécodable : on préfère ne pas y toucher du tout.
+                let h = b.get(i + 1)?;
+                let l = b.get(i + 2)?;
+                let hv = (*h as char).to_digit(16)?;
+                let lv = (*l as char).to_digit(16)?;
+                out.push((hv * 16 + lv) as u8);
+                i += 3;
+            }
+            c => {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+/// Réencode une valeur de champ. On échappe tout sauf les caractères non
+/// réservés : le jeton contient `+`, `/` et `=`, qui seraient sinon réinterprétés
+/// par le serveur et détruiraient le base64.
+fn form_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() * 3 / 2);
+    for &b in s.as_bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+/// Chiffre les segments `((...))` d'un corps de formulaire urlencodé.
+///
+/// Renvoie `(corps_transformé, nb_segments_chiffrés)`. Les champs sans marqueur
+/// sont laissés tels quels, à l'octet près.
+pub fn encrypt_marked_form(body: &str, keys: &[SymKey]) -> (String, usize) {
+    let mut total = 0usize;
+    let parts: Vec<String> = body
+        .split('&')
+        .map(|pair| {
+            // Un champ se découpe au PREMIER `=` ; la valeur peut en contenir.
+            let (name, raw_value) = match pair.find('=') {
+                Some(i) => (&pair[..i], &pair[i + 1..]),
+                None => return pair.to_string(),
+            };
+            let Some(decoded) = form_decode(raw_value) else {
+                return pair.to_string();
+            };
+            let (transformed, n) = encrypt_marked_multi(&decoded, keys);
+            if n == 0 {
+                // Rien à chiffrer : on ne touche pas au champ d'origine.
+                return pair.to_string();
+            }
+            total += n;
+            format!("{name}={}", form_encode(&transformed))
+        })
+        .collect();
+    (parts.join("&"), total)
+}
+
 /// Remplace chaque jeton `[[BROCOLIS:v1:...]]` par son texte clair.
 ///
 /// Renvoie `(texte_transformé, nb_segments_déchiffrés)`. Un jeton illisible
