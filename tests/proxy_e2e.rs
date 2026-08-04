@@ -536,3 +536,94 @@ fn percent_decode(s: &str) -> String {
     }
     String::from_utf8(out).unwrap()
 }
+
+/// Un corps compressé doit arriver au client AVEC son `Content-Encoding`.
+///
+/// Il était retiré alors que le corps compressé était relayé tel quel : le
+/// navigateur recevait des octets gzip présentés comme du texte, et affichait
+/// du binaire. Le cas survient dès qu'un serveur compresse sans qu'on l'ait
+/// demandé.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn un_corps_compresse_garde_son_encodage() {
+    use tokio::io::AsyncWriteExt;
+    // « hello » compressé en gzip.
+    const GZ: &[u8] = &[
+        0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xcb, 0x48, 0xcd, 0xc9, 0xc9,
+        0x07, 0x00, 0x86, 0xa6, 0x10, 0x36, 0x05, 0x00, 0x00, 0x00,
+    ];
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin_addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut sock, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                use tokio::io::AsyncReadExt;
+                let mut b = [0u8; 8192];
+                let _ = sock.read(&mut b).await;
+                let head = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\
+                     Content-Encoding: gzip\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    GZ.len()
+                );
+                let _ = sock.write_all(head.as_bytes()).await;
+                let _ = sock.write_all(GZ).await;
+            });
+        }
+    });
+
+    let (proxy, _stop) = start_proxy().await;
+    let resp = client(proxy)
+        .get(format!("http://{origin_addr}/page.html"))
+        .send()
+        .await
+        .expect("requête relayée");
+
+    assert_eq!(
+        resp.headers()
+            .get("content-encoding")
+            .and_then(|v| v.to_str().ok()),
+        Some("gzip"),
+        "l'encodage doit être restitué, sinon le corps est illisible"
+    );
+    let corps = resp.bytes().await.unwrap();
+    assert_eq!(&corps[..], GZ, "les octets compressés doivent être intacts");
+}
+
+/// Une réponse à HEAD doit conserver les en-têtes qui décrivent la ressource :
+/// c'est tout l'intérêt de la méthode. Les réécrire revenait à annoncer une
+/// taille nulle pour une ressource qui n'est pas vide.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn une_reponse_a_head_conserve_ses_entetes() {
+    use tokio::io::AsyncWriteExt;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin_addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut sock, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                use tokio::io::AsyncReadExt;
+                let mut b = [0u8; 8192];
+                let _ = sock.read(&mut b).await;
+                // Réponse à HEAD : en-têtes décrivant la ressource, corps vide.
+                let head = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\
+                            Content-Length: 12345\r\nConnection: close\r\n\r\n";
+                let _ = sock.write_all(head.as_bytes()).await;
+            });
+        }
+    });
+
+    let (proxy, _stop) = start_proxy().await;
+    let resp = client(proxy)
+        .head(format!("http://{origin_addr}/gros.html"))
+        .send()
+        .await
+        .expect("requête relayée");
+
+    assert_eq!(resp.status(), 200);
+    assert_eq!(
+        resp.headers()
+            .get("content-length")
+            .and_then(|v| v.to_str().ok()),
+        Some("12345"),
+        "HEAD doit rapporter la taille réelle de la ressource"
+    );
+}
