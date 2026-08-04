@@ -42,6 +42,11 @@ const DOWNLOADS = {
 const ASSET_TTL_MS = 5 * 60 * 1000;
 const assetCache = new Map();
 
+// Sans délai d'expiration, une connexion acceptée puis laissée sans réponse
+// bloquerait la requête (et son socket) indéfiniment.
+const API_TIMEOUT_MS = 15 * 1000;
+const BODY_TIMEOUT_MS = 10 * 60 * 1000;
+
 function apiHeaders(accept) {
   const headers = {
     Accept: accept || "application/vnd.github+json",
@@ -59,7 +64,7 @@ async function resolveAssetId(tag, assetName) {
 
   const res = await fetch(
     `${GITHUB_API}/repos/${GITHUB_REPO}/releases/tags/${tag}`,
-    { headers: apiHeaders() },
+    { headers: apiHeaders(), signal: AbortSignal.timeout(API_TIMEOUT_MS) },
   );
   if (!res.ok) throw new Error(`release ${tag} : HTTP ${res.status}`);
   const release = await res.json();
@@ -71,7 +76,11 @@ async function resolveAssetId(tag, assetName) {
 }
 
 async function serveDownload(res, slug) {
-  const entry = DOWNLOADS[slug];
+  // `Object.hasOwn` et non `DOWNLOADS[slug]` : une simple indexation remonte la
+  // chaîne de prototypes, donc /dl/constructor ou /dl/__proto__ renverraient une
+  // valeur véridique, passeraient ce garde-fou et iraient consommer le quota
+  // d'API du jeton pour rien.
+  const entry = Object.hasOwn(DOWNLOADS, slug) ? DOWNLOADS[slug] : null;
   if (!entry) {
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
     res.end("Not found");
@@ -90,7 +99,11 @@ async function serveDownload(res, slug) {
     // un autre domaine.
     const first = await fetch(
       `${GITHUB_API}/repos/${GITHUB_REPO}/releases/assets/${id}`,
-      { headers: apiHeaders("application/octet-stream"), redirect: "manual" },
+      {
+        headers: apiHeaders("application/octet-stream"),
+        redirect: "manual",
+        signal: AbortSignal.timeout(API_TIMEOUT_MS),
+      },
     );
 
     let upstream = first;
@@ -99,6 +112,9 @@ async function serveDownload(res, slug) {
       if (!location) throw new Error("redirection sans en-tête Location");
       upstream = await fetch(location, {
         headers: { "User-Agent": "brocolis-site" },
+        // Délai large : c'est le transfert du binaire lui-même. Il borne quand
+        // même le cas d'une connexion acceptée puis laissée sans réponse.
+        signal: AbortSignal.timeout(BODY_TIMEOUT_MS),
       });
     }
     if (!upstream.ok || !upstream.body) {
@@ -111,11 +127,29 @@ async function serveDownload(res, slug) {
       // Build « rolling » : le contenu change sans que l'URL change.
       "Cache-Control": "no-store",
     };
+    // fetch() décompresse le corps de façon transparente, mais `content-length`
+    // décrit alors la taille COMPRESSÉE : la recopier tronquerait la réponse.
+    // On ne l'annonce donc que si l'amont n'a pas compressé.
     const length = upstream.headers.get("content-length");
-    if (length) headers["Content-Length"] = length;
+    if (length && !upstream.headers.get("content-encoding")) {
+      headers["Content-Length"] = length;
+    }
 
     res.writeHead(200, headers);
-    Readable.fromWeb(upstream.body).pipe(res);
+
+    const body = Readable.fromWeb(upstream.body);
+    // `pipe()` ne propage pas les erreurs de la source : sans ce gestionnaire,
+    // une coupure du flux amont en plein transfert devient une exception non
+    // interceptée, et Node tue le processus.
+    body.on("error", (streamErr) => {
+      console.error(`[dl] ${slug} : flux amont interrompu — ${streamErr.message}`);
+      res.destroy();
+    });
+    // `pipe()` ne détruit pas non plus la source quand la destination se ferme :
+    // si le visiteur annule son téléchargement, la connexion vers le stockage
+    // resterait ouverte.
+    res.on("close", () => body.destroy());
+    body.pipe(res);
   } catch (err) {
     console.error(`[dl] ${slug} : ${err.message}`);
     if (res.headersSent) {
@@ -174,8 +208,30 @@ function sendFile(res, filePath, status) {
   });
 }
 
+function badRequest(res) {
+  res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+  res.end("Bad request");
+}
+
 const server = http.createServer((req, res) => {
-  let urlPath = decodeURIComponent((req.url || "/").split("?")[0]);
+  let urlPath;
+  try {
+    // `decodeURIComponent` lève URIError sur tout pourcentage mal formé
+    // (« /% », « /%E0%A4%A »…). Non interceptée, l'exception remonte en
+    // uncaughtException et Node tue le processus : une seule requête suffisait
+    // à mettre le site hors ligne.
+    urlPath = decodeURIComponent((req.url || "/").split("?")[0]);
+  } catch {
+    badRequest(res);
+    return;
+  }
+  // Un octet nul survit au décodage et fait lever fs.stat plus bas (même
+  // conséquence : processus tué). Le garde-fou anti-traversée ne l'attrape pas,
+  // puisque le chemin reste bien sous DIST.
+  if (urlPath.includes("\0")) {
+    badRequest(res);
+    return;
+  }
 
   // Anciennes URLs (site multi-pages) et routes applicatives : on redirige
   // vers la route HashRouter correspondante pour ne casser aucun lien ou
@@ -225,5 +281,9 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Site Brocolis servi sur le port ${PORT} (depuis ${DIST})`);
+  // On affiche le port RÉELLEMENT attribué, pas la valeur demandée : avec
+  // PORT=0 le système en choisit un, et journaliser « 0 » n'apprend rien.
+  console.log(
+    `Site Brocolis servi sur le port ${server.address().port} (depuis ${DIST})`,
+  );
 });
