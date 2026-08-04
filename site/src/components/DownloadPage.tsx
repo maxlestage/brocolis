@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { useT } from "../i18n/LangContext";
 import { Switchers } from "./Switchers";
 
