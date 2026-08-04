@@ -26,7 +26,9 @@ use crate::config::Config;
 use crate::crypto::{decrypt_tokens_multi, encrypt_marked_multi};
 use crate::keys::KeyManager;
 
-type ResBody = http_body_util::combinators::BoxBody<Bytes, Infallible>;
+// `UnsyncBoxBody` et non `BoxBody` : un corps relayé au fil de l'eau enveloppe
+// le flux de reqwest, qui n'est pas `Sync`. Hyper n'exige pas `Sync` du corps.
+type ResBody = http_body_util::combinators::UnsyncBoxBody<Bytes, Infallible>;
 
 /// État partagé entre toutes les connexions.
 pub struct AppState {
@@ -49,16 +51,64 @@ const HOP_BY_HOP: &[&str] = &[
     "upgrade",
 ];
 
+/// Au-delà de cette taille, un corps n'est plus mis en mémoire pour être
+/// réécrit : il est relayé au fil de l'eau, tel quel.
+///
+/// La réécriture impose de tenir le corps entier en mémoire (il faut le lire en
+/// UTF-8 pour y chercher les marqueurs). Sans plafond, télécharger un fichier de
+/// 2 Gio à travers le proxy réclamait 2 Gio de RAM. Les messages qu'on chiffre
+/// tiennent dans quelques kilo-octets ; 8 Mio laissent une marge confortable.
+const MAX_REWRITE_BYTES: u64 = 8 * 1024 * 1024;
+
+/// Taille annoncée par `Content-Length`, si elle est exploitable.
+fn declared_len(headers: &HeaderMap) -> Option<u64> {
+    headers
+        .get(hyper::header::CONTENT_LENGTH)?
+        .to_str()
+        .ok()?
+        .parse()
+        .ok()
+}
+
+/// Décide si un corps doit être mis en mémoire pour être réécrit. Un corps hors
+/// portée, non textuel, ou trop gros passe en relais direct.
+fn should_rewrite(in_scope: bool, headers: &HeaderMap) -> bool {
+    if !in_scope || !is_textual(headers) {
+        return false;
+    }
+    // Une taille annoncée trop grande suffit à trancher sans rien lire.
+    declared_len(headers).is_none_or(|n| n <= MAX_REWRITE_BYTES)
+}
+
 fn full(body: impl Into<Bytes>) -> ResBody {
     Full::new(body.into())
         .map_err(|never| match never {})
-        .boxed()
+        .boxed_unsync()
+}
+
+/// Relaie un flux d'octets sans jamais le tenir entièrement en mémoire.
+fn stream_body(
+    stream: impl futures_core::Stream<Item = reqwest::Result<Bytes>> + Send + 'static,
+) -> ResBody {
+    use http_body_util::StreamBody;
+    use hyper::body::Frame;
+    let mapped = futures_util::StreamExt::map(stream, |chunk| match chunk {
+        Ok(b) => Ok(Frame::data(b)),
+        // Le corps ne peut pas porter d'erreur (Infallible) : une coupure amont
+        // se traduit par une fin de flux, et le client voit une réponse
+        // tronquée — comme avec n'importe quel intermédiaire.
+        Err(e) => {
+            tracing::warn!("flux amont interrompu: {e}");
+            Ok(Frame::data(Bytes::new()))
+        }
+    });
+    StreamBody::new(mapped).boxed_unsync()
 }
 
 fn empty() -> ResBody {
     Full::new(Bytes::new())
         .map_err(|never| match never {})
-        .boxed()
+        .boxed_unsync()
 }
 
 /// Déplie la chaîne `source()` d'une erreur pour un log lisible.
@@ -212,27 +262,30 @@ async fn forward_http(
         None => return bad_gateway("URL cible introuvable"),
     };
 
-    let body_bytes = match body.collect().await {
-        Ok(c) => c.to_bytes(),
-        Err(e) => return bad_gateway(&format!("lecture du corps: {e}")),
-    };
-
     let in_scope = state.cfg.host_in_scope(&host);
 
-    // Chiffrement sélectif du corps sortant (segments `((...))`).
-    let out_body: Bytes = if in_scope && is_textual(&parts.headers) {
+    // Le corps n'est mis en mémoire que si on doit vraiment le réécrire ; sinon
+    // il est relayé au fil de l'eau (voir MAX_REWRITE_BYTES).
+    let out_body: reqwest::Body = if should_rewrite(in_scope, &parts.headers) {
+        let body_bytes = match body.collect().await {
+            Ok(c) => c.to_bytes(),
+            Err(e) => return bad_gateway(&format!("lecture du corps: {e}")),
+        };
         match std::str::from_utf8(&body_bytes) {
             Ok(text) => {
                 let (transformed, n) = encrypt_marked_multi(text, &state.keys.encryption_keys());
                 if n > 0 {
                     tracing::info!("{method} {host}: {n} segment(s) chiffré(s)");
                 }
-                Bytes::from(transformed.into_bytes())
+                reqwest::Body::from(transformed.into_bytes())
             }
-            Err(_) => body_bytes.clone(),
+            Err(_) => reqwest::Body::from(body_bytes),
         }
     } else {
-        body_bytes.clone()
+        let stream = futures_util::StreamExt::map(body.into_data_stream(), |r| {
+            r.map_err(std::io::Error::other)
+        });
+        reqwest::Body::wrap_stream(stream)
     };
 
     // Construit la requête sortante.
@@ -247,14 +300,16 @@ async fn forward_http(
 
     let status = upstream.status();
     let resp_headers = upstream.headers().clone();
-    let resp_body = match upstream.bytes().await {
-        Ok(b) => b,
-        Err(e) => return bad_gateway(&format!("lecture réponse {url}: {e}")),
-    };
 
-    // Déchiffrement sélectif du corps entrant (jetons `[[BROCOLIS:v1:...]]`).
-    let final_body: Bytes = if in_scope && is_textual(&resp_headers) {
-        match std::str::from_utf8(&resp_body) {
+    // Même règle au retour : on ne bufferise que ce qu'on va réellement
+    // déchiffrer. Un téléchargement binaire traverse le proxy sans jamais
+    // occuper la mémoire.
+    let final_body: ResBody = if should_rewrite(in_scope, &resp_headers) {
+        let resp_body = match upstream.bytes().await {
+            Ok(b) => b,
+            Err(e) => return bad_gateway(&format!("lecture réponse {url}: {e}")),
+        };
+        let out = match std::str::from_utf8(&resp_body) {
             Ok(text) => {
                 let (transformed, n) = decrypt_tokens_multi(text, &state.keys.all_keys());
                 if n > 0 {
@@ -262,20 +317,21 @@ async fn forward_http(
                 }
                 Bytes::from(transformed.into_bytes())
             }
-            Err(_) => resp_body.clone(),
-        }
+            Err(_) => resp_body,
+        };
+        tracing::debug!("{method} {url} -> {status} ({} octets)", out.len());
+        full(out)
     } else {
-        resp_body.clone()
+        tracing::debug!("{method} {url} -> {status} (relais au fil de l'eau)");
+        stream_body(upstream.bytes_stream())
     };
-
-    tracing::debug!("{method} {url} -> {status} ({} octets)", final_body.len());
 
     let mut builder = Response::builder().status(status);
     if let Some(hs) = builder.headers_mut() {
         *hs = sanitized_headers(&resp_headers, false);
     }
     builder
-        .body(full(final_body))
+        .body(final_body)
         .unwrap_or_else(|e| bad_gateway(&format!("construction réponse: {e}")))
 }
 

@@ -5,7 +5,12 @@
   <img src="https://github.com/maxlestage/brocolis/blob/master/assets/brocolisMan.png" width="512" style="border-radius: 10px;">
 </div>
 
-🌐 **Site vitrine** : <https://maxlestage.github.io/brocolis/> (déployé automatiquement à chaque push sur `master` via `.github/workflows/pages.yml`).
+🌐 **Site vitrine** : <https://brocolis-dafbe9beac75.herokuapp.com/> (déployé depuis `master`, servi par `server.js`).
+
+> Le déploiement GitHub Pages a été retiré : Pages n'est pas activable sur un
+> dépôt privé (le workflow échouait à chaque push depuis juin), et surtout le
+> site y serait bancal — les boutons de téléchargement passent par `/dl/*`,
+> relayé par `server.js`, qui n'existe pas sur un hébergement statique.
 
 ## Présentation
 
