@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { useT } from "../i18n/LangContext";
 
 // Les CTA mènent à la page dédiée de téléchargement (route React).
