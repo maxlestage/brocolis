@@ -28,6 +28,26 @@ pub enum CaError {
     Rustls(#[from] rustls::Error),
     #[error("PEM invalide: {0}")]
     Pem(String),
+    #[error("nom d'hôte invalide pour un certificat: {0}")]
+    BadHost(String),
+}
+
+/// Un nom d'hôte est-il utilisable tel quel dans un certificat ?
+///
+/// Le SAN dNSName est encodé en `IA5String`, qui n'accepte QUE de l'ASCII : un
+/// hôte contenant un octet non ASCII faisait paniquer l'encodeur ASN.1 en
+/// profondeur (yasna), depuis une simple requête `CONNECT`. Les vrais clients
+/// envoient déjà les noms internationalisés en punycode ; on refuse donc
+/// proprement le reste au lieu de laisser paniquer.
+fn is_encodable_host(host: &str) -> bool {
+    !host.is_empty()
+        && host.len() <= 253
+        && host.is_ascii()
+        // Pas de caractère de contrôle ni d'espace : ils n'ont rien à faire
+        // dans un nom d'hôte et brouilleraient le certificat.
+        && !host
+            .chars()
+            .any(|c| c.is_ascii_control() || c == ' ' || c == '\t')
 }
 
 /// Autorité de certification racine + cache de configurations TLS par hôte.
@@ -108,6 +128,11 @@ impl Ca {
     /// Renvoie une configuration TLS serveur pour `host`, en réutilisant le
     /// cache si le certificat feuille a déjà été forgé.
     pub fn server_config_for(&self, host: &str) -> Result<Arc<ServerConfig>, CaError> {
+        // Validé AVANT le cache : un hôte impossible ne doit ni paniquer plus
+        // bas, ni occuper une entrée de cache.
+        if !is_encodable_host(host) {
+            return Err(CaError::BadHost(host.chars().take(60).collect()));
+        }
         if let Some(cfg) = self.cache.lock().expect("mutex CA empoisonné").get(host) {
             return Ok(cfg.clone());
         }
@@ -172,6 +197,42 @@ fn pem_to_private_key(pem: &str) -> Result<PrivateKeyDer<'static>, CaError> {
     rustls_pemfile::private_key(&mut reader)
         .map_err(|e| CaError::Pem(e.to_string()))?
         .ok_or_else(|| CaError::Pem("clé privée absente du PEM".into()))
+}
+
+#[cfg(test)]
+mod tests_hote_hostile {
+    use super::*;
+
+    /// Un nom d'hôte non ASCII faisait paniquer l'encodeur ASN.1 (IA5String)
+    /// depuis une simple requête CONNECT. Il doit maintenant produire une
+    /// erreur propre.
+    #[test]
+    fn un_hote_hostile_ne_fait_plus_paniquer() {
+        let dir = std::env::temp_dir().join(format!("brocolis-ca-hostile-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let ca = Ca::load_or_generate(&dir.join("ca.crt"), &dir.join("ca.key")).unwrap();
+
+        for hote in [
+            "é".repeat(10),                 // non ASCII -> paniquait
+            "aé.example.com".to_string(),   // non ASCII mêlé
+            "\u{0}\u{1}".to_string(),       // caractères de contrôle
+            "a b\tc".to_string(),           // espaces
+            String::new(),                  // vide
+            "a".repeat(300),                // trop long
+        ] {
+            let r = ca.server_config_for(&hote);
+            assert!(r.is_err(), "hôte {hote:?} devrait être refusé proprement");
+        }
+
+        // Les hôtes légitimes continuent de fonctionner, punycode compris.
+        for hote in ["example.com", "xn--caf-dma.example.com", "127.0.0.1"] {
+            assert!(
+                ca.server_config_for(hote).is_ok(),
+                "hôte légitime refusé : {hote}"
+            );
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }
 
 #[cfg(test)]
