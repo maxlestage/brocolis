@@ -31,8 +31,8 @@ rustls-pemfile = "2"
 rcgen = "0.12"
 reqwest = { version = "0.12", default-features = false, features = ["default-tls", "json"] }
 aes-gcm = "0.10"
-rand = "0.8"
-base64 = "0.22"
+rand = "0.9"
+base64 = "0.23"
 # Accord de clé X25519 + HKDF-SHA256 (appairage automatique, clés de groupe),
 # byte-compatible avec CryptoKit côté iOS.
 x25519-dalek = { version = "2", features = ["static_secrets"] }
@@ -41,18 +41,18 @@ sha2 = "0.10"
 # Client du serveur de rendez-vous (appairage automatique) + édition TOML qui
 # préserve commentaires/format lors de l'ajout d'une clé dérivée au trousseau.
 serde_json = "1"
-toml_edit = "0.22"
+toml_edit = "0.23"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
-toml = "0.8"
+toml = "0.9"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1"
-thiserror = "1"
+thiserror = "2"
 
 # Dépendances de test uniquement.
 [dev-dependencies]
-base64 = "0.22"
+base64 = "0.23"
 
 # ---------------------------------------------------------------------------
 # Packaging Linux (cargo deb / cargo generate-rpm). Voir linux/build-packages.sh.
