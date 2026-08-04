@@ -5,13 +5,14 @@ import { Switchers } from "./Switchers";
 
 const REL = "https://github.com/maxlestage/brocolis/releases";
 
-// Liens de téléchargement direct vers les builds « rolling » (dernier master).
-// Les noms d'artefacts sont stables (cf. workflows *-cli-release.yml).
+// Les binaires sont relayés par le serveur (voir /dl/* dans server.js) : les
+// assets de release vivent dans un dépôt privé, donc un lien GitHub direct
+// renverrait 404 à tout visiteur. Le serveur, lui, est authentifié.
 const DL = {
-  macos: `${REL}/download/cli-latest/brocolis-macos-universal.tar.gz`,
-  linuxDeb: `${REL}/download/cli-latest-linux/brocolis-linux-amd64.deb`,
-  linuxRpm: `${REL}/download/cli-latest-linux/brocolis-linux-x86_64.rpm`,
-  windows: `${REL}/download/cli-latest-windows/brocolis-windows-x86_64.zip`,
+  macos: "/dl/macos",
+  linuxDeb: "/dl/linux-deb",
+  linuxRpm: "/dl/linux-rpm",
+  windows: "/dl/windows",
 } as const;
 
 export function DownloadPage() {

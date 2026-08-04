@@ -324,6 +324,29 @@ publient/actualisent automatiquement la release GitHub **`cli-latest`** :
 Il suffit de télécharger l'artefact correspondant à votre OS depuis l'onglet
 *Releases*. Un tag `v*` produit en plus une release versionnée.
 
+### Site vitrine : relais de téléchargement (`/dl/*`)
+
+Ce dépôt est **privé**, donc ses assets de release renvoient `404` à toute
+requête non authentifiée. Les boutons du site ne pointent donc pas vers
+GitHub mais vers `/dl/<plateforme>` (`macos`, `linux-deb`, `linux-rpm`,
+`windows`), relayé par `server.js` : le serveur récupère l'asset avec son
+jeton et le retransmet au visiteur. Le dépôt reste privé, les
+téléchargements sont publics.
+
+Le relais lit la release à la volée (au lieu de copier les binaires dans le
+slug au build) parce que les releases sont *rolling* : elles sont
+reconstruites à chaque push sur `master`.
+
+**Variable d'environnement requise sur Heroku :**
+
+```sh
+heroku config:set GITHUB_TOKEN=<jeton avec accès en lecture au dépôt>
+```
+
+Un jeton *fine-grained* limité à ce dépôt avec la permission **Contents:
+Read** suffit. Sans lui, le site fonctionne normalement mais `/dl/*` répond
+`503` (jeton invalide ou expiré : `502`).
+
 ## Tests d'intégration système
 
 Chaque OS dispose d'un script qui valide, sur une vraie machine, le cycle
