@@ -1,0 +1,44 @@
+name: Serveur du site
+
+# Tests de non-régression de server.js (le serveur statique + relais /dl/*).
+# Ils existent parce que « /% » ou « /%00 » suffisaient à tuer le processus.
+# Aucune dépendance : le runner de test intégré à Node et un faux api.github.com.
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'server.js'
+      - 'tests/server.test.mjs'
+      - 'package.json'
+      - '.github/workflows/server.yml'
+  pull_request:
+    paths:
+      - 'server.js'
+      - 'tests/server.test.mjs'
+      - 'package.json'
+      - '.github/workflows/server.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: server-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests du serveur
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Même plancher que `engines` dans package.json.
+          node-version: '22.22'
+
+      # Les tests construisent le site : server.js sert site/dist.
+      - name: Build du site
+        run: npm run build
+
+      - name: Tests du serveur
+        run: npm test
