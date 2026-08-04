@@ -8,6 +8,7 @@
   "scripts": {
     "build": "npm --prefix site ci --include=dev && npm --prefix site run build",
     "heroku-postbuild": "npm --prefix site ci --include=dev && npm --prefix site run build",
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test tests/server.test.mjs"
   }
 }
