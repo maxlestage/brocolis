@@ -30,7 +30,7 @@ rustls = "0.23"
 rustls-pemfile = "2"
 rcgen = "0.12"
 reqwest = { version = "0.12", default-features = false, features = ["default-tls", "json"] }
-aes-gcm = "0.10"
+aes-gcm = "0.11"
 rand = "0.9"
 # base64 0.23 active `simd-unsafe` par défaut, ce qui fait entrer du code
 # `unsafe` dans le décodeur. Ce proxy décode du base64 issu du réseau, donc
@@ -39,9 +39,9 @@ rand = "0.9"
 base64 = { version = "0.23", default-features = false, features = ["std"] }
 # Accord de clé X25519 + HKDF-SHA256 (appairage automatique, clés de groupe),
 # byte-compatible avec CryptoKit côté iOS.
-x25519-dalek = { version = "2", features = ["static_secrets"] }
-hkdf = "0.12"
-sha2 = "0.10"
+x25519-dalek = { version = "3", features = ["static_secrets"] }
+hkdf = "0.13"
+sha2 = "0.11"
 # Client du serveur de rendez-vous (appairage automatique) + édition TOML qui
 # préserve commentaires/format lors de l'ajout d'une clé dérivée au trousseau.
 serde_json = "1"

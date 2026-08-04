@@ -85,7 +85,10 @@ impl SymKey {
     }
 
     fn cipher(&self) -> Aes256Gcm {
-        Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&self.bytes))
+        // aes-gcm 0.11 déprécie `from_slice` au profit de `From`/`TryFrom`
+        // (hybrid-array). `self.bytes` fait exactement KEY_LEN, donc `From`
+        // suffit et reste infaillible.
+        Aes256Gcm::new(&Key::<Aes256Gcm>::from(self.bytes))
     }
 
     /// Scelle `plaintext` en AES-256-GCM et renvoie l'empaquetage « combined »
@@ -95,10 +98,10 @@ impl SymKey {
     pub fn seal(&self, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
         let mut nonce_bytes = [0u8; NONCE_LEN];
         rand::rng().fill_bytes(&mut nonce_bytes);
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        let nonce = Nonce::from(nonce_bytes);
         let ct = self
             .cipher()
-            .encrypt(nonce, plaintext)
+            .encrypt(&nonce, plaintext)
             .map_err(|_| CryptoError::Aead)?;
         let mut packed = Vec::with_capacity(NONCE_LEN + ct.len());
         packed.extend_from_slice(&nonce_bytes);
@@ -112,9 +115,11 @@ impl SymKey {
             return Err(CryptoError::BadToken);
         }
         let (nonce_bytes, ct) = packed.split_at(NONCE_LEN);
-        let nonce = Nonce::from_slice(nonce_bytes);
+        // `split_at(NONCE_LEN)` garantit la longueur, mais on reste sur
+        // `try_from` (l'API non dépréciée) plutôt que de déballer.
+        let nonce = Nonce::try_from(nonce_bytes).map_err(|_| CryptoError::BadToken)?;
         self.cipher()
-            .decrypt(nonce, ct)
+            .decrypt(&nonce, ct)
             .map_err(|_| CryptoError::Aead)
     }
 
