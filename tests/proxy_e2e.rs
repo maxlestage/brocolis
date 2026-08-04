@@ -432,3 +432,107 @@ async fn en_texte_brut_le_clair_reste_intact() {
 
     assert_eq!(corps, "avant 3 < 5 & \"vrai\" apres");
 }
+
+/// Le cas d'usage principal : l'utilisateur tape `((secret))` dans un champ de
+/// formulaire. Le navigateur l'envoie percent-encodé ; le secret doit quand
+/// même être chiffré avant de sortir.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn un_secret_saisi_dans_un_formulaire_est_chiffre() {
+    let o = origin("ok".to_string(), "text/plain").await;
+    let (proxy, _stop) = start_proxy().await;
+
+    // Exactement ce qu'émet un navigateur pour <input name="t" value="((mon secret))">
+    let resp = client(proxy)
+        .post(format!("http://{}/post", o.addr))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body("t=%28%28mon+secret%29%29&autre=bonjour")
+        .send()
+        .await
+        .expect("requête relayée");
+    assert_eq!(resp.status(), 200);
+
+    let recu = o.seen.lock().unwrap().first().cloned().expect("corps reçu");
+    assert!(
+        !recu.contains("mon+secret") && !recu.contains("mon%20secret"),
+        "le secret est parti en clair : {recu}"
+    );
+    assert!(
+        recu.contains("BROCOLIS"),
+        "un jeton doit remplacer le secret : {recu}"
+    );
+    assert!(
+        recu.contains("autre=bonjour"),
+        "un champ sans marqueur doit rester intact : {recu}"
+    );
+}
+
+/// Un formulaire SANS marqueur ne doit pas être touché du tout : c'est ce qui
+/// borne le risque de la réécriture des corps de formulaire.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn un_formulaire_sans_marqueur_sort_identique() {
+    let o = origin("ok".to_string(), "text/plain").await;
+    let (proxy, _stop) = start_proxy().await;
+
+    let corps = "a=1&b=deux+mots&c=%C3%A9t%C3%A9&d&e=x%3Dy";
+    client(proxy)
+        .post(format!("http://{}/post", o.addr))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(corps)
+        .send()
+        .await
+        .expect("requête relayée");
+
+    let recu = o.seen.lock().unwrap().first().cloned().expect("corps reçu");
+    assert_eq!(recu, corps, "le formulaire doit sortir octet pour octet");
+}
+
+/// Le jeton réencodé doit survivre au décodage du serveur : `+`, `/` et `=`
+/// du base64 seraient sinon réinterprétés et le jeton détruit.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn le_jeton_survit_au_decodage_du_formulaire() {
+    let o = origin("ok".to_string(), "text/plain").await;
+    let (proxy, _stop) = start_proxy().await;
+
+    client(proxy)
+        .post(format!("http://{}/post", o.addr))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body("t=%28%28secret+a+chiffrer+avec+un+peu+de+longueur%29%29")
+        .send()
+        .await
+        .expect("requête relayée");
+
+    let recu = o.seen.lock().unwrap().first().cloned().expect("corps reçu");
+    // On rejoue le décodage que ferait le serveur.
+    let valeur = recu.split_once('=').expect("champ").1;
+    let decode = percent_decode(valeur);
+    let key = SymKey::from_base64(KEY_B64).unwrap();
+    let (clair, n) = brocolis::crypto::decrypt_tokens(&decode, &key);
+    assert_eq!(n, 1, "le serveur doit voir un jeton exploitable : {decode}");
+    assert_eq!(clair, "secret a chiffrer avec un peu de longueur");
+}
+
+/// Décodage urlencodé minimal, tel que le ferait le serveur destinataire.
+fn percent_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b'%' if i + 2 < b.len() => {
+                let h = (b[i + 1] as char).to_digit(16).unwrap();
+                let l = (b[i + 2] as char).to_digit(16).unwrap();
+                out.push((h * 16 + l) as u8);
+                i += 3;
+            }
+            c => {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8(out).unwrap()
+}
