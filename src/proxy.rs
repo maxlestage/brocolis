@@ -23,7 +23,7 @@ use tokio_rustls::TlsAcceptor;
 
 use crate::ca::Ca;
 use crate::config::Config;
-use crate::crypto::{decrypt_tokens_multi, encrypt_marked_multi};
+use crate::crypto::{decrypt_tokens_escaped, encrypt_marked_multi, PlainEscape};
 use crate::keys::KeyManager;
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -382,7 +382,11 @@ async fn forward_http(
             Capped::Whole(resp_body) => {
                 let out = match std::str::from_utf8(&resp_body) {
                     Ok(text) => {
-                        let (transformed, n) = decrypt_tokens_multi(text, &state.keys.all_keys());
+                        let (transformed, n) = decrypt_tokens_escaped(
+                            text,
+                            &state.keys.all_keys(),
+                            escape_for(&resp_headers),
+                        );
                         if n > 0 {
                             tracing::info!(
                                 "{method} {host} -> {status}: {n} segment(s) déchiffré(s)"
@@ -409,6 +413,27 @@ async fn forward_http(
     builder
         .body(final_body)
         .unwrap_or_else(|e| bad_gateway(&format!("construction réponse: {e}")))
+}
+
+/// Choisit l'échappement du clair d'après le type du document qui l'accueille.
+///
+/// Le texte déchiffré n'est pas du balisage : sans échappement, un secret
+/// contenant `<script>` s'exécutait dans l'origine du site consulté, et un
+/// secret contenant `"` rendait une réponse JSON invalide.
+fn escape_for(headers: &HeaderMap) -> PlainEscape {
+    let ct = headers
+        .get(hyper::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if ct.contains("html") || ct.contains("xml") {
+        PlainEscape::Html
+    } else if ct.contains("json") {
+        PlainEscape::Json
+    } else {
+        // text/plain et assimilés : le clair est déjà du texte.
+        PlainEscape::None
+    }
 }
 
 /// Construit l'URL absolue + le nom d'hôte cible (sans port).

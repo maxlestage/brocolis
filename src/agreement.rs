@@ -83,7 +83,7 @@ impl PrivateKey {
     /// correspondant (base64). Le résultat est identique des deux côtés.
     pub fn derive(&self, peer_public_base64: &str) -> Result<Derived, AgreementError> {
         let peer = peer_public_data(peer_public_base64)?;
-        let shared = self.shared_secret(&peer);
+        let shared = self.shared_secret(&peer)?;
         let info = sorted_concat(&self.public_bytes(), &peer);
         let key = hkdf_sha256(SALT, shared.as_bytes(), &info);
         Ok(Derived {
@@ -129,13 +129,30 @@ impl PrivateKey {
         PublicKey::from(&self.secret).to_bytes()
     }
 
-    fn shared_secret(&self, peer: &[u8; PUB_LEN]) -> SharedSecret {
-        self.secret.diffie_hellman(&PublicKey::from(*peer))
+    /// Secret partagé X25519, en REFUSANT les points d'ordre faible.
+    ///
+    /// Une clé publique d'ordre faible (0, 1, p-1…) force un secret partagé
+    /// entièrement nul : l'attaquant qui l'envoie n'a donc besoin d'aucune clé
+    /// privée pour le connaître. Comme la dérivation ne mélange ensuite que des
+    /// valeurs publiques (les deux clés publiques), il peut recalculer la clé
+    /// pairwise à l'identique et se faire passer pour un correspondant légitime
+    /// — c'est-à-dire déballer les clés de groupe qui lui sont destinées.
+    ///
+    /// `was_contributory()` détecte exactement ce cas.
+    fn shared_secret(&self, peer: &[u8; PUB_LEN]) -> Result<SharedSecret, AgreementError> {
+        let shared = self.secret.diffie_hellman(&PublicKey::from(*peer));
+        if !shared.was_contributory() {
+            tracing::warn!(
+                "clé publique d'ordre faible refusée : secret partagé dégénéré (contribution nulle)"
+            );
+            return Err(AgreementError::BadPeerKey);
+        }
+        Ok(shared)
     }
 
     /// Clé symétrique pairwise (même secret des deux côtés) servant à emballer.
     fn pairwise_wrap_key(&self, peer: &[u8; PUB_LEN]) -> Result<SymKey, AgreementError> {
-        let shared = self.shared_secret(peer);
+        let shared = self.shared_secret(peer)?;
         let info = sorted_concat(&self.public_bytes(), peer);
         let raw = hkdf_sha256(WRAP_SALT, shared.as_bytes(), &info);
         Ok(SymKey::from_bytes(&raw)?)
@@ -217,6 +234,63 @@ mod tests {
             .step_by(2)
             .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
             .collect()
+    }
+
+    /// Une clé publique d'ordre faible doit être REFUSÉE.
+    ///
+    /// Elle force un secret partagé nul, que l'attaquant connaît donc sans
+    /// détenir la moindre clé privée. La dérivation ne mélangeant ensuite que
+    /// des valeurs publiques, il recalculerait la clé pairwise à l'identique et
+    /// déballerait les clés de groupe qui lui sont destinées.
+    #[test]
+    fn les_points_dordre_faible_sont_refuses() {
+        let faibles: [[u8; 32]; 5] = [
+            [0u8; 32],
+            {
+                let mut a = [0u8; 32];
+                a[0] = 1;
+                a
+            },
+            // p-1 (ordre 2)
+            [
+                0xec, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                0xff, 0xff, 0xff, 0xff, 0xff, 0x7f,
+            ],
+            // ordre 4
+            [
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
+            ],
+            // ordre 8
+            [
+                0xe0, 0xeb, 0x7a, 0x7c, 0x3b, 0x41, 0xb8, 0xae, 0x16, 0x56, 0xe3, 0xfa, 0xf1,
+                0x9f, 0xc4, 0x6a, 0xda, 0x09, 0x8d, 0xeb, 0x9c, 0x32, 0xb1, 0xfd, 0x86, 0x62,
+                0x05, 0x16, 0x5f, 0x49, 0xb8, 0x00,
+            ],
+        ];
+
+        let moi = PrivateKey::generate();
+        for (i, pt) in faibles.iter().enumerate() {
+            let b64 = B64.encode(pt);
+            assert!(
+                moi.derive(&b64).is_err(),
+                "le point d'ordre faible {i} doit être refusé par derive"
+            );
+            assert!(
+                moi.wrap_group_key(&generate_group_key_base64(), &b64).is_err(),
+                "le point d'ordre faible {i} doit être refusé par wrap_group_key"
+            );
+            assert!(
+                moi.unwrap_group_key("AAAA", &b64).is_err(),
+                "le point d'ordre faible {i} doit être refusé par unwrap_group_key"
+            );
+        }
+
+        // Un échange honnête continue de fonctionner.
+        let pair = PrivateKey::generate();
+        assert!(moi.derive(&pair.public_key_base64()).is_ok());
     }
 
     /// Vecteur figé de la dérivation complète X25519 + HKDF-SHA256.

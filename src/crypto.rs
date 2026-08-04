@@ -315,6 +315,76 @@ pub fn decrypt_tokens(input: &str, key: &SymKey) -> (String, usize) {
 /// correspondant dans le trousseau, on lit ce que chacun nous envoie sans
 /// jamais changer de clé active.
 pub fn decrypt_tokens_multi(input: &str, keys: &[SymKey]) -> (String, usize) {
+    decrypt_tokens_escaped(input, keys, PlainEscape::None)
+}
+
+/// Comment échapper le clair réinjecté, selon le document qui l'accueille.
+///
+/// Le texte déchiffré est inséré dans un document que l'on ne contrôle pas. S'il
+/// y est recopié tel quel, il n'est plus du texte : il devient de la syntaxe.
+/// Deux conséquences, toutes deux constatées :
+///
+/// - dans une page HTML, un secret contenant `<script>` était injecté comme du
+///   balisage et s'exécutait dans l'origine du site consulté ;
+/// - dans une réponse JSON, un secret contenant `"` cassait le document, qui
+///   devenait invalide et faisait échouer la page.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PlainEscape {
+    /// Aucun échappement (texte brut).
+    None,
+    /// Entités HTML : le clair s'affiche, il ne s'interprète pas.
+    Html,
+    /// Échappement de chaîne JSON : le document reste valide.
+    Json,
+}
+
+impl PlainEscape {
+    fn apply(self, s: &str) -> String {
+        match self {
+            PlainEscape::None => s.to_string(),
+            // `&` en premier, sinon on ré-échapperait les entités produites.
+            PlainEscape::Html => {
+                let mut out = String::with_capacity(s.len() + 16);
+                for c in s.chars() {
+                    match c {
+                        '&' => out.push_str("&amp;"),
+                        '<' => out.push_str("&lt;"),
+                        '>' => out.push_str("&gt;"),
+                        '"' => out.push_str("&quot;"),
+                        '\'' => out.push_str("&#39;"),
+                        _ => out.push(c),
+                    }
+                }
+                out
+            }
+            PlainEscape::Json => {
+                let mut out = String::with_capacity(s.len() + 16);
+                for c in s.chars() {
+                    match c {
+                        '"' => out.push_str("\\\""),
+                        '\\' => out.push_str("\\\\"),
+                        '\n' => out.push_str("\\n"),
+                        '\r' => out.push_str("\\r"),
+                        '\t' => out.push_str("\\t"),
+                        c if (c as u32) < 0x20 => {
+                            out.push_str(&format!("\\u{:04x}", c as u32));
+                        }
+                        c => out.push(c),
+                    }
+                }
+                out
+            }
+        }
+    }
+}
+
+/// Comme [`decrypt_tokens_multi`], mais échappe le clair pour le document qui
+/// l'accueille (voir [`PlainEscape`]).
+pub fn decrypt_tokens_escaped(
+    input: &str,
+    keys: &[SymKey],
+    escape: PlainEscape,
+) -> (String, usize) {
     let mut out = String::with_capacity(input.len());
     let mut count = 0usize;
     let mut rest = input;
@@ -343,7 +413,9 @@ pub fn decrypt_tokens_multi(input: &str, keys: &[SymKey]) -> (String, usize) {
 
         match decrypted {
             Some(plain) => {
-                out.push_str(&plain);
+                // Le clair est du TEXTE : on l'échappe pour le document qui
+                // l'accueille, faute de quoi il y devient de la syntaxe.
+                out.push_str(&escape.apply(&plain));
                 count += 1;
             }
             None => {
