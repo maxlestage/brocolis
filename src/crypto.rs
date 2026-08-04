@@ -40,6 +40,13 @@ const TOKEN_SUFFIX: &str = "]]";
 const PLAIN_OPEN: &str = "((";
 const PLAIN_CLOSE: &str = "))";
 
+/// Remplace un segment que l'on n'a PAS réussi à chiffrer.
+///
+/// Le principe est l'échec fermé : si le chiffrement échoue, le secret ne part
+/// pas. Le marqueur est visible pour que l'utilisateur comprenne qu'il doit
+/// corriger sa configuration, plutôt que de croire son message protégé.
+const REDACTED_MARKER: &str = "[[BROCOLIS:ERREUR-CHIFFREMENT]]";
+
 #[derive(Debug, thiserror::Error)]
 pub enum CryptoError {
     #[error("la clé doit faire {KEY_LEN} octets, reçu {0}")]
@@ -273,10 +280,17 @@ pub fn encrypt_marked_multi(input: &str, keys: &[SymKey]) -> (String, usize) {
                 count += 1;
             }
             None => {
-                // Laisse le marqueur intact si le chiffrement échoue.
-                out.push_str(PLAIN_OPEN);
-                out.push_str(secret);
-                out.push_str(PLAIN_CLOSE);
+                // ÉCHEC FERMÉ. Ce bloc réémettait le segment en clair, ce qui
+                // envoyait le secret au serveur — exactement ce que l'outil
+                // existe pour empêcher. Un chiffrement impossible (trousseau de
+                // plus de 255 clés en mode multi, erreur AEAD…) ne doit JAMAIS
+                // dégrader vers le texte lisible.
+                tracing::error!(
+                    "chiffrement impossible pour un segment de {} octets : \
+                     segment remplacé par un marqueur d'erreur (le clair n'est PAS émis)",
+                    secret.len()
+                );
+                out.push_str(REDACTED_MARKER);
             }
         }
         rest = &after_open[close + PLAIN_CLOSE.len()..];
@@ -343,6 +357,47 @@ pub fn decrypt_tokens_multi(input: &str, keys: &[SymKey]) -> (String, usize) {
     }
     out.push_str(rest);
     (out, count)
+}
+
+#[cfg(test)]
+mod tests_echec_ferme {
+    use super::*;
+
+    /// Un chiffrement impossible ne doit JAMAIS laisser sortir le clair.
+    ///
+    /// Le déclencheur ici est un trousseau de plus de 255 clés en mode
+    /// multi-destinataire (le format v2 code le nombre sur un octet), mais le
+    /// repli concerne toute erreur de chiffrement.
+    #[test]
+    fn segment_non_chiffrable_nest_jamais_emis_en_clair() {
+        let keys: Vec<SymKey> = (0..256).map(|_| SymKey::generate()).collect();
+        let (sortie, n) = encrypt_marked_multi("rdv ((code secret 4291)) ok", &keys);
+
+        assert_eq!(n, 0, "aucun segment n'a pu être chiffré");
+        assert!(
+            !sortie.contains("code secret 4291"),
+            "le secret ne doit pas sortir en clair : {sortie}"
+        );
+        assert!(
+            sortie.contains(REDACTED_MARKER),
+            "un marqueur d'erreur doit remplacer le segment : {sortie}"
+        );
+        assert!(
+            sortie.starts_with("rdv ") && sortie.ends_with(" ok"),
+            "le texte hors marqueur est conservé : {sortie}"
+        );
+    }
+
+    /// Le marqueur d'erreur n'est pas un jeton : le déchiffrement le laisse tel
+    /// quel au lieu de planter ou de le consommer.
+    #[test]
+    fn le_marqueur_derreur_traverse_le_dechiffrement() {
+        let k = SymKey::generate();
+        let entree = format!("avant {REDACTED_MARKER} après");
+        let (sortie, n) = decrypt_tokens(&entree, &k);
+        assert_eq!(n, 0);
+        assert_eq!(sortie, entree);
+    }
 }
 
 #[cfg(test)]

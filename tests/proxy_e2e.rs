@@ -242,3 +242,112 @@ async fn un_corps_textuel_sous_le_plafond_est_bien_reecrit() {
         "un corps sous le plafond doit être déchiffré"
     );
 }
+
+/// Une réponse « chunked » n'annonce aucune taille : le plafond de réécriture
+/// ne peut pas être décidé à l'avance. Il doit donc s'appliquer À LA LECTURE,
+/// sinon un corps textuel sans `Content-Length` est bufferisé sans aucune borne.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn une_reponse_chunked_enorme_reste_plafonnee() {
+    use tokio::io::AsyncWriteExt;
+    const SIZE: usize = 192 * 1024 * 1024;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin_addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut sock, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                use tokio::io::AsyncReadExt;
+                let mut b = [0u8; 8192];
+                let _ = sock.read(&mut b).await;
+                let head = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\
+                            Transfer-Encoding: chunked\r\n\r\n";
+                if sock.write_all(head.as_bytes()).await.is_err() { return; }
+                let payload = vec![b'a'; 64 * 1024];
+                let mut sent = 0usize;
+                while sent < SIZE {
+                    let n = payload.len().min(SIZE - sent);
+                    if sock.write_all(format!("{n:x}\r\n").as_bytes()).await.is_err() { return; }
+                    if sock.write_all(&payload[..n]).await.is_err() { return; }
+                    if sock.write_all(b"\r\n").await.is_err() { return; }
+                    sent += n;
+                }
+                let _ = sock.write_all(b"0\r\n\r\n").await;
+            });
+        }
+    });
+
+    let (proxy, _stop) = start_proxy().await;
+    let before = rss();
+    let resp = client(proxy)
+        .get(format!("http://{origin_addr}/page.html"))
+        .send()
+        .await
+        .expect("requête relayée");
+    assert_eq!(resp.status(), 200);
+
+    let mut recu = 0usize;
+    {
+        use futures_util::StreamExt;
+        let mut st = resp.bytes_stream();
+        while let Some(c) = st.next().await {
+            recu += c.expect("morceau").len();
+        }
+    }
+    let growth = rss().saturating_sub(before);
+    eprintln!("chunked : reçu {} Mio, croissance {} Mio", recu / 1048576, growth / 1048576);
+    assert_eq!(recu, SIZE, "le corps doit arriver entier");
+    assert!(
+        growth < (SIZE as u64) / 3,
+        "plafond contourné en chunked : croissance {} Mio pour {} Mio",
+        growth / 1048576,
+        SIZE / 1048576
+    );
+}
+
+/// Si l'amont coupe en plein corps, le client ne doit PAS recevoir un « 200 OK »
+/// tronqué qu'il prendrait pour un succès : l'erreur doit remonter.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn une_coupure_amont_ne_passe_pas_pour_un_succes() {
+    use tokio::io::AsyncWriteExt;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin_addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut sock, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                use tokio::io::AsyncReadExt;
+                let mut b = [0u8; 8192];
+                let _ = sock.read(&mut b).await;
+                let head = "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\n\
+                            Content-Length: 1000000\r\n\r\n";
+                let _ = sock.write_all(head.as_bytes()).await;
+                let _ = sock.write_all(&vec![0x42u8; 1000]).await;
+                let _ = sock.flush().await;
+                // Coupe net : 1000 octets livrés sur 1000000 annoncés.
+                drop(sock);
+            });
+        }
+    });
+
+    let (proxy, _stop) = start_proxy().await;
+    let resp = client(proxy)
+        .get(format!("http://{origin_addr}/tronque.bin"))
+        .send()
+        .await
+        .expect("les en-têtes arrivent");
+    let status = resp.status();
+    let corps = resp.bytes().await;
+    eprintln!("coupure amont : status={status} corps={:?}", corps.as_ref().map(|b| b.len()));
+
+    let succes_silencieux = status == 200 && matches!(corps.as_ref().map(|b| b.len()), Ok(1000));
+    assert!(
+        !succes_silencieux,
+        "troncature silencieuse : 200 OK avec 1000 octets sur 1000000 annoncés"
+    );
+}
+
+/// Mémoire résidente du processus, en octets.
+fn rss() -> u64 {
+    let statm = std::fs::read_to_string("/proc/self/statm").unwrap_or_default();
+    let pages: u64 = statm.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+    pages * 4096
+}
