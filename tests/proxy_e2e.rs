@@ -351,3 +351,84 @@ fn rss() -> u64 {
     let pages: u64 = statm.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
     pages * 4096
 }
+
+/// Un secret contenant du balisage ne doit PAS devenir du balisage dans la
+/// page : sans échappement, `<script>` s'exécutait dans l'origine du site
+/// consulté, avec les droits de la session de l'utilisateur sur ce site.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn le_clair_ne_devient_pas_du_balisage_dans_une_page_html() {
+    let key = SymKey::from_base64(KEY_B64).unwrap();
+    let token = key.encrypt_token(b"<script>alert(1)</script>").unwrap();
+    let o = origin(
+        format!("<html><body><p>{token}</p></body></html>"),
+        "text/html; charset=utf-8",
+    )
+    .await;
+    let (proxy, _stop) = start_proxy().await;
+
+    let page = client(proxy)
+        .get(format!("http://{}/page.html", o.addr))
+        .send()
+        .await
+        .expect("requête relayée")
+        .text()
+        .await
+        .unwrap();
+
+    assert!(
+        !page.contains("<script>alert(1)</script>"),
+        "le balisage du secret a été injecté tel quel : {page}"
+    );
+    assert!(
+        page.contains("&lt;script&gt;alert(1)&lt;/script&gt;"),
+        "le secret doit rester lisible, mais échappé : {page}"
+    );
+}
+
+/// Un secret contenant un guillemet ne doit pas casser une réponse JSON.
+/// Sans échappement, le document devenait invalide et la page échouait.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn le_clair_ne_casse_pas_une_reponse_json() {
+    let key = SymKey::from_base64(KEY_B64).unwrap();
+    let token = key
+        .encrypt_token(b"il a dit \"bonjour\" puis \\ fin")
+        .unwrap();
+    let o = origin(format!(r#"{{"message":"{token}"}}"#), "application/json").await;
+    let (proxy, _stop) = start_proxy().await;
+
+    let corps = client(proxy)
+        .get(format!("http://{}/api", o.addr))
+        .send()
+        .await
+        .expect("requête relayée")
+        .text()
+        .await
+        .unwrap();
+
+    let parsed: serde_json::Value =
+        serde_json::from_str(&corps).unwrap_or_else(|e| panic!("JSON cassé ({e}) : {corps}"));
+    assert_eq!(
+        parsed["message"], "il a dit \"bonjour\" puis \\ fin",
+        "le clair doit être restitué intact après analyse JSON"
+    );
+}
+
+/// En text/plain, rien à échapper : le clair sort tel quel.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn en_texte_brut_le_clair_reste_intact() {
+    let key = SymKey::from_base64(KEY_B64).unwrap();
+    let token = key.encrypt_token(b"3 < 5 & \"vrai\"").unwrap();
+    let o = origin(format!("avant {token} apres"), "text/plain").await;
+    let (proxy, _stop) = start_proxy().await;
+
+    let corps = client(proxy)
+        .get(format!("http://{}/note.txt", o.addr))
+        .send()
+        .await
+        .expect("requête relayée")
+        .text()
+        .await
+        .unwrap();
+
+    assert_eq!(corps, "avant 3 < 5 & \"vrai\" apres");
+}
