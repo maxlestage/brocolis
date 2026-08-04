@@ -32,6 +32,13 @@ pub enum CaError {
     BadHost(String),
 }
 
+/// Nombre maximal de certificats feuilles gardés en cache.
+///
+/// Chaque entrée pèse une dizaine de kilo-octets ; 1024 hôtes plafonnent donc
+/// le cache aux alentours d'une dizaine de mégaoctets, tout en couvrant
+/// largement les domaines d'une session de navigation normale.
+const MAX_CACHED_HOSTS: usize = 1024;
+
 /// Un nom d'hôte est-il utilisable tel quel dans un certificat ?
 ///
 /// Le SAN dNSName est encodé en `IA5String`, qui n'accepte QUE de l'ASCII : un
@@ -137,10 +144,24 @@ impl Ca {
             return Ok(cfg.clone());
         }
         let cfg = Arc::new(self.make_leaf_config(host)?);
-        self.cache
-            .lock()
-            .expect("mutex CA empoisonné")
-            .insert(host.to_string(), cfg.clone());
+        {
+            let mut cache = self.cache.lock().expect("mutex CA empoisonné");
+            // Le cache ne se vidait jamais : chaque hôte visité y laissait un
+            // certificat et sa clé (~11 Ko mesurés). Une navigation ordinaire
+            // touche des centaines de domaines tiers, et 4000 hôtes distincts
+            // faisaient déjà +45 Mo jamais rendus.
+            //
+            // Ce cache n'est qu'une optimisation : un certificat jeté sera
+            // simplement reforgé. On le vide donc en bloc au seuil, ce qui
+            // borne la mémoire sans dépendre d'une structure LRU.
+            if cache.len() >= MAX_CACHED_HOSTS {
+                tracing::debug!(
+                    "cache CA plein ({MAX_CACHED_HOSTS} hôtes) : vidé, les certificats seront reforgés"
+                );
+                cache.clear();
+            }
+            cache.insert(host.to_string(), cfg.clone());
+        }
         Ok(cfg)
     }
 
@@ -231,6 +252,25 @@ mod tests_hote_hostile {
                 "hôte légitime refusé : {hote}"
             );
         }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Le cache de certificats doit rester borné : sans plafond, chaque hôte
+    /// visité y laissait un certificat et sa clé, sans jamais rien libérer.
+    #[test]
+    fn le_cache_de_certificats_reste_borne() {
+        let dir = std::env::temp_dir().join(format!("brocolis-ca-cache-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let ca = Ca::load_or_generate(&dir.join("ca.crt"), &dir.join("ca.key")).unwrap();
+
+        for i in 0..(MAX_CACHED_HOSTS + 50) {
+            ca.server_config_for(&format!("h{i}.example.com")).unwrap();
+        }
+        let taille = ca.cache.lock().unwrap().len();
+        assert!(
+            taille <= MAX_CACHED_HOSTS,
+            "cache non borné : {taille} entrées pour un plafond de {MAX_CACHED_HOSTS}"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 }
