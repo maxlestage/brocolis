@@ -23,7 +23,7 @@ use tokio_rustls::TlsAcceptor;
 
 use crate::ca::Ca;
 use crate::config::Config;
-use crate::crypto::{decrypt_tokens_escaped, encrypt_marked_multi, PlainEscape};
+use crate::crypto::{decrypt_tokens_escaped, encrypt_marked_form, encrypt_marked_multi, PlainEscape};
 use crate::keys::KeyManager;
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -335,6 +335,22 @@ async fn forward_http(
         None => return bad_gateway("URL cible introuvable"),
     };
 
+    // Brocolis ne sait pas relayer un changement de protocole : `Connection` et
+    // `Upgrade` font partie des en-têtes hop-by-hop retirés, et rien ne traite
+    // une réponse 101. Une négociation WebSocket échoue donc — silencieusement
+    // jusqu'ici, ce qui rendait la panne indiagnosticable côté utilisateur.
+    if wants_upgrade(&parts.headers) {
+        tracing::warn!(
+            "{method} {host}: changement de protocole demandé ({}) — non relayé par brocolis, \
+             la connexion échouera côté client",
+            parts
+                .headers
+                .get(hyper::header::UPGRADE)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("?")
+        );
+    }
+
     let in_scope = state.cfg.host_in_scope(&host);
 
     // Le corps n'est mis en mémoire que si on doit vraiment le réécrire ; sinon
@@ -346,7 +362,14 @@ async fn forward_http(
         };
         match std::str::from_utf8(&body_bytes) {
             Ok(text) => {
-                let (transformed, n) = encrypt_marked_multi(text, &state.keys.encryption_keys());
+                // Un formulaire de navigateur transmet `((secret))` sous la
+                // forme `%28%28secret%29%29` : les marqueurs doivent être
+                // cherchés APRÈS décodage, sinon le secret part en clair.
+                let (transformed, n) = if is_form_urlencoded(&parts.headers) {
+                    encrypt_marked_form(text, &state.keys.encryption_keys())
+                } else {
+                    encrypt_marked_multi(text, &state.keys.encryption_keys())
+                };
                 if n > 0 {
                     tracing::info!("{method} {host}: {n} segment(s) chiffré(s)");
                 }
@@ -491,6 +514,25 @@ fn sanitized_headers(src: &HeaderMap, outgoing: bool) -> HeaderMap {
         }
     }
     out
+}
+
+/// La requête demande-t-elle un changement de protocole (WebSocket…) ?
+fn wants_upgrade(headers: &HeaderMap) -> bool {
+    headers.contains_key(hyper::header::UPGRADE)
+        || headers
+            .get(hyper::header::CONNECTION)
+            .and_then(|v| v.to_str().ok())
+            .map(|v| v.to_ascii_lowercase().contains("upgrade"))
+            .unwrap_or(false)
+}
+
+/// Le corps est-il un formulaire urlencodé (soumission navigateur standard) ?
+fn is_form_urlencoded(headers: &HeaderMap) -> bool {
+    headers
+        .get(hyper::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|ct| ct.to_ascii_lowercase().contains("x-www-form-urlencoded"))
+        .unwrap_or(false)
 }
 
 /// Détermine si le corps est du texte transformable.

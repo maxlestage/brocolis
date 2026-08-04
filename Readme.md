@@ -352,6 +352,22 @@ Un jeton *fine-grained* limité à ce dépôt avec la permission **Contents:
 Read** suffit. Sans lui, le site fonctionne normalement mais `/dl/*` répond
 `503` (jeton invalide ou expiré : `502`).
 
+## Limites connues
+
+- **WebSocket non relayé.** Brocolis ne sait pas suivre un changement de
+  protocole : les en-têtes `Connection`/`Upgrade` sont retirés et une réponse
+  `101` n'est pas traitée. Les fonctions temps réel d'un site (chat, flux live)
+  échouent donc derrière le proxy. Un avertissement est journalisé à chaque
+  tentative, pour que la panne soit diagnosticable.
+- **Marqueurs à cheval sur deux champs.** Un `((` dans un champ et un `))` dans
+  un autre ne sont pas appariés : la détection travaille champ par champ.
+- **Réécriture plafonnée à 8 Mio.** Au-delà, le corps est relayé sans
+  réécriture (voir `MAX_REWRITE_BYTES`) — les messages visés pèsent quelques
+  kilo-octets.
+- **Trousseau limité à 255 clés** en chiffrement multi-destinataire (le format
+  `v2` code le nombre sur un octet). Au-delà, le segment n'est pas chiffré : il
+  est remplacé par un marqueur d'erreur visible, jamais émis en clair.
+
 ## Tests d'intégration système
 
 Chaque OS dispose d'un script qui valide, sur une vraie machine, le cycle
