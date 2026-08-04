@@ -1,4 +1,4 @@
-import { HashRouter, Routes, Route } from "react-router-dom";
+import { HashRouter, Routes, Route } from "react-router";
 import { LangProvider } from "./i18n/LangContext";
 import { ThemeProvider } from "./theme/ThemeContext";
 import { Landing } from "./components/Landing";

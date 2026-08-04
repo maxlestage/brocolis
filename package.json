@@ -3,7 +3,7 @@
   "private": true,
   "description": "Déploiement Heroku du site vitrine Brocolis (build site/, servi en statique).",
   "engines": {
-    "node": "22.x"
+    "node": ">=22.22.0 <23"
   },
   "scripts": {
     "build": "npm --prefix site ci --include=dev && npm --prefix site run build",
