@@ -62,7 +62,7 @@ impl SymKey {
     /// Génère une nouvelle clé aléatoire (CSPRNG).
     pub fn generate() -> Self {
         let mut bytes = [0u8; KEY_LEN];
-        rand::thread_rng().fill_bytes(&mut bytes);
+        rand::rng().fill_bytes(&mut bytes);
         Self { bytes }
     }
 
@@ -94,7 +94,7 @@ impl SymKey {
     /// v1, l'enveloppe v2 et l'emballage des clés de groupe X25519.
     pub fn seal(&self, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
         let mut nonce_bytes = [0u8; NONCE_LEN];
-        rand::thread_rng().fill_bytes(&mut nonce_bytes);
+        rand::rng().fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
         let ct = self
             .cipher()

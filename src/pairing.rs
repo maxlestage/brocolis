@@ -179,7 +179,7 @@ async fn parse<T: serde::de::DeserializeOwned>(resp: reqwest::Response) -> Resul
 /// Identifiant de participant aléatoire (16 octets en hex).
 pub fn random_peer_id() -> String {
     let mut b = [0u8; 16];
-    rand::thread_rng().fill_bytes(&mut b);
+    rand::rng().fill_bytes(&mut b);
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 

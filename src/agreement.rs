@@ -51,7 +51,7 @@ impl PrivateKey {
     /// Génère une nouvelle paire de clés aléatoire (CSPRNG).
     pub fn generate() -> Self {
         let mut bytes = [0u8; PUB_LEN];
-        rand::thread_rng().fill_bytes(&mut bytes);
+        rand::rng().fill_bytes(&mut bytes);
         Self {
             secret: StaticSecret::from(bytes),
         }
