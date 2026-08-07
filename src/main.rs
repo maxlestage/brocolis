@@ -85,6 +85,33 @@ enum Command {
     },
     /// Génère une nouvelle clé symétrique AES-256 (base64) à partager.
     Keygen,
+    /// Chiffre les segments `((...))` d'un texte, comme le ferait le proxy.
+    ///
+    /// Sert à vérifier une configuration sans monter de navigateur, et à
+    /// préparer un message à coller ailleurs.
+    Encrypt {
+        /// Texte à traiter. Absent, le texte est lu sur l'entrée standard.
+        #[arg(long)]
+        text: Option<String>,
+        /// Fichier de configuration TOML (pour le trousseau).
+        #[arg(long, default_value = "brocolis.toml")]
+        config: PathBuf,
+        /// Clé base64 (surcharge la configuration).
+        #[arg(long)]
+        key: Option<String>,
+    },
+    /// Déchiffre les jetons `[[BROCOLIS:…]]` d'un texte, comme le ferait le proxy.
+    Decrypt {
+        /// Texte à traiter. Absent, le texte est lu sur l'entrée standard.
+        #[arg(long)]
+        text: Option<String>,
+        /// Fichier de configuration TOML (pour le trousseau).
+        #[arg(long, default_value = "brocolis.toml")]
+        config: PathBuf,
+        /// Clé base64 (surcharge la configuration).
+        #[arg(long)]
+        key: Option<String>,
+    },
     /// Appairage automatique X25519 via le serveur de rendez-vous : échange les
     /// clés publiques avec un correspondant partageant le même CODE, dérive la
     /// clé partagée et l'ajoute au trousseau (`keys` de brocolis.toml).
@@ -160,6 +187,30 @@ fn main() -> anyhow::Result<()> {
             println!("{}", key.to_base64());
             eprintln!("# Partagez cette clé (canal sûr) avec les utilisateurs autorisés,");
             eprintln!("# puis placez-la dans brocolis.toml (champ `key`).");
+            Ok(())
+        }
+        Command::Encrypt { text, config, key } => {
+            let keys = keys_for_tool(&config, key.as_deref())?;
+            let entree = read_text(text)?;
+            let (sortie, n) = brocolis::crypto::encrypt_marked_multi(&entree, &keys);
+            print!("{sortie}");
+            if !sortie.ends_with('\n') {
+                println!();
+            }
+            // Le compte va sur stderr : stdout ne porte que le texte, pour
+            // rester utilisable dans un tube.
+            eprintln!("# {n} segment(s) chiffré(s)");
+            Ok(())
+        }
+        Command::Decrypt { text, config, key } => {
+            let keys = keys_for_tool(&config, key.as_deref())?;
+            let entree = read_text(text)?;
+            let (sortie, n) = brocolis::crypto::decrypt_tokens_multi(&entree, &keys);
+            print!("{sortie}");
+            if !sortie.ends_with('\n') {
+                println!();
+            }
+            eprintln!("# {n} jeton(s) déchiffré(s)");
             Ok(())
         }
         Command::Pair {
@@ -354,6 +405,46 @@ async fn run_auto(cfg: Config, config_path: PathBuf, system: bool) -> anyhow::Re
 
 /// Charge la clé privée X25519 locale depuis `path`, ou en crée une (persistée
 /// en base64, droits `0600` sous Unix).
+/// Texte à traiter : l'option `--text`, sinon l'entrée standard.
+fn read_text(text: Option<String>) -> anyhow::Result<String> {
+    match text {
+        Some(t) => Ok(t),
+        None => {
+            use std::io::Read;
+            let mut buf = String::new();
+            std::io::stdin().read_to_string(&mut buf)?;
+            Ok(buf)
+        }
+    }
+}
+
+/// Trousseau utilisé par `encrypt`/`decrypt`.
+///
+/// `--key` l'emporte ; sinon on prend celui de la configuration. Contrairement
+/// au proxy, on NE génère PAS de clé éphémère en dernier recours : chiffrer
+/// avec une clé jetable que personne ne possède ne rendrait service à personne,
+/// et donnerait l'illusion d'avoir protégé quelque chose.
+fn keys_for_tool(config: &Path, key: Option<&str>) -> anyhow::Result<Vec<SymKey>> {
+    if let Some(k) = key {
+        return Ok(vec![SymKey::from_base64(k)
+            .map_err(|e| anyhow::anyhow!("clé fournie invalide : {e}"))?]);
+    }
+    let cfg = Config::load(config)?;
+    let b64 = cfg.all_key_b64();
+    if b64.is_empty() {
+        anyhow::bail!(
+            "aucune clé : renseignez `key` dans {} ou passez --key",
+            config.display()
+        );
+    }
+    b64.iter()
+        .map(|k| {
+            SymKey::from_base64(k)
+                .map_err(|e| anyhow::anyhow!("clé invalide dans la configuration : {e}"))
+        })
+        .collect()
+}
+
 fn load_or_create_identity(path: &Path) -> anyhow::Result<brocolis::agreement::PrivateKey> {
     use brocolis::agreement::PrivateKey;
 
