@@ -315,3 +315,257 @@ fn decrypt_avec_une_mauvaise_cle_laisse_le_jeton_intact() {
     assert!(!sortie.contains("secret"), "et surtout ne rien révéler");
     let _ = std::fs::remove_dir_all(&d);
 }
+
+// ---------------------------------------------------------------------------
+// `run` : le proxy lancé par la CLI chiffre-t-il réellement ?
+// ---------------------------------------------------------------------------
+
+/// Serveur d'origine minimal qui mémorise le corps reçu.
+fn origine(recu: std::sync::Arc<std::sync::Mutex<Vec<String>>>) -> u16 {
+    use std::io::{BufRead, BufReader, Read, Write};
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = l.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for flux in l.incoming() {
+            let Ok(mut flux) = flux else { continue };
+            let recu = recu.clone();
+            std::thread::spawn(move || {
+                let mut lect = BufReader::new(flux.try_clone().unwrap());
+                let mut ligne = String::new();
+                let _ = lect.read_line(&mut ligne);
+                let mut len = 0usize;
+                loop {
+                    let mut h = String::new();
+                    if lect.read_line(&mut h).is_err() || h.trim().is_empty() {
+                        break;
+                    }
+                    if let Some(v) = h.to_ascii_lowercase().strip_prefix("content-length:") {
+                        len = v.trim().parse().unwrap_or(0);
+                    }
+                }
+                let mut corps = vec![0u8; len];
+                if len > 0 {
+                    let _ = lect.read_exact(&mut corps);
+                }
+                recu.lock()
+                    .unwrap()
+                    .push(String::from_utf8_lossy(&corps).into_owned());
+                let _ = flux.write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+                );
+            });
+        }
+    });
+    port
+}
+
+fn port_libre() -> u16 {
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    l.local_addr().unwrap().port()
+}
+
+/// Le proxy démarré par `brocolis run` doit réellement chiffrer le trafic.
+///
+/// Les tests bout en bout existants passent par la bibliothèque ; celui-ci
+/// vérifie le binaire tel que l'utilisateur le lance, avec sa configuration.
+#[test]
+fn run_demarre_un_proxy_qui_chiffre_vraiment() {
+    let d = tmpdir("run-proxy");
+    let recu = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let port_origine = origine(recu.clone());
+    let port_proxy = port_libre();
+
+    let cle = String::from_utf8(Command::new(bin()).arg("keygen").output().unwrap().stdout)
+        .unwrap()
+        .trim()
+        .to_string();
+
+    let mut proxy = Command::new(bin())
+        .args(["run", "--listen", &format!("127.0.0.1:{port_proxy}"), "--key", &cle])
+        .current_dir(&d)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+
+    // Attendre que le proxy écoute.
+    let mut pret = false;
+    for _ in 0..50 {
+        if std::net::TcpStream::connect(("127.0.0.1", port_proxy)).is_ok() {
+            pret = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    assert!(pret, "le proxy doit finir par écouter");
+
+    // Requête AU TRAVERS du proxy, écrite à la main pour ne dépendre d'aucun
+    // réglage d'environnement (une variable no_proxy contournerait le proxy et
+    // ferait croire à tort que le chiffrement ne se fait pas).
+    {
+        use std::io::{Read, Write};
+        let mut s = std::net::TcpStream::connect(("127.0.0.1", port_proxy)).unwrap();
+        let corps = "rendez-vous ((code 4291)) a 18h";
+        let req = format!(
+            "POST http://127.0.0.1:{port_origine}/envoi HTTP/1.1\r\nHost: 127.0.0.1:{port_origine}\r\n\
+             Content-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{corps}",
+            corps.len()
+        );
+        s.write_all(req.as_bytes()).unwrap();
+        let mut rep = String::new();
+        let _ = s.read_to_string(&mut rep);
+        assert!(rep.contains("200"), "le proxy doit relayer la réponse : {rep}");
+    }
+
+    let _ = proxy.kill();
+    let _ = proxy.wait();
+    let vu = recu.lock().unwrap().first().cloned().unwrap_or_default();
+
+    assert!(
+        !vu.contains("code 4291"),
+        "le secret ne doit pas sortir en clair : {vu}"
+    );
+    assert!(vu.contains("[[BROCOLIS:v1:"), "un jeton doit remplacer le segment : {vu}");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// `--encrypt-host` restreint la portée : un hôte hors périmètre n'est pas touché.
+#[test]
+fn run_respecte_la_portee_encrypt_host() {
+    let d = tmpdir("run-portee");
+    let recu = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let port_origine = origine(recu.clone());
+    let port_proxy = port_libre();
+    let cle = String::from_utf8(Command::new(bin()).arg("keygen").output().unwrap().stdout)
+        .unwrap().trim().to_string();
+
+    let mut proxy = Command::new(bin())
+        .args([
+            "run", "--listen", &format!("127.0.0.1:{port_proxy}"), "--key", &cle,
+            // La portée ne couvre PAS 127.0.0.1.
+            "--encrypt-host", "exemple.invalide",
+        ])
+        .current_dir(&d)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+
+    let mut pret = false;
+    for _ in 0..50 {
+        if std::net::TcpStream::connect(("127.0.0.1", port_proxy)).is_ok() {
+            pret = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    assert!(pret, "le proxy doit finir par écouter");
+    {
+        use std::io::{Read, Write};
+        let mut s = std::net::TcpStream::connect(("127.0.0.1", port_proxy)).unwrap();
+        let corps = "hors ((perimetre)) donc intact";
+        let req = format!(
+            "POST http://127.0.0.1:{port_origine}/x HTTP/1.1\r\nHost: 127.0.0.1:{port_origine}\r\n\
+             Content-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{corps}",
+            corps.len()
+        );
+        s.write_all(req.as_bytes()).unwrap();
+        let mut rep = String::new();
+        let _ = s.read_to_string(&mut rep);
+        assert!(rep.contains("200"), "le proxy doit relayer la réponse : {rep}");
+    }
+    let _ = proxy.kill();
+    let _ = proxy.wait();
+
+    let vu = recu.lock().unwrap().first().cloned().unwrap_or_default();
+    assert_eq!(
+        vu, "hors ((perimetre)) donc intact",
+        "un hôte hors portée doit traverser sans modification"
+    );
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+// ---------------------------------------------------------------------------
+// `ca`
+// ---------------------------------------------------------------------------
+
+/// Relancer `ca` doit RECHARGER le CA existant, pas en forger un nouveau :
+/// le régénérer invaliderait le certificat déjà installé dans le navigateur.
+#[test]
+fn ca_relance_ne_regenere_pas_le_certificat() {
+    let d = tmpdir("ca-stable");
+    let cert = d.join("ca.crt");
+    let key = d.join("ca.key");
+    let lancer = || {
+        Command::new(bin())
+            .args(["ca", "--ca-cert"]).arg(&cert)
+            .arg("--ca-key").arg(&key)
+            .current_dir(&d)
+            .output()
+            .unwrap()
+    };
+
+    assert!(lancer().status.success());
+    let cert1 = std::fs::read_to_string(&cert).unwrap();
+    let key1 = std::fs::read_to_string(&key).unwrap();
+
+    assert!(lancer().status.success());
+    assert_eq!(cert1, std::fs::read_to_string(&cert).unwrap(), "le certificat doit être stable");
+    assert_eq!(key1, std::fs::read_to_string(&key).unwrap(), "la clé doit être stable");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// `--export` doit écrire exactement le certificat racine, prêt à installer.
+#[test]
+fn ca_export_ecrit_le_meme_certificat() {
+    let d = tmpdir("ca-export");
+    let cert = d.join("ca.crt");
+    let exporte = d.join("pour-le-navigateur.crt");
+
+    let out = Command::new(bin())
+        .args(["ca", "--ca-cert"]).arg(&cert)
+        .arg("--ca-key").arg(d.join("ca.key"))
+        .arg("--export").arg(&exporte)
+        .current_dir(&d)
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+
+    let a = std::fs::read_to_string(&cert).unwrap();
+    let b = std::fs::read_to_string(&exporte).unwrap();
+    assert_eq!(a, b, "l'export doit être le certificat racine, à l'identique");
+    assert!(a.contains("BEGIN CERTIFICATE"), "et être un PEM exploitable");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+// ---------------------------------------------------------------------------
+// `auto`
+// ---------------------------------------------------------------------------
+
+/// `auto` n'est pas exécutable en test : elle modifie le proxy système et les
+/// magasins de confiance de la machine. On vérifie au moins que la commande
+/// existe, que ses options sont celles annoncées, et qu'elle est documentée —
+/// sa logique interne est couverte côté `system::linux`.
+#[test]
+fn auto_expose_les_options_attendues() {
+    let out = Command::new(bin()).args(["auto", "--help"]).output().unwrap();
+    assert!(out.status.success());
+    let aide = String::from_utf8(out.stdout).unwrap();
+    for option in ["--config", "--listen", "--key", "--ca-cert", "--ca-key"] {
+        assert!(aide.contains(option), "`auto` doit accepter {option} : {aide}");
+    }
+}
+
+/// Toutes les sous-commandes annoncées dans l'aide doivent répondre à `--help` :
+/// une commande listée mais cassée serait invisible autrement.
+#[test]
+fn toutes_les_sous_commandes_repondent() {
+    for cmd in ["run", "auto", "keygen", "encrypt", "decrypt", "pair", "pair-group", "ca"] {
+        let out = Command::new(bin()).args([cmd, "--help"]).output().unwrap();
+        assert!(out.status.success(), "`{cmd} --help` doit répondre");
+        assert!(
+            !String::from_utf8_lossy(&out.stdout).is_empty(),
+            "`{cmd} --help` doit décrire la commande"
+        );
+    }
+}
