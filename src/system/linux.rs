@@ -20,7 +20,6 @@ use super::{firefox_policy_json, Backend, SystemProxy};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const FF_POLICY_DIR: &str = "/etc/firefox/policies";
 const FF_POLICY: &str = "/etc/firefox/policies/policies.json";
 const ENV_PROXY: &str = "/etc/profile.d/brocolis-proxy.sh";
 const TRUST_FILE_NAME: &str = "brocolis-ca.crt";
@@ -129,26 +128,38 @@ fn untrust_ca(distro: &Distro, trust_file: &Path) {
     tracing::info!("CA retiré du magasin de confiance");
 }
 
+/// Pose un fichier UNIQUEMENT s'il n'existe pas déjà.
+///
+/// Le `Option` renvoyé est le contrat de sécurité de `auto` : il vaut `Some`
+/// seulement si NOUS avons créé le fichier. C'est lui qui est mémorisé, et
+/// c'est lui seul qui sera retiré à l'arrêt. Un fichier préexistant (une
+/// politique Firefox posée par l'administrateur, par exemple) renvoie `None`
+/// et ne sera donc jamais ni écrasé, ni supprimé.
+pub(super) fn write_if_absent(path: &Path, contents: &str, quoi: &str) -> Option<PathBuf> {
+    if path.exists() {
+        tracing::warn!("{quoi} déjà présent ({}) : laissé intact", path.display());
+        return None;
+    }
+    if let Some(dir) = path.parent() {
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            tracing::warn!("{quoi}: création {} impossible: {e}", dir.display());
+            return None;
+        }
+    }
+    if let Err(e) = std::fs::write(path, contents) {
+        tracing::warn!("{quoi}: écriture {} impossible: {e}", path.display());
+        return None;
+    }
+    tracing::info!("{quoi} posé ({})", path.display());
+    Some(path.to_path_buf())
+}
+
 fn enable_firefox() -> Option<PathBuf> {
-    let policy = Path::new(FF_POLICY);
-    if policy.exists() {
-        tracing::warn!(
-            "Politique Firefox déjà présente ({}) : laissée intacte. \
-             Activez-y `Certificates.ImportEnterpriseRoots` si besoin.",
-            policy.display()
-        );
-        return None;
-    }
-    if let Err(e) = std::fs::create_dir_all(FF_POLICY_DIR) {
-        tracing::warn!("Firefox: création {FF_POLICY_DIR} impossible: {e}");
-        return None;
-    }
-    if let Err(e) = std::fs::write(policy, firefox_policy_json()) {
-        tracing::warn!("Firefox: écriture {} impossible: {e}", policy.display());
-        return None;
-    }
-    tracing::info!("Firefox: confiance activée ({})", policy.display());
-    Some(policy.to_path_buf())
+    write_if_absent(
+        Path::new(FF_POLICY),
+        firefox_policy_json(),
+        "Politique Firefox",
+    )
 }
 
 fn disable_firefox(policy: Option<&Path>) {
@@ -179,25 +190,11 @@ pub(super) fn env_proxy_content(port: u16) -> String {
 }
 
 fn write_env_proxy(port: u16) -> Option<PathBuf> {
-    let path = Path::new(ENV_PROXY);
-    if path.exists() {
-        tracing::warn!("{} déjà présent : laissé intact", path.display());
-        return None;
-    }
-    match std::fs::write(path, env_proxy_content(port)) {
-        Ok(()) => {
-            tracing::info!(
-                "Variables http_proxy/https_proxy écrites ({}) — \
-                 effet sur les nouvelles sessions shell",
-                path.display()
-            );
-            Some(path.to_path_buf())
-        }
-        Err(e) => {
-            tracing::warn!("écriture {} impossible: {e}", path.display());
-            None
-        }
-    }
+    write_if_absent(
+        Path::new(ENV_PROXY),
+        &env_proxy_content(port),
+        "Variables http_proxy/https_proxy",
+    )
 }
 
 fn remove_env_proxy(path: Option<&Path>) {
@@ -261,6 +258,145 @@ pub(super) fn revert(
 mod tests {
     use super::*;
 
+    /// Répertoire de travail isolé.
+    fn tmp(nom: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("brocolis-auto-{}-{nom}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    /// LA garantie de `auto` : un fichier qui existait déjà n'est ni écrasé,
+    /// ni revendiqué.
+    ///
+    /// C'est ce qui empêche `auto` de détruire la configuration de
+    /// l'administrateur — une politique Firefox posée par l'entreprise, par
+    /// exemple. Le `None` renvoyé fait que rien ne sera retiré à l'arrêt.
+    #[test]
+    fn un_fichier_preexistant_nest_ni_ecrase_ni_revendique() {
+        let d = tmp("preexistant");
+        let f = d.join("policies.json");
+        std::fs::write(&f, "{\"politique\": \"de l'administrateur\"}").unwrap();
+
+        let revendique = write_if_absent(&f, firefox_policy_json(), "Politique Firefox");
+
+        assert!(revendique.is_none(), "un fichier existant ne doit pas être revendiqué");
+        assert_eq!(
+            std::fs::read_to_string(&f).unwrap(),
+            "{\"politique\": \"de l'administrateur\"}",
+            "le contenu de l'administrateur doit être intact"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// À l'inverse, un fichier absent est bien posé et revendiqué.
+    #[test]
+    fn un_fichier_absent_est_pose_et_revendique() {
+        let d = tmp("absent");
+        // Sous-dossier inexistant : il doit être créé au passage.
+        let f = d.join("policies").join("policies.json");
+
+        let revendique = write_if_absent(&f, firefox_policy_json(), "Politique Firefox");
+
+        assert_eq!(revendique.as_deref(), Some(f.as_path()));
+        assert!(f.exists(), "le fichier doit avoir été créé");
+        assert!(
+            std::fs::read_to_string(&f).unwrap().contains("ImportEnterpriseRoots"),
+            "le contenu attendu doit avoir été écrit"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// La restauration ne retire QUE ce qui a été revendiqué.
+    #[test]
+    fn la_restauration_ne_retire_rien_si_rien_na_ete_pose() {
+        let d = tmp("revert-none");
+        let temoin = d.join("policies.json");
+        std::fs::write(&temoin, "intact").unwrap();
+
+        // `None` = nous n'avons rien posé.
+        disable_firefox(None);
+
+        assert!(temoin.exists(), "aucun fichier ne doit être retiré");
+        assert_eq!(std::fs::read_to_string(&temoin).unwrap(), "intact");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// Et elle retire bien ce qui l'a été.
+    #[test]
+    fn la_restauration_retire_ce_qui_a_ete_pose() {
+        let d = tmp("revert-some");
+        let dossier = d.join("policies");
+        let f = dossier.join("policies.json");
+        let pose = write_if_absent(&f, firefox_policy_json(), "Politique Firefox").unwrap();
+
+        disable_firefox(Some(&pose));
+
+        assert!(!f.exists(), "le fichier posé doit être retiré");
+        assert!(
+            !dossier.exists(),
+            "le dossier créé pour l'occasion, devenu vide, doit être retiré aussi"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// Un dossier qui contient AUTRE CHOSE ne doit pas être emporté.
+    ///
+    /// `disable_firefox` retire le dossier parent après le fichier. S'il
+    /// contenait d'autres politiques, les supprimer détruirait la
+    /// configuration de l'utilisateur.
+    #[test]
+    fn la_restauration_nemporte_pas_un_dossier_encore_occupe() {
+        let d = tmp("revert-occupe");
+        let dossier = d.join("policies");
+        std::fs::create_dir_all(&dossier).unwrap();
+        let voisin = dossier.join("autre-politique.json");
+        std::fs::write(&voisin, "politique d'un tiers").unwrap();
+
+        let f = dossier.join("policies.json");
+        let pose = write_if_absent(&f, firefox_policy_json(), "Politique Firefox").unwrap();
+
+        disable_firefox(Some(&pose));
+
+        assert!(!f.exists(), "notre fichier est retiré");
+        assert!(dossier.exists(), "le dossier encore occupé doit rester");
+        assert_eq!(
+            std::fs::read_to_string(&voisin).unwrap(),
+            "politique d'un tiers",
+            "le fichier d'un tiers doit être intact"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// Poser deux fois de suite ne revendique le fichier qu'une seule fois :
+    /// un `auto` relancé ne doit pas s'attribuer ce qu'il a laissé derrière.
+    #[test]
+    fn poser_deux_fois_ne_revendique_quune_fois() {
+        let d = tmp("idempotence");
+        let f = d.join("brocolis-proxy.sh");
+
+        let premier = write_if_absent(&f, &env_proxy_content(8080), "Variables proxy");
+        let second = write_if_absent(&f, &env_proxy_content(9090), "Variables proxy");
+
+        assert!(premier.is_some(), "la première pose revendique");
+        assert!(second.is_none(), "la seconde ne revendique pas");
+        assert!(
+            std::fs::read_to_string(&f).unwrap().contains("8080"),
+            "et n'écrase pas le contenu de la première"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// Le dossier de politiques doit rester cohérent avec le chemin du fichier :
+    /// une faute de frappe dans l'un des deux ferait écrire au mauvais endroit.
+    #[test]
+    fn le_dossier_de_politique_correspond_au_chemin_du_fichier() {
+        assert_eq!(
+            Path::new(FF_POLICY).parent().unwrap(),
+            Path::new("/etc/firefox/policies")
+        );
+    }
+
     #[test]
     fn env_proxy_content_contains_port() {
         let s = env_proxy_content(8080);
@@ -316,7 +452,10 @@ mod tests {
 
     #[test]
     fn ff_policy_dir_is_etc_firefox() {
-        assert_eq!(FF_POLICY_DIR, "/etc/firefox/policies");
+        assert_eq!(
+            Path::new(FF_POLICY).parent().unwrap(),
+            Path::new("/etc/firefox/policies")
+        );
         assert_eq!(FF_POLICY, "/etc/firefox/policies/policies.json");
         assert_eq!(ENV_PROXY, "/etc/profile.d/brocolis-proxy.sh");
         // Le fichier env-proxy doit terminer en .sh pour être source-able
