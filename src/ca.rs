@@ -39,6 +39,35 @@ pub enum CaError {
 /// largement les domaines d'une session de navigation normale.
 const MAX_CACHED_HOSTS: usize = 1024;
 
+/// Écrit un fichier de clé privée avec des droits restreints DÈS SA CRÉATION.
+///
+/// Un `std::fs::write` suivi d'un `set_permissions` laisse une fenêtre pendant
+/// laquelle le fichier existe en 0644 : un autre utilisateur du poste peut le
+/// lire à cet instant précis. On ouvre donc directement avec le bon mode, et on
+/// resserre malgré tout ensuite au cas où le fichier préexistait avec des
+/// droits trop larges (`mode` ne s'applique qu'à la création).
+pub fn write_private_key(path: &Path, contents: &str) -> std::io::Result<()> {
+    use std::io::Write;
+
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let mut f = opts.open(path)?;
+    f.write_all(contents.as_bytes())?;
+    f.flush()?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(())
+}
+
 /// Un nom d'hôte est-il utilisable tel quel dans un certificat ?
 ///
 /// Le SAN dNSName est encodé en `IA5String`, qui n'accepte QUE de l'ASCII : un
@@ -94,7 +123,10 @@ impl Ca {
             let root_cert_pem = root.serialize_pem()?;
             let root_key_pem = root.serialize_private_key_pem();
             std::fs::write(cert_path, &root_cert_pem)?;
-            std::fs::write(key_path, &root_key_pem)?;
+            // La clé du CA signe des certificats pour N'IMPORTE QUEL site que
+            // le navigateur de l'utilisateur croira ensuite légitime : elle ne
+            // doit jamais être lisible par un autre compte du poste.
+            write_private_key(key_path, &root_key_pem)?;
             tracing::warn!(
                 "Nouveau CA généré: {} / {} — installez {} dans le magasin de confiance du navigateur",
                 cert_path.display(),
