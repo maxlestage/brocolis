@@ -154,3 +154,164 @@ fn base64_decode(s: &str) -> Option<Vec<u8>> {
     }
     Some(out)
 }
+
+/// Aller-retour complet en ligne de commande, sans navigateur ni proxy.
+///
+/// C'est ce qui permet de vérifier qu'une clé fonctionne : avant, il fallait
+/// monter un proxy et un navigateur pour s'en assurer.
+#[test]
+fn encrypt_puis_decrypt_restitue_le_texte() {
+    let d = tmpdir("aller-retour");
+    let cle = String::from_utf8(
+        Command::new(bin()).arg("keygen").output().unwrap().stdout,
+    )
+    .unwrap()
+    .trim()
+    .to_string();
+
+    let chiffre = Command::new(bin())
+        .args(["encrypt", "--text", "rendez-vous ((code 4291)) a 18h", "--key", &cle])
+        .current_dir(&d)
+        .output()
+        .unwrap();
+    assert!(chiffre.status.success());
+    let chiffre = String::from_utf8(chiffre.stdout).unwrap();
+
+    assert!(
+        !chiffre.contains("code 4291"),
+        "le secret ne doit pas apparaître en clair : {chiffre}"
+    );
+    assert!(chiffre.contains("[[BROCOLIS:v1:"), "un jeton doit être produit");
+    assert!(
+        chiffre.contains("rendez-vous ") && chiffre.contains(" a 18h"),
+        "le texte autour du marqueur est conservé : {chiffre}"
+    );
+
+    let clair = Command::new(bin())
+        .args(["decrypt", "--text", chiffre.trim(), "--key", &cle])
+        .current_dir(&d)
+        .output()
+        .unwrap();
+    assert!(clair.status.success());
+    assert_eq!(
+        String::from_utf8(clair.stdout).unwrap().trim(),
+        "rendez-vous code 4291 a 18h",
+        "le clair doit être restitué"
+    );
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// Le texte peut arriver par l'entrée standard, pour s'enchaîner dans un tube.
+#[test]
+fn encrypt_lit_lentree_standard() {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let d = tmpdir("stdin");
+    let cle = String::from_utf8(Command::new(bin()).arg("keygen").output().unwrap().stdout)
+        .unwrap()
+        .trim()
+        .to_string();
+
+    let mut fils = Command::new(bin())
+        .args(["encrypt", "--key", &cle])
+        .current_dir(&d)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    fils.stdin
+        .as_mut()
+        .unwrap()
+        .write_all(b"debut ((secret)) fin")
+        .unwrap();
+    let out = fils.wait_with_output().unwrap();
+
+    assert!(out.status.success());
+    let sortie = String::from_utf8(out.stdout).unwrap();
+    assert!(!sortie.contains("secret"), "pas de fuite : {sortie}");
+    assert!(sortie.contains("[[BROCOLIS:"), "jeton attendu : {sortie}");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// stdout ne doit porter QUE le texte : le compte de segments va sur stderr,
+/// sinon la commande n'est pas utilisable dans un tube.
+#[test]
+fn encrypt_ne_pollue_pas_stdout_avec_le_compte() {
+    let d = tmpdir("tube");
+    let cle = String::from_utf8(Command::new(bin()).arg("keygen").output().unwrap().stdout)
+        .unwrap()
+        .trim()
+        .to_string();
+
+    let out = Command::new(bin())
+        .args(["encrypt", "--text", "a ((b)) c", "--key", &cle])
+        .current_dir(&d)
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert_eq!(stdout.lines().count(), 1, "une seule ligne sur stdout : {stdout:?}");
+    assert!(!stdout.contains("segment"), "le compte ne doit pas être sur stdout");
+    assert!(
+        String::from_utf8(out.stderr).unwrap().contains("segment"),
+        "le compte doit rester visible, sur stderr"
+    );
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// Sans clé, la commande refuse plutôt que d'inventer une clé jetable :
+/// chiffrer avec une clé que personne ne possède donnerait l'illusion d'avoir
+/// protégé quelque chose.
+#[test]
+fn encrypt_sans_cle_refuse_au_lieu_dinventer() {
+    let d = tmpdir("sans-cle");
+    let out = Command::new(bin())
+        .args(["encrypt", "--text", "a ((b)) c"])
+        .current_dir(&d)
+        .env_remove("RUST_BACKTRACE")
+        .output()
+        .unwrap();
+
+    assert!(!out.status.success(), "doit échouer");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("aucune clé"), "message explicite attendu : {err}");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// Une clé qui n'est pas la bonne laisse le jeton intact plutôt que de rendre
+/// n'importe quoi : c'est le comportement « message pour quelqu'un d'autre ».
+#[test]
+fn decrypt_avec_une_mauvaise_cle_laisse_le_jeton_intact() {
+    let d = tmpdir("mauvaise-cle");
+    let cle_a = String::from_utf8(Command::new(bin()).arg("keygen").output().unwrap().stdout)
+        .unwrap().trim().to_string();
+    let cle_b = String::from_utf8(Command::new(bin()).arg("keygen").output().unwrap().stdout)
+        .unwrap().trim().to_string();
+
+    let chiffre = String::from_utf8(
+        Command::new(bin())
+            .args(["encrypt", "--text", "x ((secret)) y", "--key", &cle_a])
+            .current_dir(&d)
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+
+    let out = Command::new(bin())
+        .args(["decrypt", "--text", chiffre.trim(), "--key", &cle_b])
+        .current_dir(&d)
+        .output()
+        .unwrap();
+
+    let sortie = String::from_utf8(out.stdout).unwrap();
+    assert!(out.status.success(), "ce n'est pas une erreur, juste illisible");
+    assert!(
+        sortie.contains("[[BROCOLIS:"),
+        "le jeton doit rester tel quel : {sortie}"
+    );
+    assert!(!sortie.contains("secret"), "et surtout ne rien révéler");
+    let _ = std::fs::remove_dir_all(&d);
+}
