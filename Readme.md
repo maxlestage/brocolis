@@ -285,6 +285,27 @@ Pour une installation persistante, voir le dossier
 > qu'il faut pointer le client sur `127.0.0.1:<port>` manuellement.
 > `--no-system` lance le proxy sans aucune modification système.
 
+### Vérifier sa clé sans navigateur : `encrypt` / `decrypt`
+
+Les deux commandes appliquent exactement la transformation du proxy, hors
+ligne. C'est le moyen le plus rapide de s'assurer qu'une clé est la bonne, ou
+de lire un jeton reçu par un autre canal.
+
+```sh
+$ cle=$(brocolis keygen)                 # la clé seule sur stdout
+$ brocolis encrypt --key "$cle" --text 'rdv ((code 4291)) a 18h'
+rdv [[BROCOLIS:v1:Ob376+nksSGoCRycfGa31Wl6DsujMD3eJReu6ZJDJK8IoLwjfQ==]] a 18h
+
+$ echo '<jeton collé ici>' | brocolis decrypt --key "$cle"
+rdv code 4291 a 18h
+```
+
+Sans `--key`, le trousseau de `brocolis.toml` est utilisé. Le texte peut venir
+de `--text` ou de l'entrée standard. Seul le texte transformé va sur stdout (le
+compte de segments part sur stderr), donc les commandes s'enchaînent dans un
+tube. Un jeton qu'aucune clé n'ouvre est laissé tel quel, sans erreur : c'est un
+message destiné à quelqu'un d'autre.
+
 ### Commandes de base
 
 Générer une clé symétrique AES-256 à partager (canal sûr) :
