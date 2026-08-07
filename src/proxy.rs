@@ -355,7 +355,9 @@ async fn forward_http(
 
     // Le corps n'est mis en mémoire que si on doit vraiment le réécrire ; sinon
     // il est relayé au fil de l'eau (voir MAX_REWRITE_BYTES).
+    let mut requete_reecrite = false;
     let out_body: reqwest::Body = if should_rewrite(in_scope, &parts.headers) {
+        requete_reecrite = true;
         let body_bytes = match body.collect().await {
             Ok(c) => c.to_bytes(),
             Err(e) => return bad_gateway(&format!("lecture du corps: {e}")),
@@ -387,6 +389,17 @@ async fn forward_http(
     // Construit la requête sortante.
     let mut rb = state.http.request(method.clone(), url.clone());
     rb = rb.headers(sanitized_headers(&parts.headers, true));
+    // Un corps relayé au fil de l'eau n'a pas de longueur connue de reqwest,
+    // qui bascule alors en `chunked`. Or la requête d'origine, elle, annonçait
+    // une taille : la perdre change la forme de l'envoi et casse les serveurs
+    // qui refusent le découpage en morceaux. On la restitue puisque le corps
+    // est identique. (`sanitized_headers` la retire, car après réécriture elle
+    // serait fausse.)
+    if !requete_reecrite {
+        if let Some(len) = parts.headers.get(hyper::header::CONTENT_LENGTH) {
+            rb = rb.header(hyper::header::CONTENT_LENGTH, len.clone());
+        }
+    }
     rb = rb.body(out_body);
 
     let upstream = match rb.send().await {
