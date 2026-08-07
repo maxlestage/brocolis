@@ -154,9 +154,12 @@ fn main() -> anyhow::Result<()> {
     match cli.command {
         Command::Keygen => {
             let key = SymKey::generate();
+            // La clé SEULE sur stdout : c'est ce qui rend `key=$(brocolis
+            // keygen)` et `brocolis keygen > cle.txt` utilisables. Les conseils
+            // partent sur stderr, donc restent visibles à l'écran.
             println!("{}", key.to_base64());
-            println!("# Partagez cette clé (canal sûr) avec les utilisateurs autorisés,");
-            println!("# puis placez-la dans brocolis.toml (champ `key`).");
+            eprintln!("# Partagez cette clé (canal sûr) avec les utilisateurs autorisés,");
+            eprintln!("# puis placez-la dans brocolis.toml (champ `key`).");
             Ok(())
         }
         Command::Pair {
@@ -361,12 +364,9 @@ fn load_or_create_identity(path: &Path) -> anyhow::Result<brocolis::agreement::P
         });
     }
     let key = PrivateKey::generate();
-    std::fs::write(path, key.to_base64())?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
-    }
+    // Même écriture protégée que pour la clé du CA : droits restreints dès la
+    // création, sans fenêtre où le fichier serait lisible par tous.
+    brocolis::ca::write_private_key(path, &key.to_base64())?;
     tracing::info!("Nouvelle identité X25519 créée: {}", path.display());
     Ok(key)
 }
