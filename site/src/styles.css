@@ -217,6 +217,14 @@ body {
   border-bottom: 1px solid var(--nav-border);
   padding: 14px 24px 18px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  /* Le tiroir est ancré à une barre collante : ce qui dépasse de l'écran ne
+     peut PAS être rattrapé en faisant défiler la page. En paysage, le bas du
+     tiroir — les sélecteurs de langue et de thème — devenait donc
+     définitivement inatteignable. On le borne à la hauteur disponible et on le
+     rend défilant : quand le contenu tient (portrait), rien ne change. */
+  max-height: calc(100vh - 56px);
+  max-height: calc(100dvh - 56px);
+  overflow-y: auto;
 }
 .nav-drawer.open {
   display: flex;
