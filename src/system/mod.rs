@@ -49,7 +49,7 @@ mod windows;
 use std::path::Path;
 
 /// État d'un proxy `networksetup` (web ou sécurisé).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ProxyState {
     pub enabled: bool,
     pub server: String,
@@ -169,6 +169,7 @@ pub struct SystemProxy {
 }
 
 #[allow(dead_code)]
+#[derive(serde::Serialize, serde::Deserialize)]
 enum Backend {
     Inactive,
     #[cfg(target_os = "macos")]
@@ -208,6 +209,45 @@ enum Backend {
         /// l'arrêt), un par variante détectée.
         firefox_policies: Vec<std::path::PathBuf>,
     },
+}
+
+/// Où l'état d'avant-activation est conservé entre deux invocations.
+///
+/// `engage`/`revert` gardaient cet état EN MÉMOIRE : il disparaissait donc avec
+/// le processus, et un `off` lancé plus tard n'avait plus rien à restaurer.
+/// C'est ce qui empêchait un interrupteur en deux commandes.
+pub fn default_state_path() -> std::path::PathBuf {
+    std::path::PathBuf::from("/etc/brocolis/etat-precedent.json")
+}
+
+impl SystemProxy {
+    /// Écrit l'état d'avant-activation, pour qu'un `off` ultérieur le retrouve.
+    pub fn save_state(&self, path: &Path) -> anyhow::Result<()> {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        let json = serde_json::to_string_pretty(&self.backend)?;
+        std::fs::write(path, json)?;
+        tracing::info!("État d'origine mémorisé dans {}", path.display());
+        Ok(())
+    }
+
+    /// Relit un état précédemment mémorisé. `Ok(None)` si le fichier n'existe
+    /// pas : rien n'a été activé, il n'y a donc rien à défaire.
+    pub fn load_state(path: &Path) -> anyhow::Result<Option<Self>> {
+        if !path.exists() {
+            return Ok(None);
+        }
+        let brut = std::fs::read_to_string(path)?;
+        let backend: Backend = serde_json::from_str(&brut).map_err(|e| {
+            anyhow::anyhow!(
+                "état mémorisé illisible ({}) : {e}. \
+                 Supprimez ce fichier pour repartir d'un état propre.",
+                path.display()
+            )
+        })?;
+        Ok(Some(Self { backend }))
+    }
 }
 
 impl SystemProxy {

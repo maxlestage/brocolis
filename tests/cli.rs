@@ -569,3 +569,129 @@ fn toutes_les_sous_commandes_repondent() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// `on` / `off` / `status` — l'interrupteur
+// ---------------------------------------------------------------------------
+//
+// Ces tests n'engagent JAMAIS le système : ils exercent les garde-fous qui
+// entourent l'activation (état mémorisé, double activation, état corrompu).
+// Le cycle complet a été validé à la main sur une machine jetable ; le rejouer
+// ici modifierait le proxy et le magasin de confiance de la machine de test.
+
+/// Sans état mémorisé, l'interrupteur se déclare inactif.
+#[test]
+fn status_est_inactif_par_defaut() {
+    let d = tmpdir("statut-inactif");
+    let out = Command::new(bin())
+        .args(["status", "--state"])
+        .arg(d.join("etat.json"))
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert_eq!(
+        String::from_utf8(out.stdout).unwrap().trim(),
+        "inactif",
+        "sans état mémorisé, rien n'est actif"
+    );
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// `off` alors que rien n'est actif ne doit ni échouer ni rien créer.
+#[test]
+fn off_sans_etat_ne_fait_rien_et_reussit() {
+    let d = tmpdir("off-a-vide");
+    let etat = d.join("etat.json");
+    let out = Command::new(bin())
+        .args(["off", "--state"])
+        .arg(&etat)
+        .output()
+        .unwrap();
+
+    assert!(out.status.success(), "couper deux fois n'est pas une erreur");
+    assert!(
+        String::from_utf8(out.stdout).unwrap().contains("Déjà inactif"),
+        "l'utilisateur doit comprendre qu'il n'y avait rien à faire"
+    );
+    assert!(!etat.exists(), "aucun fichier ne doit être créé au passage");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// Un `on` alors qu'un état existe déjà ne doit PAS réengager.
+///
+/// C'est le garde-fou important : réengager écraserait l'état d'origine
+/// mémorisé par le premier `on` — l'état d'avant-brocolis serait alors perdu,
+/// et `off` restaurerait une configuration déjà détournée.
+#[test]
+fn on_refuse_de_reengager_et_preserve_letat_memorise() {
+    let d = tmpdir("double-on");
+    let etat = d.join("etat.json");
+    // Un état mémorisé plausible, écrit tel quel : la commande doit s'arrêter
+    // AVANT de toucher au système, donc sans même le relire.
+    std::fs::write(&etat, "{\"Inactive\":null}").unwrap();
+    let avant = std::fs::read_to_string(&etat).unwrap();
+
+    let out = Command::new(bin())
+        .args(["on", "--config"])
+        .arg(d.join("inexistant.toml"))
+        .arg("--state")
+        .arg(&etat)
+        .current_dir(&d)
+        .output()
+        .unwrap();
+
+    assert!(out.status.success());
+    assert!(
+        String::from_utf8(out.stdout).unwrap().contains("Déjà actif"),
+        "un second `on` doit être annoncé comme sans effet"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&etat).unwrap(),
+        avant,
+        "l'état d'origine mémorisé ne doit surtout pas être écrasé"
+    );
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// `status` doit refléter la présence d'un état, sans rien modifier.
+#[test]
+fn status_signale_actif_et_ne_modifie_rien() {
+    let d = tmpdir("statut-actif");
+    let etat = d.join("etat.json");
+    std::fs::write(&etat, "{\"Inactive\":null}").unwrap();
+
+    let out = Command::new(bin())
+        .args(["status", "--state"]).arg(&etat).output().unwrap();
+
+    assert!(out.status.success());
+    let s = String::from_utf8(out.stdout).unwrap();
+    assert!(s.contains("actif"), "doit annoncer l'état actif : {s}");
+    assert!(etat.exists(), "`status` ne doit rien effacer");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// Un état illisible doit produire une erreur qui dit quoi faire, et surtout
+/// NE PAS effacer le fichier : il peut contenir la seule trace de la
+/// configuration d'origine.
+#[test]
+fn off_sur_un_etat_corrompu_explique_et_conserve_le_fichier() {
+    let d = tmpdir("etat-corrompu");
+    let etat = d.join("etat.json");
+    std::fs::write(&etat, "ceci n'est pas du json").unwrap();
+
+    let out = Command::new(bin())
+        .args(["off", "--state"]).arg(&etat)
+        .env_remove("RUST_BACKTRACE")
+        .output()
+        .unwrap();
+
+    assert!(!out.status.success(), "un état illisible est une erreur");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("illisible"), "le message doit être explicite : {err}");
+    assert!(
+        err.contains("Supprimez"),
+        "et indiquer comment s'en sortir : {err}"
+    );
+    assert!(etat.exists(), "le fichier ne doit pas être effacé sur erreur");
+    let _ = std::fs::remove_dir_all(&d);
+}
