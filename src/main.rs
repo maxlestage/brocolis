@@ -157,6 +157,33 @@ enum Command {
         #[arg(long, default_value_t = 120)]
         timeout: u64,
     },
+    /// Active le chiffrement : dirige le système vers le proxy et fait
+    /// confiance au CA. L'état d'origine est mémorisé pour `off`.
+    ///
+    /// À la différence de `auto`, la commande rend la main : rien à laisser
+    /// ouvert. Le proxy lui-même tourne en service (LaunchDaemon sur macOS,
+    /// systemd sur Linux), installé une fois pour toutes.
+    On {
+        /// Fichier de configuration TOML.
+        #[arg(long, default_value = "/etc/brocolis/brocolis.toml")]
+        config: PathBuf,
+        /// Où mémoriser l'état d'origine (relu par `off`).
+        #[arg(long)]
+        state: Option<PathBuf>,
+    },
+    /// Coupe le chiffrement et remet le système exactement dans l'état
+    /// mémorisé par `on`. Le service, lui, continue de tourner.
+    Off {
+        /// Emplacement de l'état mémorisé par `on`.
+        #[arg(long)]
+        state: Option<PathBuf>,
+    },
+    /// Indique si le chiffrement est actif, et depuis quel état.
+    Status {
+        /// Emplacement de l'état mémorisé par `on`.
+        #[arg(long)]
+        state: Option<PathBuf>,
+    },
     /// Génère/charge le CA et l'exporte pour le navigateur.
     Ca {
         #[arg(long, default_value = "brocolis-ca.crt")]
@@ -213,6 +240,9 @@ fn main() -> anyhow::Result<()> {
             eprintln!("# {n} jeton(s) déchiffré(s)");
             Ok(())
         }
+        Command::On { config, state } => run_on(&config, state),
+        Command::Off { state } => run_off(state),
+        Command::Status { state } => run_status(state),
         Command::Pair {
             code,
             server,
@@ -405,6 +435,79 @@ async fn run_auto(cfg: Config, config_path: PathBuf, system: bool) -> anyhow::Re
 
 /// Charge la clé privée X25519 locale depuis `path`, ou en crée une (persistée
 /// en base64, droits `0600` sous Unix).
+/// Emplacement de l'état mémorisé, surchargeable pour les tests.
+fn chemin_etat(state: Option<PathBuf>) -> PathBuf {
+    state.unwrap_or_else(brocolis::system::default_state_path)
+}
+
+/// `on` — dirige le système vers le proxy et mémorise l'état d'avant.
+fn run_on(config: &Path, state: Option<PathBuf>) -> anyhow::Result<()> {
+    use brocolis::system::SystemProxy;
+    let chemin = chemin_etat(state);
+
+    if chemin.exists() {
+        println!("Déjà actif (état mémorisé dans {}).", chemin.display());
+        println!("Rien à faire — `brocolis off` pour couper.");
+        return Ok(());
+    }
+
+    let cfg = Config::load(config)?;
+    let port = cfg.listen.port();
+
+    // Le CA doit exister AVANT d'engager : c'est lui qu'on dépose dans le
+    // magasin de confiance. Sans cela, une installation neuve échouait sur un
+    // « No such file or directory » incompréhensible. `auto` fait de même.
+    brocolis::ca::Ca::load_or_generate(&cfg.ca_cert, &cfg.ca_key)
+        .map_err(|e| anyhow::anyhow!("CA indisponible ({}) : {e}", cfg.ca_cert.display()))?;
+
+    match SystemProxy::engage(&cfg.ca_cert, port)? {
+        Some(sp) => {
+            // Mémorisé AVANT d'annoncer le succès : sans cet état, `off` ne
+            // saurait rien restaurer et le système resterait détourné.
+            sp.save_state(&chemin)?;
+            println!("✅ Chiffrement actif (proxy 127.0.0.1:{port}).");
+            println!("   `brocolis off` pour couper, `brocolis status` pour vérifier.");
+        }
+        None => {
+            println!("Rien à activer : configuration système non prise en charge ici,");
+            println!("ou droits administrateur manquants (essayez avec sudo).");
+        }
+    }
+    Ok(())
+}
+
+/// `off` — restaure exactement ce que `on` avait mémorisé.
+fn run_off(state: Option<PathBuf>) -> anyhow::Result<()> {
+    use brocolis::system::SystemProxy;
+    let chemin = chemin_etat(state);
+
+    match SystemProxy::load_state(&chemin)? {
+        Some(sp) => {
+            sp.revert();
+            // L'état n'est retiré qu'APRÈS restauration : si celle-ci échoue,
+            // le fichier reste et l'opération peut être retentée.
+            std::fs::remove_file(&chemin)?;
+            println!("✅ Chiffrement coupé, état d'origine restauré.");
+        }
+        None => {
+            println!("Déjà inactif : aucun état mémorisé dans {}.", chemin.display());
+        }
+    }
+    Ok(())
+}
+
+/// `status` — dit simplement si c'est actif, sans rien modifier.
+fn run_status(state: Option<PathBuf>) -> anyhow::Result<()> {
+    let chemin = chemin_etat(state);
+    if chemin.exists() {
+        println!("actif");
+        println!("   état d'origine mémorisé dans {}", chemin.display());
+    } else {
+        println!("inactif");
+    }
+    Ok(())
+}
+
 /// Texte à traiter : l'option `--text`, sinon l'entrée standard.
 fn read_text(text: Option<String>) -> anyhow::Result<String> {
     match text {

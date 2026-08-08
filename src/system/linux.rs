@@ -37,6 +37,7 @@ fn is_root() -> bool {
 /// Famille de distribution Linux gérée. Utilisée par le `Backend::Linux`
 /// pour rejouer la mise à jour du magasin de confiance à l'arrêt.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub(super) enum Distro {
     Debian,
     Rhel,

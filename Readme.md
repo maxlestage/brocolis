@@ -173,6 +173,33 @@ cargo build --release      # binaire: target/release/brocolis
 
 ## Utilisation (CLI)
 
+### Installer une fois, activer à volonté : `on` / `off` / `status`
+
+`auto` occupe un terminal et tout se défait quand on le ferme. Pour un usage
+quotidien, on installe le service **une seule fois** — LaunchDaemon sur macOS
+(`macos/install.sh`), service systemd sur Linux (posé par le paquet `.deb` /
+`.rpm`) — puis on bascule à la demande :
+
+```sh
+$ sudo brocolis on        # dirige le système vers le proxy, mémorise l'état d'avant
+✅ Chiffrement actif (proxy 127.0.0.1:8080).
+
+$ brocolis status
+actif
+
+$ sudo brocolis off       # remet EXACTEMENT la configuration d'origine
+✅ Chiffrement coupé, état d'origine restauré.
+```
+
+Les commandes rendent la main : rien à laisser ouvert. Le service continue de
+tourner en tâche de fond ; `on`/`off` ne font que brancher ou débrancher le
+système dessus.
+
+L'état d'avant-activation est mémorisé dans `/etc/brocolis/etat-precedent.json`
+(modifiable avec `--state`). C'est lui qui permet à `off` de restaurer
+fidèlement — un `on` déjà actif refuse donc de réengager, pour ne pas écraser
+cette trace. Au premier `on`, le CA est généré s'il n'existe pas encore.
+
 ### Tout-en-un : `brocolis auto` (macOS, Linux, Windows)
 
 La façon la plus simple. Une seule commande :
