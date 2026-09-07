@@ -5,6 +5,8 @@
   <img src="https://github.com/maxlestage/brocolis/blob/master/assets/brocolisMan.png" width="512" style="border-radius: 10px;">
 </div>
 
+**Conçu et développé par Maxime Nathan Lestage.**
+
 🌐 **Site vitrine** : <https://brocolis-dafbe9beac75.herokuapp.com/> (déployé depuis `master`, servi par `server.js`).
 
 > Le déploiement GitHub Pages a été retiré : Pages n'est pas activable sur un

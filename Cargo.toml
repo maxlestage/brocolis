@@ -2,6 +2,9 @@
 name = "brocolis"
 version = "0.1.0"
 edition = "2021"
+# Adresse de non-réponse GitHub, comme dans les métadonnées de paquet
+# plus bas : le dépôt n'expose volontairement pas d'adresse personnelle.
+authors = ["Maxime Nathan Lestage <maxlestage@users.noreply.github.com>"]
 description = "Proxy MITM Rust pour le chiffrement sélectif du trafic HTTP/HTTPS"
 license = "LicenseRef-Proprietary"
 readme = "Readme.md"
