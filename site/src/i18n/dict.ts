@@ -126,7 +126,7 @@ export const DICT = {
       "Le CA est <strong>retiré du magasin de confiance</strong> automatiquement à l'arrêt s'il a été ajouté par Brocolis.",
     "s6.li4":
       "Code source consultable pour audit (logiciel sous licence propriétaire).",
-    "footer": "Brocolis — proxy MITM en Rust",
+    "footer": "Brocolis — proxy MITM en Rust. Conçu et développé par Maxime Nathan Lestage.",
   },
   en: {
     "meta.title": "Brocolis 🥦 — Rust MITM proxy for selective encryption",
@@ -250,7 +250,7 @@ export const DICT = {
       "The CA is <strong>removed from the trust store</strong> automatically on exit if Brocolis added it.",
     "s6.li4":
       "Source code available for audit (proprietary-licensed software).",
-    "footer": "Brocolis — Rust MITM proxy",
+    "footer": "Brocolis — Rust MITM proxy. Designed and developed by Maxime Nathan Lestage.",
   },
   es: {
     "meta.title": "Brocolis 🥦 — Proxy MITM en Rust para cifrado selectivo",
@@ -375,7 +375,7 @@ export const DICT = {
       "El CA se <strong>retira del almacén de confianza</strong> automáticamente al salir si Brocolis lo añadió.",
     "s6.li4":
       "Código fuente consultable para auditoría (software bajo licencia propietaria).",
-    "footer": "Brocolis — proxy MITM en Rust",
+    "footer": "Brocolis — proxy MITM en Rust. Diseñado y desarrollado por Maxime Nathan Lestage.",
   },
 } as const satisfies Record<Lang, Record<string, string>>;
 
