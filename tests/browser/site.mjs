@@ -75,6 +75,20 @@ async function newPage(viewport, locale = "fr-FR") {
   return { ctx, page, errors };
 }
 
+/**
+ * Attend qu'une condition devienne vraie côté page, sans lever si elle ne
+ * vient pas : l'assertion qui suit doit pouvoir rapporter la valeur réelle.
+ *
+ * Toutes les attentes du harnais passent par là plutôt que par un délai fixe.
+ * Yew rend de façon asynchrone et plusieurs propriétés sont animées : un
+ * `waitForTimeout` calibré sur cette machine devient une source d'échecs
+ * intermittents sur une machine plus lente — c'est exactement ce qui est
+ * arrivé à l'assertion sur le fond sombre.
+ */
+async function until(page, fn, arg) {
+  await page.waitForFunction(fn, arg, { timeout: 5000 }).catch(() => {});
+}
+
 async function load(page, url) {
   await page.goto(url, { waitUntil: "networkidle" });
   // L'application est rendue par WebAssembly : rien n'est dans le HTML initial.
@@ -110,7 +124,7 @@ async function load(page, url) {
   // Tiroir de navigation.
   const drawerHiddenBefore = await page.$eval("#nav-drawer", (e) => getComputedStyle(e).display);
   await page.click(".nav-toggle");
-  await page.waitForTimeout(150);
+  await until(page, () => document.querySelector(".nav-toggle")?.getAttribute("aria-expanded") === "true");
   const drawerShown = await page.$eval("#nav-drawer", (e) => getComputedStyle(e).display);
   const expanded = await page.getAttribute(".nav-toggle", "aria-expanded");
   drawerHiddenBefore === "none" && drawerShown === "flex" && expanded === "true"
@@ -118,15 +132,15 @@ async function load(page, url) {
     : bad(`tiroir : ${drawerHiddenBefore} → ${drawerShown}, aria-expanded=${expanded}`);
 
   await page.keyboard.press("Escape");
-  await page.waitForTimeout(150);
+  await until(page, () => getComputedStyle(document.querySelector("#nav-drawer")).display === "none");
   const afterEsc = await page.$eval("#nav-drawer", (e) => getComputedStyle(e).display);
   afterEsc === "none" ? ok("Échap referme le tiroir") : bad(`Échap : display=${afterEsc}`);
 
   // Un lien de section ne doit PAS changer la route.
   await page.click(".nav-toggle");
-  await page.waitForTimeout(100);
+  await until(page, () => getComputedStyle(document.querySelector("#nav-drawer")).display === "flex");
   await page.click('.nav-links a[href="#features"]');
-  await page.waitForTimeout(600);
+  await until(page, () => window.scrollY > 100);
   const hash = await page.evaluate(() => location.hash);
   const navbarStill = await page.$("nav.navbar");
   hash === "" && navbarStill
@@ -138,9 +152,9 @@ async function load(page, url) {
   // Changement de langue.
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.click(".nav-toggle");
-  await page.waitForTimeout(100);
+  await until(page, () => getComputedStyle(document.querySelector("#nav-drawer")).display === "flex");
   await page.click('.switcher button:has-text("EN")');
-  await page.waitForTimeout(200);
+  await until(page, () => document.documentElement.lang === "en");
   const lang = await page.getAttribute("html", "lang");
   const title = await page.title();
   lang === "en" && title.includes("Rust MITM proxy")
@@ -149,12 +163,22 @@ async function load(page, url) {
   const desc = await page.getAttribute('meta[name="description"]', "content");
   desc?.startsWith("A Rust MITM proxy") ? ok("meta description traduite") : bad(`meta description : ${desc?.slice(0, 40)}`);
 
-  // Changement de thème.
+  // Changement de thème. `body` porte une transition de 0,2s sur
+  // `background-color` : lire la couleur après un délai fixe attrape une
+  // valeur intermédiaire dès que la machine est un peu lente (rgb(14,21,17)
+  // au lieu de rgb(13,20,16) sur un runner d'intégration continue). On attend
+  // que la peinture converge au lieu de deviner un délai — l'assertion porte
+  // bien sur l'état final, elle ne le suppose plus atteint.
+  const FOND_SOMBRE = "rgb(13, 20, 16)";
   await page.click('.switcher button[title="Dark"]');
-  await page.waitForTimeout(200);
+  await until(
+    page,
+    (attendu) => getComputedStyle(document.body).backgroundColor === attendu,
+    FOND_SOMBRE,
+  );
   const theme = await page.getAttribute("html", "data-theme");
   const bg = await page.$eval("body", (e) => getComputedStyle(e).backgroundColor);
-  theme === "dark" && bg === "rgb(13, 20, 16)"
+  theme === "dark" && bg === FOND_SOMBRE
     ? ok(`thème → dark (fond ${bg})`)
     : bad(`thème : data-theme=${theme}, fond=${bg}`);
 
@@ -174,7 +198,7 @@ async function load(page, url) {
   const focused = await page.evaluate(() => document.activeElement?.className);
   focused === "skip-link" ? ok("premier Tab = lien d'évitement") : bad(`premier Tab : ${focused}`);
   await page.keyboard.press("Enter");
-  await page.waitForTimeout(300);
+  await until(page, () => document.activeElement?.id === "contenu");
   const focusedAfter = await page.evaluate(() => document.activeElement?.id);
   focusedAfter === "contenu" ? ok("le lien d'évitement déplace le focus sur <main>") : bad(`focus après Entrée : ${focusedAfter}`);
   const hashAfterSkip = await page.evaluate(() => location.hash);
@@ -191,7 +215,7 @@ async function load(page, url) {
   await page.evaluate(() => window.scrollTo(0, 2000));
   await page.click('.hero a.btn.primary, .platform-card a.btn.primary');
   await page.waitForSelector(".dl-title", { timeout: 10000 });
-  await page.waitForTimeout(400);
+  await until(page, () => window.scrollY < 10);
 
   const top = await page.evaluate(() => window.scrollY);
   top < 10 ? ok(`arrivée en haut de la page de téléchargement (scrollY=${Math.round(top)})`) : bad(`scrollY=${Math.round(top)} à l'arrivée`);
@@ -270,7 +294,7 @@ for (const w of [601, 760, 905, 959, 960]) {
   const hamburger = await page.$eval(".nav-toggle", (e) => getComputedStyle(e).display);
   if (hamburger !== "none") {
     await page.click(".nav-toggle");
-    await page.waitForTimeout(120);
+    await until(page, () => getComputedStyle(document.querySelector("#nav-drawer")).display === "flex");
   }
   const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   over <= 0 ? ok(`${w}px : pas de débordement, menu ouvert`) : bad(`${w}px : débordement de ${over}px`);
