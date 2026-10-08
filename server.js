@@ -165,6 +165,9 @@ const MIME = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".mjs": "text/javascript; charset=utf-8",
+  // Indispensable, et pas un détail de confort : `WebAssembly.instantiate`
+  // refuse un module servi sous un autre type, et la page reste blanche.
+  ".wasm": "application/wasm",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".map": "application/json; charset=utf-8",
@@ -181,6 +184,11 @@ const MIME = {
   ".txt": "text/plain; charset=utf-8",
 };
 
+// Noms produits par Trunk : `<nom>-<16 chiffres hexadécimaux>.<ext>`, et
+// `<nom>-<empreinte>_bg.wasm` pour le module WebAssembly. L'empreinte est
+// calculée sur le contenu.
+const HASHED_NAME = /-[0-9a-f]{16}(?:_bg)?\.(?:js|wasm|css)$/;
+
 function sendFile(res, filePath, status) {
   fs.readFile(filePath, (err, data) => {
     if (err) {
@@ -189,11 +197,13 @@ function sendFile(res, filePath, status) {
       return;
     }
     const ext = path.extname(filePath).toLowerCase();
-    // Cache : les assets Vite sont fingerprintés (hash dans le nom) donc
-    // immuables ; le HTML doit être revalidé à chaque visite, sinon un
-    // navigateur garde un index.html périmé qui pointe vers des assets
-    // supprimés au déploiement suivant (page blanche).
-    const isHashedAsset = filePath.includes(`${path.sep}assets${path.sep}`);
+    // Cache : les fichiers produits par Trunk portent une empreinte de leur
+    // contenu dans leur nom, donc un nom ne désigne jamais deux contenus
+    // différents et peut être déclaré immuable. Le HTML, lui, doit être
+    // revalidé à chaque visite : sinon un navigateur garde un index.html
+    // périmé qui pointe vers des fichiers supprimés au déploiement suivant
+    // (page blanche).
+    const isHashedAsset = HASHED_NAME.test(path.basename(filePath));
     const cacheControl =
       ext === ".html"
         ? "no-cache"

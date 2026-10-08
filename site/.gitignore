@@ -1,6 +1,6 @@
-node_modules
-dist
-.vite
-*.tsbuildinfo
-vite.config.d.ts
-vite.config.js
+# Artefacts de compilation Rust/wasm.
+/target
+
+# `dist/` n'est PAS ignoré, à l'inverse de l'usage habituel : Heroku construit
+# ce dépôt avec le buildpack Node, qui n'a pas de chaîne Rust. Le site compilé
+# est donc versionné, et c'est lui qui est déployé. Voir Readme.md § Site.

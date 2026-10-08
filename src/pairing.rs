@@ -16,7 +16,7 @@
 
 use std::time::Duration;
 
-use rand::RngCore;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use toml_edit::{Array, DocumentMut, Item, Value};
 

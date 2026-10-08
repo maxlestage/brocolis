@@ -16,7 +16,7 @@
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
 use hkdf::Hkdf;
-use rand::RngCore;
+use rand::Rng;
 use sha2::{Digest, Sha256};
 use x25519_dalek::{PublicKey, SharedSecret, StaticSecret};
 

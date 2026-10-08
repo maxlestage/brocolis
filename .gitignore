@@ -13,5 +13,7 @@ brocolis-x25519.*
 # Paquets Linux générés par linux/build-packages.sh
 /linux/dist/
 
-# Déploiement Node / Heroku (le site est reconstruit au build)
+# Déploiement Node / Heroku
 /node_modules
+# Dépendances du harnais de vérification navigateur (tests/browser).
+/tests/browser/node_modules

@@ -1,0 +1,113 @@
+name: Site (WebAssembly)
+
+# Le site vitrine est une application Yew compilée en WebAssembly (crate
+# `site/`, indépendante du proxy). Ce workflow vérifie qu'elle compile, qu'elle
+# est propre au sens de clippy, et que le `site/dist` versionné est complet.
+#
+# Pourquoi `site/dist` est versionné : Heroku construit ce dépôt avec le
+# buildpack Node, qui n'a pas de chaîne Rust. Le build ne peut donc pas avoir
+# lieu sur le dyno. Voir Readme.md § Site vitrine.
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'site/**'
+      - 'scripts/check-dist.mjs'
+      - '.github/workflows/site.yml'
+  pull_request:
+    paths:
+      - 'site/**'
+      - 'scripts/check-dist.mjs'
+      - '.github/workflows/site.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TRUNK_VERSION: '0.21.14'
+
+jobs:
+  build:
+    name: Build, clippy & dist
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+
+      # Vérifié AVANT de reconstruire : c'est le dist du dépôt qu'on déploie,
+      # pas celui que ce job vient de produire.
+      - name: Le dist versionné est complet
+        working-directory: .
+        run: node scripts/check-dist.mjs
+
+      - name: Cible wasm et composants
+        run: |
+          rustup target add wasm32-unknown-unknown
+          rustup component add clippy rustfmt
+
+      - name: Cache des dépendances
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: site
+
+      # Compiler trunk depuis les sources prend plusieurs minutes : on garde le
+      # binaire d'un run à l'autre, invalidé par le numéro de version.
+      - name: Cache de trunk
+        id: cache-trunk
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/trunk
+          key: trunk-${{ env.TRUNK_VERSION }}-${{ runner.os }}
+
+      - name: Installer trunk
+        if: steps.cache-trunk.outputs.cache-hit != 'true'
+        working-directory: .
+        run: cargo install trunk --version ${{ env.TRUNK_VERSION }} --locked
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Tests
+        run: cargo test
+
+      - name: Clippy (zéro warning)
+        run: cargo clippy --target wasm32-unknown-unknown --all-targets -- -D warnings
+
+      - name: Build de production
+        run: trunk build --release
+
+      # Le build qu'on vient de faire doit lui aussi produire un dist complet :
+      # une référence cassée dans index.html serait invisible autrement.
+      - name: Le dist reconstruit est complet
+        working-directory: .
+        run: node scripts/check-dist.mjs
+
+  navigateur:
+    name: Rendu dans un navigateur
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: tests/browser
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22'
+
+      # Le site servi est le `site/dist` versionné : ce job vérifie donc
+      # exactement ce qui sera déployé, pas une reconstruction locale.
+      - name: Dépendances du harnais
+        run: npm ci
+
+      - name: Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Vérification du rendu
+        run: npm test
