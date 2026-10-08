@@ -1,0 +1,42 @@
+[package]
+name = "brocolis-site"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Site vitrine Brocolis — application WebAssembly (Yew)"
+authors = ["Maxime Nathan Lestage <maxlestage@users.noreply.github.com>"]
+license = "LicenseRef-Proprietary"
+
+# Espace de travail autonome, volontairement vide. La racine du dépôt est
+# elle-même un paquet Cargo (le proxy) : sans ce `[workspace]`, Cargo refuserait
+# de compiler ce crate imbriqué avec « current package believes it's in a
+# workspace when it's not ». Les deux cibles restent ainsi indépendantes : le
+# proxy compile pour l'hôte, le site pour wasm32-unknown-unknown.
+[workspace]
+
+[dependencies]
+# Rendu côté client uniquement : pas de SSR, le site est servi en statique.
+yew = { version = "0.23", features = ["csr"] }
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = [
+    "Document",
+    "Element",
+    "Event",
+    "EventTarget",
+    "HtmlElement",
+    "KeyboardEvent",
+    "Location",
+    "Navigator",
+    "Storage",
+    "Window",
+] }
+
+# Le binaire part sur le réseau : on optimise la taille, pas le temps de
+# compilation. `panic = "abort"` supprime la machinerie de déroulement, inutile
+# en wasm où une panique arrête de toute façon l'instance.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
