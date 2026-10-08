@@ -379,7 +379,37 @@ publient/actualisent automatiquement la release GitHub **`cli-latest`** :
 Il suffit de télécharger l'artefact correspondant à votre OS depuis l'onglet
 *Releases*. Un tag `v*` produit en plus une release versionnée.
 
-### Site vitrine : relais de téléchargement (`/dl/*`)
+### Site vitrine : application WebAssembly
+
+Le site (`site/`) est une application **Yew compilée en WebAssembly** — même
+langage que le proxy, donc une seule chaîne d'outils pour tout le dépôt.
+Trois langues (fr/en/es), trois thèmes, routage par fragment d'URL, aucun
+appel réseau en dehors des téléchargements.
+
+```sh
+cd site
+trunk serve            # développement, rechargement à chaud sur :8081
+trunk build --release  # production → site/dist
+```
+
+Il faut `trunk` (`cargo install trunk --locked`) et la cible
+`wasm32-unknown-unknown` (`rustup target add wasm32-unknown-unknown`).
+
+**`site/dist` est versionné**, contrairement à l'usage. Raison : Heroku
+construit ce dépôt avec le buildpack Node, qui n'a pas de chaîne Rust — le
+site ne peut donc pas être compilé sur le dyno. Conséquence pratique : après
+toute modification de `site/`, **reconstruire et committer `site/dist`**,
+sinon le déploiement sert l'ancienne version. `npm run heroku-postbuild`
+(exécuté par Heroku) lance `scripts/check-dist.mjs`, qui fait échouer le
+déploiement si `site/dist` est absent ou incomplet — mais il ne peut pas
+détecter un `dist` simplement périmé.
+
+> Alternative possible : ajouter un buildpack Rust à l'application Heroku pour
+> compiler à chaque déploiement. Écartée ici parce que l'installation de
+> `trunk` depuis les sources prend à elle seule ~6 minutes, ce qui approche la
+> limite de build de Heroku.
+
+### Relais de téléchargement (`/dl/*`)
 
 Ce dépôt est **privé**, donc ses assets de release renvoient `404` à toute
 requête non authentifiée. Les boutons du site ne pointent donc pas vers

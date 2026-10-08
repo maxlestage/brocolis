@@ -12,8 +12,8 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, Once};
 
 use rcgen::{
-    BasicConstraints, Certificate, CertificateParams, DnType, IsCa, KeyUsagePurpose,
-    ExtendedKeyUsagePurpose, KeyPair,
+    BasicConstraints, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair,
+    KeyUsagePurpose,
 };
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::ServerConfig;
@@ -88,8 +88,9 @@ fn is_encodable_host(host: &str) -> bool {
 
 /// Autorité de certification racine + cache de configurations TLS par hôte.
 pub struct Ca {
-    /// Certificat racine (rechargé en mémoire pour signer les feuilles).
-    root: Certificate,
+    /// Signataire des certificats feuilles : le DN, les usages et la méthode
+    /// d'identifiant de clé du certificat racine, associés à sa clé privée.
+    issuer: Issuer<'static, KeyPair>,
     /// PEM du certificat racine, à exporter pour le navigateur.
     root_cert_pem: String,
     /// Configurations TLS feuilles déjà générées, indexées par nom d'hôte.
@@ -100,28 +101,31 @@ impl Ca {
     /// Charge le CA depuis `cert_path`/`key_path`, ou le génère puis le
     /// persiste si les fichiers n'existent pas.
     ///
-    /// rcgen 0.12 ne sait pas reconstruire un signataire depuis un PEM ; on
-    /// reconstruit donc des paramètres CA *déterministes* (mêmes DN/extensions)
-    /// associés à la clé privée rechargée. Le certificat racine envoyé au
-    /// navigateur reste celui stocké sur disque.
+    /// Au rechargement, le signataire est reconstruit À PARTIR DU CERTIFICAT
+    /// STOCKÉ, et non de paramètres réécrits à l'identique. La différence n'est
+    /// pas cosmétique : le champ « issuer » des feuilles doit correspondre au
+    /// « subject » du certificat racine effectivement installé dans le
+    /// navigateur. Avec des paramètres reconstruits, toute évolution ultérieure
+    /// de `root_params` ferait signer les feuilles par une autorité que le
+    /// navigateur ne reconnaîtrait pas — et l'interception casserait en
+    /// silence, sur tous les postes où le CA avait été installé plus tôt.
     pub fn load_or_generate(cert_path: &Path, key_path: &Path) -> Result<Self, CaError> {
         if cert_path.exists() && key_path.exists() {
             let cert_pem = std::fs::read_to_string(cert_path)?;
             let key_pem = std::fs::read_to_string(key_path)?;
             let key = KeyPair::from_pem(&key_pem)?;
-            let mut params = Self::root_params();
-            params.key_pair = Some(key);
-            let root = Certificate::from_params(params)?;
+            let issuer = Issuer::from_ca_cert_pem(&cert_pem, key)?;
             tracing::info!("CA chargé depuis {}", cert_path.display());
             Ok(Self {
-                root,
+                issuer,
                 root_cert_pem: cert_pem,
                 cache: Mutex::new(HashMap::new()),
             })
         } else {
-            let root = Certificate::from_params(Self::root_params())?;
-            let root_cert_pem = root.serialize_pem()?;
-            let root_key_pem = root.serialize_private_key_pem();
+            let key = KeyPair::generate()?;
+            let params = Self::root_params()?;
+            let root_cert_pem = params.self_signed(&key)?.pem();
+            let root_key_pem = key.serialize_pem();
             std::fs::write(cert_path, &root_cert_pem)?;
             // La clé du CA signe des certificats pour N'IMPORTE QUEL site que
             // le navigateur de l'utilisateur croira ensuite légitime : elle ne
@@ -134,7 +138,7 @@ impl Ca {
                 cert_path.display()
             );
             Ok(Self {
-                root,
+                issuer: Issuer::new(params, key),
                 root_cert_pem,
                 cache: Mutex::new(HashMap::new()),
             })
@@ -142,8 +146,8 @@ impl Ca {
     }
 
     /// Paramètres déterministes du certificat racine (DN/extensions fixes).
-    fn root_params() -> CertificateParams {
-        let mut params = CertificateParams::new(Vec::<String>::new());
+    fn root_params() -> Result<CertificateParams, CaError> {
+        let mut params = CertificateParams::new(Vec::<String>::new())?;
         params
             .distinguished_name
             .push(DnType::CommonName, "Brocolis Root CA");
@@ -156,7 +160,7 @@ impl Ca {
             KeyUsagePurpose::CrlSign,
             KeyUsagePurpose::DigitalSignature,
         ];
-        params
+        Ok(params)
     }
 
     /// PEM du certificat racine (à fournir au navigateur).
@@ -199,7 +203,7 @@ impl Ca {
 
     fn make_leaf_config(&self, host: &str) -> Result<ServerConfig, CaError> {
         ensure_crypto_provider();
-        let mut params = CertificateParams::new(vec![host.to_string()]);
+        let mut params = CertificateParams::new(vec![host.to_string()])?;
         params.distinguished_name.push(DnType::CommonName, host);
         params.is_ca = IsCa::ExplicitNoCa;
         params.use_authority_key_identifier_extension = true;
@@ -209,12 +213,11 @@ impl Ca {
         ];
         params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
 
-        let leaf = Certificate::from_params(params)?;
-        let leaf_cert_pem = leaf.serialize_pem_with_signer(&self.root)?;
-        let leaf_key_pem = leaf.serialize_private_key_pem();
+        let leaf_key = KeyPair::generate()?;
+        let leaf = params.signed_by(&leaf_key, &self.issuer)?;
 
-        let cert_chain = pem_to_cert_chain(&leaf_cert_pem)?;
-        let key = pem_to_private_key(&leaf_key_pem)?;
+        let cert_chain = pem_to_cert_chain(&leaf.pem())?;
+        let key = pem_to_private_key(&leaf_key.serialize_pem())?;
 
         let mut cfg = ServerConfig::builder()
             .with_no_client_auth()
@@ -266,12 +269,12 @@ mod tests_hote_hostile {
         let ca = Ca::load_or_generate(&dir.join("ca.crt"), &dir.join("ca.key")).unwrap();
 
         for hote in [
-            "é".repeat(10),                 // non ASCII -> paniquait
-            "aé.example.com".to_string(),   // non ASCII mêlé
-            "\u{0}\u{1}".to_string(),       // caractères de contrôle
-            "a b\tc".to_string(),           // espaces
-            String::new(),                  // vide
-            "a".repeat(300),                // trop long
+            "é".repeat(10),               // non ASCII -> paniquait
+            "aé.example.com".to_string(), // non ASCII mêlé
+            "\u{0}\u{1}".to_string(),     // caractères de contrôle
+            "a b\tc".to_string(),         // espaces
+            String::new(),                // vide
+            "a".repeat(300),              // trop long
         ] {
             let r = ca.server_config_for(&hote);
             assert!(r.is_err(), "hôte {hote:?} devrait être refusé proprement");
@@ -332,6 +335,131 @@ mod tests {
         // Rechargement depuis le disque.
         let ca2 = Ca::load_or_generate(&cert, &key).unwrap();
         ca2.server_config_for("example.com").unwrap();
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Fait circuler les octets TLS en attente d'un bout à l'autre.
+    fn transmettre(
+        de: &mut rustls::Connection,
+        vers: &mut rustls::Connection,
+    ) -> Result<(), rustls::Error> {
+        let mut tampon = Vec::new();
+        while de.wants_write() {
+            de.write_tls(&mut tampon).expect("écriture en mémoire");
+        }
+        let mut reste = &tampon[..];
+        while !reste.is_empty() {
+            vers.read_tls(&mut reste).expect("lecture en mémoire");
+            vers.process_new_packets()?;
+        }
+        Ok(())
+    }
+
+    /// Négocie TLS entre un serveur utilisant `config` et un client qui ne fait
+    /// confiance qu'à `racines_pem`. Renvoie l'erreur du client, s'il refuse.
+    fn poignee_de_main(
+        config: Arc<ServerConfig>,
+        racines_pem: &str,
+        hote: &'static str,
+    ) -> Result<(), rustls::Error> {
+        let mut racines = rustls::RootCertStore::empty();
+        for certificat in pem_to_cert_chain(racines_pem).expect("PEM de racine lisible") {
+            racines.add(certificat).expect("racine acceptable");
+        }
+        let client_config = Arc::new(
+            rustls::ClientConfig::builder()
+                .with_root_certificates(racines)
+                .with_no_client_auth(),
+        );
+
+        let mut serveur: rustls::Connection = rustls::ServerConnection::new(config)
+            .expect("configuration serveur valide")
+            .into();
+        let mut client: rustls::Connection =
+            rustls::ClientConnection::new(client_config, hote.try_into().expect("nom d'hôte"))
+                .expect("configuration client valide")
+                .into();
+
+        // Deux allers-retours suffisent largement à TLS 1.3 ; la borne évite
+        // simplement une boucle infinie si la négociation se bloquait.
+        for _ in 0..8 {
+            if !client.is_handshaking() && !serveur.is_handshaking() {
+                return Ok(());
+            }
+            transmettre(&mut client, &mut serveur)?;
+            transmettre(&mut serveur, &mut client)?;
+        }
+        Ok(())
+    }
+
+    /// Un certificat feuille doit être accepté par un client qui ne fait
+    /// confiance qu'au certificat racine STOCKÉ SUR DISQUE — même quand ce
+    /// certificat ne ressemble pas à ce que `root_params` produirait
+    /// aujourd'hui.
+    ///
+    /// C'est exactement le scénario d'un poste où le CA a été installé par une
+    /// version antérieure : le fichier sur disque fait foi, pas le code. Si le
+    /// signataire était reconstruit depuis `root_params`, les feuilles
+    /// porteraient un émetteur inconnu du navigateur et l'interception
+    /// casserait en silence. Ce test refait la poignée de main TLS complète,
+    /// comme le ferait un navigateur.
+    #[test]
+    fn une_feuille_chaine_au_ca_stocke_meme_si_ses_parametres_ont_change() {
+        use rcgen::{BasicConstraints, CertificateParams, DnType, IsCa, KeyPair, KeyUsagePurpose};
+
+        ensure_crypto_provider();
+        let dir = std::env::temp_dir().join(format!("brocolis-ca-chaine-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let cert = dir.join("ca.crt");
+        let key = dir.join("ca.key");
+
+        // CA « d'une version antérieure » : même rôle, mais un DN que
+        // `root_params` ne produit pas.
+        let mut anciens = CertificateParams::new(Vec::<String>::new()).unwrap();
+        anciens
+            .distinguished_name
+            .push(DnType::CommonName, "Brocolis Root CA (ancienne version)");
+        anciens
+            .distinguished_name
+            .push(DnType::OrganizationName, "Brocolis d'avant");
+        anciens.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        anciens.key_usages = vec![
+            KeyUsagePurpose::KeyCertSign,
+            KeyUsagePurpose::CrlSign,
+            KeyUsagePurpose::DigitalSignature,
+        ];
+        let ancienne_cle = KeyPair::generate().unwrap();
+        let racine_pem = anciens.self_signed(&ancienne_cle).unwrap().pem();
+        std::fs::write(&cert, &racine_pem).unwrap();
+        std::fs::write(&key, ancienne_cle.serialize_pem()).unwrap();
+
+        // Rechargement par le code d'aujourd'hui, puis forge d'une feuille.
+        let ca = Ca::load_or_generate(&cert, &key).unwrap();
+        assert_eq!(
+            ca.root_cert_pem(),
+            racine_pem,
+            "le CA exporté doit rester celui du disque"
+        );
+        let feuille = ca.server_config_for("exemple.test").unwrap();
+
+        poignee_de_main(feuille.clone(), &racine_pem, "exemple.test")
+            .expect("la feuille doit chaîner jusqu'au certificat racine stocké");
+
+        // Contre-épreuve : face à une autre autorité, la même poignée de main
+        // doit échouer. Sans elle, un test qui accepte tout passerait aussi.
+        let autre_dir = dir.join("autre");
+        std::fs::create_dir_all(&autre_dir).unwrap();
+        let autre_racine =
+            Ca::load_or_generate(&autre_dir.join("ca.crt"), &autre_dir.join("ca.key"))
+                .unwrap()
+                .root_cert_pem()
+                .to_string();
+        let refus = poignee_de_main(feuille, &autre_racine, "exemple.test");
+        assert!(
+            matches!(refus, Err(rustls::Error::InvalidCertificate(_))),
+            "une autorité inconnue aurait dû être refusée, obtenu : {refus:?}"
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }

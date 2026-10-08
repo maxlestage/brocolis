@@ -31,10 +31,15 @@ bytes = "1"
 tokio-rustls = "0.26"
 rustls = "0.23"
 rustls-pemfile = "2"
-rcgen = "0.12"
-reqwest = { version = "0.12", default-features = false, features = ["default-tls", "json", "stream"] }
+# `x509-parser` active `Issuer::from_ca_cert_pem` : au rechargement, le
+# signataire est reconstruit depuis le certificat racine STOCKÉ, et non depuis
+# des paramètres réécrits à l'identique. Sans ça, une évolution du DN du CA
+# ferait signer les feuilles par une autorité absente du magasin de confiance
+# — l'interception casserait en silence sur les postes déjà équipés.
+rcgen = { version = "0.14", features = ["x509-parser"] }
+reqwest = { version = "0.13", default-features = false, features = ["default-tls", "json", "stream"] }
 aes-gcm = "0.11"
-rand = "0.9"
+rand = "0.10"
 # base64 0.23 active `simd-unsafe` par défaut, ce qui fait entrer du code
 # `unsafe` dans le décodeur. Ce proxy décode du base64 issu du réseau, donc
 # non fiable : on garde l'implémentation sûre. Le décodage n'est pas un
@@ -48,10 +53,10 @@ sha2 = "0.11"
 # Client du serveur de rendez-vous (appairage automatique) + édition TOML qui
 # préserve commentaires/format lors de l'ajout d'une clé dérivée au trousseau.
 serde_json = "1"
-toml_edit = "0.23"
+toml_edit = "0.25"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
-toml = "0.9"
+toml = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1"

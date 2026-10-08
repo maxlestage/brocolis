@@ -25,7 +25,7 @@ use base64::engine::general_purpose::{
     STANDARD as B64, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD,
 };
 use base64::Engine;
-use rand::RngCore;
+use rand::Rng;
 
 pub const KEY_LEN: usize = 32;
 const NONCE_LEN: usize = 12;

@@ -10,12 +10,23 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const DIST = path.join(ROOT, "site", "dist");
+
+/** Premier fichier de `site/dist` dont le nom porte une empreinte de contenu. */
+function hashedFile(extension) {
+  const found = fs
+    .readdirSync(DIST)
+    .find((name) => /-[0-9a-f]{16}(?:_bg)?\./.test(name) && name.endsWith(extension));
+  assert.ok(found, `le build doit produire un fichier ${extension} empreinté`);
+  return found;
+}
 
 const ASSET_NAME = "brocolis-macos-universal.tar.gz";
 const BODY = Buffer.alloc(4096, 0x42);
@@ -166,6 +177,28 @@ test("les anciennes URL redirigent vers la route à dièse", async () => {
     assert.equal(r.status, 302);
     assert.equal(r.headers.get("location"), "/#/telecharger");
   }
+});
+
+test("le module WebAssembly est servi en application/wasm", async () => {
+  // `WebAssembly.instantiateStreaming` refuse tout autre type : un mauvais
+  // MIME ici ne casse pas une ressource secondaire, il laisse la page vide.
+  const r = await fetch(`${base}/${hashedFile(".wasm")}`);
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get("content-type"), "application/wasm");
+});
+
+test("les fichiers empreintés sont immuables, index.html revalidé", async () => {
+  for (const ext of [".js", ".wasm", ".css"]) {
+    const r = await fetch(`${base}/${hashedFile(ext)}`);
+    assert.equal(r.status, 200, `${ext} doit être servi`);
+    assert.match(
+      r.headers.get("cache-control"),
+      /immutable/,
+      `${ext} empreinté doit être déclaré immuable`,
+    );
+  }
+  const index = await fetch(base + "/");
+  assert.equal(index.headers.get("cache-control"), "no-cache");
 });
 
 test("une route applicative retombe sur index.html, une ressource absente non", async () => {
