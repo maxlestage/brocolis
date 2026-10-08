@@ -1,0 +1,12 @@
+{
+  "name": "brocolis-site-browser-tests",
+  "private": true,
+  "type": "module",
+  "description": "Vérification du site compilé dans un vrai navigateur (mise en page mesurée, navigation, langues, thèmes, accessibilité).",
+  "scripts": {
+    "test": "node site.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.64.0"
+  }
+}

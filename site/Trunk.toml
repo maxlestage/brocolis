@@ -1,0 +1,27 @@
+[build]
+target = "index.html"
+dist = "dist"
+# URL relative : la page fonctionne à la racine d'un domaine comme sous un
+# sous-chemin. Le routage par fragment garantit que le document est toujours
+# servi depuis le même chemin, donc « ./ » résout correctement en toute
+# circonstance.
+public_url = "./"
+# Les noms de fichiers portent une empreinte de leur contenu, ce qui permet au
+# serveur de les déclarer immuables (voir `HASHED_NAME` dans server.js).
+filehash = true
+# Minification du HTML et du CSS — en production seulement, pour garder des
+# sources lisibles pendant `trunk serve`.
+#
+# Trunk émet au passage un « Failed to minify JS » sur la colle produite par
+# wasm-bindgen : son minifieur ne gère pas la syntaxe de module employée. Le
+# build aboutit, le fichier est simplement copié tel quel (33 Ko, que la
+# compression du serveur ramène à quelques kilo-octets). Avertissement connu,
+# sans effet sur le résultat.
+minify = "on_release"
+
+[watch]
+ignore = ["dist"]
+
+[serve]
+port = 8081
+open = false

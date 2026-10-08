@@ -9,13 +9,17 @@ on:
     paths:
       - 'server.js'
       - 'tests/server.test.mjs'
+      - 'scripts/check-dist.mjs'
       - 'package.json'
+      - 'site/dist/**'
       - '.github/workflows/server.yml'
   pull_request:
     paths:
       - 'server.js'
       - 'tests/server.test.mjs'
+      - 'scripts/check-dist.mjs'
       - 'package.json'
+      - 'site/dist/**'
       - '.github/workflows/server.yml'
   workflow_dispatch:
 
@@ -36,9 +40,11 @@ jobs:
           # Même plancher que `engines` dans package.json.
           node-version: '22.22'
 
-      # Les tests construisent le site : server.js sert site/dist.
-      - name: Build du site
-        run: npm run build
+      # Pas de build ici : le site est une application WebAssembly dont le
+      # `site/dist` est versionné (voir .github/workflows/site.yml). Les tests
+      # s'appuient dessus, donc on vérifie d'abord qu'il est complet.
+      - name: Le site compilé est présent
+        run: node scripts/check-dist.mjs
 
       - name: Tests du serveur
         run: npm test
