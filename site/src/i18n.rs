@@ -115,6 +115,15 @@ pub struct Strings {
     pub s6_li: [&'static str; 4],
 
     pub footer: &'static str,
+
+    // Habillage animé (refonte) : surtitre et invitation à défiler du héros,
+    // manifeste, bandeau défilant, appel final du pied de page.
+    pub hero_eyebrow: &'static str,
+    pub hero_scroll: &'static str,
+    pub manifesto_label: &'static str,
+    pub manifesto: &'static str,
+    pub marquee: [&'static str; 6],
+    pub footer_h: &'static str,
 }
 
 impl Strings {
@@ -348,6 +357,19 @@ pub static FR: Strings = Strings {
     ],
 
     footer: "Brocolis — proxy MITM en Rust. Conçu et développé par Maxime Nathan Lestage.",
+    hero_eyebrow: "Proxy MITM · Rust · AES-256-GCM",
+    hero_scroll: "Défiler",
+    manifesto_label: "Manifeste",
+    manifesto: "Vos mots restent les vôtres. Brocolis chiffre ce que vous marquez avant que ça ne quitte votre machine, et laisse tout le reste intact. Aucun serveur à convaincre, aucune application à changer.",
+    marquee: [
+        "Chiffrement sélectif",
+        "AES-256-GCM",
+        "MITM transparent",
+        "Zéro configuration",
+        "Écrit en Rust",
+        "macOS · Linux · Windows",
+    ],
+    footer_h: "Prêt à chiffrer <em>ce qui compte</em> ?",
 };
 
 // ---------------------------------------------------------------------------
@@ -469,6 +491,19 @@ pub static EN: Strings = Strings {
     ],
 
     footer: "Brocolis — Rust MITM proxy. Designed and developed by Maxime Nathan Lestage.",
+    hero_eyebrow: "MITM proxy · Rust · AES-256-GCM",
+    hero_scroll: "Scroll",
+    manifesto_label: "Manifesto",
+    manifesto: "Your words stay yours. Brocolis encrypts what you mark before it leaves your machine, and leaves everything else untouched. No server to convince, no app to change.",
+    marquee: [
+        "Selective encryption",
+        "AES-256-GCM",
+        "Transparent MITM",
+        "Zero configuration",
+        "Written in Rust",
+        "macOS · Linux · Windows",
+    ],
+    footer_h: "Ready to encrypt <em>what matters</em>?",
 };
 
 // ---------------------------------------------------------------------------
@@ -590,4 +625,17 @@ pub static ES: Strings = Strings {
     ],
 
     footer: "Brocolis — proxy MITM en Rust. Diseñado y desarrollado por Maxime Nathan Lestage.",
+    hero_eyebrow: "Proxy MITM · Rust · AES-256-GCM",
+    hero_scroll: "Desplazar",
+    manifesto_label: "Manifiesto",
+    manifesto: "Tus palabras siguen siendo tuyas. Brocolis cifra lo que marcas antes de que salga de tu máquina, y deja todo lo demás intacto. Ningún servidor que convencer, ninguna aplicación que cambiar.",
+    marquee: [
+        "Cifrado selectivo",
+        "AES-256-GCM",
+        "MITM transparente",
+        "Cero configuración",
+        "Escrito en Rust",
+        "macOS · Linux · Windows",
+    ],
+    footer_h: "¿Listo para cifrar <em>lo que importa</em>?",
 };

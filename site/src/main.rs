@@ -13,18 +13,21 @@
 //! - `route` : routage par fragment d'URL
 //! - `dom` : les rares accès au DOM hors rendu (titre, `<meta>`, focus)
 //! - `markup` : insertion du balisage contenu dans les traductions
+//! - `motion` : tout le mouvement (défilement, curseur, poussière du héros),
+//!   piloté hors de Yew par des attributs et des variables CSS
 
 mod components;
 mod dom;
 mod i18n;
 mod markup;
+mod motion;
 mod route;
 mod settings;
 mod theme;
 
 use yew::prelude::*;
 
-use components::{DownloadPage, Landing};
+use components::{Ambient, Curtain, DownloadPage, Landing};
 use dom::{scroll_to_top, set_meta, set_root_attribute, set_title};
 use i18n::Lang;
 use route::{Route, use_route};
@@ -32,6 +35,9 @@ use settings::{Settings, detect_lang, detect_theme, remember_lang, remember_them
 use theme::Theme;
 
 fn main() {
+    // Avant le premier rendu : la feuille de style en dépend pour savoir si
+    // elle doit cacher ce qui apparaîtra ensuite.
+    motion::flag_document();
     yew::Renderer::<App>::new().render();
 }
 
@@ -40,6 +46,23 @@ fn App() -> Html {
     let lang = use_state(detect_lang);
     let theme = use_state(detect_theme);
     let route = use_route();
+    // Nombre de changements de page : sert de clé au volet de transition,
+    // qui rejoue ainsi son animation à chaque navigation (et pas au
+    // chargement, que le rideau d'ouverture couvre déjà).
+    let navigations = use_mut_ref(|| (route, 0u32));
+    {
+        let mut nav = navigations.borrow_mut();
+        if nav.0 != route {
+            *nav = (route, nav.1 + 1);
+        }
+    }
+    let wipe = navigations.borrow().1;
+
+    // Le contrôleur de mouvement vit aussi longtemps que l'application.
+    use_effect_with((), |()| {
+        let motion = motion::Motion::start();
+        move || drop(motion)
+    });
 
     let set_lang = {
         let lang = lang.clone();
@@ -94,10 +117,15 @@ fn App() -> Html {
 
     html! {
         <ContextProvider<Settings> context={settings}>
+            <Curtain />
             { match route {
                 Route::Home => html! { <Landing /> },
                 Route::Download => html! { <DownloadPage /> },
             } }
+            if wipe > 0 {
+                <div class="wipe" key={wipe.to_string()} aria-hidden="true" />
+            }
+            <Ambient />
         </ContextProvider<Settings>>
     }
 }

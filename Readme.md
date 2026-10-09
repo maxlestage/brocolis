@@ -395,6 +395,23 @@ trunk build --release  # production → site/dist
 Il faut `trunk` (`cargo install trunk --locked`) et la cible
 `wasm32-unknown-unknown` (`rustup target add wasm32-unknown-unknown`).
 
+**Mouvement.** Le langage visuel s'inspire de zamocorp.com : rideau
+d'ouverture avec compteur (une fois par session), scène épinglée où la
+mascotte se forme dans la poussière au fil du défilement puis est balayée par
+la lumière, titres géants qui se dévoilent, grain de pellicule, bandeau
+défilant, manifeste qui s'allume mot à mot, curseur anneau, boutons aimantés,
+volet entre les pages. Aucune bibliothèque JavaScript : tout est en Rust
+(`site/src/motion/`), une seule boucle `requestAnimationFrame` qui s'arrête
+quand rien ne bouge. Les composants posent des attributs (`data-reveal`,
+`data-magnetic`, `data-spot`, `data-speed`), le contrôleur les découvre dans le
+DOM et écrit des variables CSS ; la feuille de style en fait du mouvement. Le
+défilement reste natif (pas de défilement « lissé »). Sous
+`prefers-reduced-motion: reduce`, rien n'est épinglé ni caché : la page est
+statique et complète.
+
+Polices auto-hébergées (`site/public/fonts`, licence OFL) : Archivo variable
+pour le texte, Fraunces italique pour les mots d'accent.
+
 **`site/dist` est versionné**, contrairement à l'usage. Raison : Heroku
 construit ce dépôt avec le buildpack Node, qui n'a pas de chaîne Rust — le
 site ne peut donc pas être compilé sur le dyno. Conséquence pratique : après

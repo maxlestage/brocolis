@@ -42,12 +42,12 @@ pub fn DownloadPage() -> Html {
                 <a class="dl-back" href={Route::Home.href()}>
                     <span aria-hidden="true">{ "← " }</span>{ t.dl_back }
                 </a>
-                <h1 id="dl-h" class="dl-title">{ t.dl_h }</h1>
-                <p class="dl-intro">{ raw(t.dl_intro) }</p>
-                <p class="dl-version">{ raw(t.dl_version) }</p>
+                <h1 id="dl-h" class="dl-title" data-reveal="mask">{ t.dl_h }</h1>
+                <p class="dl-intro" data-reveal="">{ raw(t.dl_intro) }</p>
+                <p class="dl-version" data-reveal="">{ raw(t.dl_version) }</p>
 
                 <section id="downloads" class="grid grid-3 dl-grid" aria-labelledby="dl-h">
-                    <article class="card platform-card">
+                    <article class="card platform-card" data-reveal="" data-spot="">
                         <div class="platform-head">
                             <span class="platform-icon" aria-hidden="true">{ "🍎" }</span>
                             <h2>{ t.dl_macos_t }</h2>
@@ -59,7 +59,7 @@ pub fn DownloadPage() -> Html {
                         <p class="dl-note">{ raw(t.dl_macos_note) }</p>
                     </article>
 
-                    <article class="card platform-card">
+                    <article class="card platform-card" data-reveal="" data-spot="">
                         <div class="platform-head">
                             <span class="platform-icon" aria-hidden="true">{ "🐧" }</span>
                             <h2>{ t.dl_linux_t }</h2>
@@ -76,7 +76,7 @@ pub fn DownloadPage() -> Html {
                         <p class="dl-note">{ raw(t.dl_linux_note) }</p>
                     </article>
 
-                    <article class="card platform-card">
+                    <article class="card platform-card" data-reveal="" data-spot="">
                         <div class="platform-head">
                             <span class="platform-icon" aria-hidden="true">{ "🪟" }</span>
                             <h2>{ t.dl_windows_t }</h2>
@@ -89,12 +89,12 @@ pub fn DownloadPage() -> Html {
                     </article>
                 </section>
 
-                <p class="dl-all">
+                <p class="dl-all" data-reveal="">
                     <a href={RELEASES}>{ t.dl_all }</a>
                 </p>
             </main>
 
-            <Footer />
+            <Footer cta={false} />
         </>
     }
 }
