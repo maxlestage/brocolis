@@ -8,12 +8,43 @@
 //! ca_key = "brocolis-ca.key"
 //! key = "<clé base64 de 32 octets, optionnel>"
 //! encrypt_hosts = ["twitter.com", "x.com"]
+//!
+//! # Un contact par correspondant, une ou plusieurs clés chacun : la première
+//! # chiffre, les suivantes (plus anciennes) servent encore à lire.
+//! [[contacts]]
+//! name = "Alice"
+//! keys = ["<clé partagée avec Alice>"]
 //! ```
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
+
+/// Un correspondant et les clés partagées avec lui.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Contact {
+    pub name: String,
+    /// La première clé est la clé ACTIVE : c'est elle qui chiffre pour ce
+    /// contact. Les suivantes (anciennes clés, clé de groupe…) servent
+    /// seulement à lire ce qu'il nous a envoyé avec.
+    #[serde(default)]
+    pub keys: Vec<String>,
+}
+
+impl Contact {
+    /// La clé qui chiffre pour ce contact.
+    pub fn active_key(&self) -> Option<&str> {
+        self.keys.iter().map(|k| k.trim()).find(|k| !k.is_empty())
+    }
+}
+
+/// Deux noms désignent-ils le même contact ? Sans tenir compte de la casse ni
+/// des espaces autour : « alice » et « Alice » sont la même personne.
+pub fn same_name(a: &str, b: &str) -> bool {
+    a.trim().to_lowercase() == b.trim().to_lowercase()
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -42,6 +73,14 @@ pub struct Config {
     /// correspondants). Défaut : faux (jeton `v1`, compatible proxy/iOS).
     #[serde(default)]
     pub encrypt_multi: bool,
+    /// Correspondants nommés, chacun avec ses clés (`[[contacts]]`).
+    #[serde(default)]
+    pub contacts: Vec<Contact>,
+    /// Pour qui le proxy chiffre : des noms de contacts. Vide = la clé `key`
+    /// (ou tout le trousseau si `encrypt_multi`). Plusieurs noms = un seul
+    /// jeton `v2` que chacun d'eux peut ouvrir.
+    #[serde(default)]
+    pub encrypt_to: Vec<String>,
     /// Hôtes dont le trafic doit être traité (sous-chaîne du nom d'hôte).
     /// Vide = tous les hôtes.
     #[serde(default)]
@@ -51,13 +90,49 @@ pub struct Config {
 impl Config {
     /// Toutes les clés base64 du trousseau, dans l'ordre : `key` (primaire)
     /// d'abord, puis `keys`. Les chaînes vides sont ignorées.
+    ///
+    /// Les clés des contacts suivent : au déchiffrement, le proxy lit ainsi ce
+    /// que chacun nous envoie. Une même clé présente deux fois n'est gardée
+    /// qu'une fois.
     pub fn all_key_b64(&self) -> Vec<String> {
-        self.key
-            .iter()
-            .chain(self.keys.iter())
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect()
+        let mut out: Vec<String> = Vec::new();
+        let contact_keys = self.contacts.iter().flat_map(|c| c.keys.iter());
+        for k in self.key.iter().chain(self.keys.iter()).chain(contact_keys) {
+            let k = k.trim();
+            if !k.is_empty() && !out.iter().any(|o| o == k) {
+                out.push(k.to_string());
+            }
+        }
+        out
+    }
+
+    /// Le contact de ce nom (casse indifférente).
+    pub fn contact(&self, name: &str) -> Option<&Contact> {
+        self.contacts.iter().find(|c| same_name(&c.name, name))
+    }
+
+    /// Clés avec lesquelles CHIFFRER quand `encrypt_to` désigne des contacts :
+    /// la clé active de chacun. `Ok(None)` si `encrypt_to` est vide (règle
+    /// par défaut). Un nom inconnu, ou un contact sans clé, est une erreur :
+    /// chiffrer pour quelqu'un d'autre que prévu, ou ne pas chiffrer du tout,
+    /// serait pire que de refuser de démarrer.
+    pub fn encryption_targets(&self) -> anyhow::Result<Option<Vec<String>>> {
+        if self.encrypt_to.is_empty() {
+            return Ok(None);
+        }
+        let mut keys = Vec::new();
+        for name in &self.encrypt_to {
+            let contact = self
+                .contact(name)
+                .ok_or_else(|| anyhow::anyhow!("encrypt_to : contact « {name} » inconnu"))?;
+            let key = contact.active_key().ok_or_else(|| {
+                anyhow::anyhow!("encrypt_to : le contact « {name} » n'a aucune clé")
+            })?;
+            if !keys.iter().any(|k: &String| k == key) {
+                keys.push(key.to_string());
+            }
+        }
+        Ok(Some(keys))
     }
 }
 
@@ -80,6 +155,8 @@ impl Default for Config {
             key: None,
             keys: Vec::new(),
             encrypt_multi: false,
+            contacts: Vec::new(),
+            encrypt_to: Vec::new(),
             encrypt_hosts: Vec::new(),
         }
     }
@@ -138,6 +215,45 @@ encrypt_hosts = ["twitter.com", "x.com"]
         assert_eq!(cfg.listen, default_listen());
         assert!(cfg.key.is_none());
         assert!(cfg.encrypt_hosts.is_empty());
+    }
+
+    #[test]
+    fn contacts_et_destinataires() {
+        let toml = r#"
+key = "PRINCIPALE"
+keys = ["ANONYME", "ALICE1"]
+encrypt_to = ["alice", "Bob"]
+
+[[contacts]]
+name = "Alice"
+keys = ["ALICE1", "ALICE0"]
+
+[[contacts]]
+name = "Bob"
+keys = ["BOB1"]
+"#;
+        let cfg: Config = toml::from_str(toml).unwrap();
+        assert_eq!(
+            cfg.all_key_b64(),
+            ["PRINCIPALE", "ANONYME", "ALICE1", "ALICE0", "BOB1"],
+            "toutes les clés, sans doublon, contacts compris"
+        );
+        assert_eq!(cfg.contact("ALICE").unwrap().active_key(), Some("ALICE1"));
+        assert_eq!(
+            cfg.encryption_targets().unwrap().unwrap(),
+            ["ALICE1", "BOB1"],
+            "la clé ACTIVE de chaque destinataire"
+        );
+    }
+
+    #[test]
+    fn destinataire_inconnu_ou_sans_cle_refuse() {
+        let inconnu: Config = toml::from_str("encrypt_to = [\"Zoé\"]").unwrap();
+        assert!(inconnu.encryption_targets().is_err());
+        let vide: Config =
+            toml::from_str("encrypt_to = [\"Zoé\"]\n[[contacts]]\nname = \"Zoé\"\n").unwrap();
+        assert!(vide.encryption_targets().is_err());
+        assert!(Config::default().encryption_targets().unwrap().is_none());
     }
 
     #[test]
