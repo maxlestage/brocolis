@@ -327,7 +327,7 @@ pub static FR: Strings = Strings {
     s2_cards: [
         Card {
             title: "Chiffrement sélectif",
-            body: "Seuls les segments <code>((entre doubles parenthèses))</code> sont chiffrés, en AES-256-GCM, sous la forme d'un jeton <code>[[BROCOLIS:v1:…]]</code>. Le serveur distant ne stocke que du chiffré. Hors navigateur, sans parenthèses, c'est <strong>tout le message</strong> qui est chiffré.",
+            body: "Seuls les segments <code>((entre doubles parenthèses))</code> sont chiffrés, en AES-256-GCM, sous la forme d'un jeton <code>[[BROCOLIS:v1:…]]</code>. Le serveur distant ne stocke que du chiffré. Dans l'application, sans parenthèses, c'est <strong>tout le message</strong> qui est chiffré.",
         },
         Card {
             title: "MITM transparent",
@@ -335,7 +335,7 @@ pub static FR: Strings = Strings {
         },
         Card {
             title: "Contacts et clés",
-            body: "Un contact, <strong>une ou plusieurs clés</strong> AES-256 : l'active chiffre, les autres lisent encore. Chiffrez pour un contact ou pour plusieurs à la fois — un seul jeton, que chacun ouvre avec sa clé — et sachez de qui vient un message.",
+            body: "<strong>Un contact, une clé</strong> AES-256, créée dans l'application ou obtenue par un code convenu de vive voix. Chiffrez pour un contact ou pour plusieurs à la fois — un seul jeton, que chacun ouvre avec sa clé — et sachez de qui vient un message.",
         },
         Card {
             title: "Multi-navigateurs",
@@ -476,7 +476,7 @@ pub static EN: Strings = Strings {
     s2_cards: [
         Card {
             title: "Selective encryption",
-            body: "Only segments wrapped in <code>((double parentheses))</code> are encrypted, with AES-256-GCM, as a <code>[[BROCOLIS:v1:…]]</code> token. The remote server only ever stores ciphertext. Outside the browser, without parentheses, the <strong>whole message</strong> is encrypted.",
+            body: "Only segments wrapped in <code>((double parentheses))</code> are encrypted, with AES-256-GCM, as a <code>[[BROCOLIS:v1:…]]</code> token. The remote server only ever stores ciphertext. In the app, without parentheses, the <strong>whole message</strong> is encrypted.",
         },
         Card {
             title: "Transparent MITM",
@@ -484,7 +484,7 @@ pub static EN: Strings = Strings {
         },
         Card {
             title: "Contacts and keys",
-            body: "One contact, <strong>one or more</strong> AES-256 keys: the active one encrypts, the others still read. Encrypt for one contact or several at once — a single token each opens with their own key — and know who a message comes from.",
+            body: "<strong>One contact, one key</strong> (AES-256), created in the app or obtained from a code agreed in person. Encrypt for one contact or several at once — a single token each opens with their own key — and know who a message comes from.",
         },
         Card {
             title: "Multi-browser",
@@ -625,7 +625,7 @@ pub static ES: Strings = Strings {
     s2_cards: [
         Card {
             title: "Cifrado selectivo",
-            body: "Solo los segmentos <code>((entre dobles paréntesis))</code> se cifran, con AES-256-GCM, como un token <code>[[BROCOLIS:v1:…]]</code>. El servidor remoto solo almacena texto cifrado. Fuera del navegador, sin paréntesis, se cifra <strong>todo el mensaje</strong>.",
+            body: "Solo los segmentos <code>((entre dobles paréntesis))</code> se cifran, con AES-256-GCM, como un token <code>[[BROCOLIS:v1:…]]</code>. El servidor remoto solo almacena texto cifrado. En la aplicación, sin paréntesis, se cifra <strong>todo el mensaje</strong>.",
         },
         Card {
             title: "MITM transparente",
@@ -633,7 +633,7 @@ pub static ES: Strings = Strings {
         },
         Card {
             title: "Contactos y claves",
-            body: "Un contacto, <strong>una o varias</strong> claves AES-256: la activa cifra, las demás siguen leyendo. Cifra para un contacto o para varios a la vez — un solo token, que cada uno abre con su clave — y sabe de quién viene un mensaje.",
+            body: "<strong>Un contacto, una clave</strong> AES-256, creada en la aplicación u obtenida con un código acordado en persona. Cifra para un contacto o para varios a la vez — un solo token, que cada uno abre con su clave — y sabe de quién viene un mensaje.",
         },
         Card {
             title: "Multi-navegador",

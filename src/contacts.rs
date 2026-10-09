@@ -1,21 +1,21 @@
-//! Contacts : un nom, et les clés partagées avec cette personne.
+//! Contacts : un nom, et la clé partagée avec cette personne.
 //!
 //! Dans `brocolis.toml`, chaque contact est une table :
 //!
 //! ```toml
 //! [[contacts]]
 //! name = "Alice"
-//! keys = ["<clé active>", "<ancienne clé, encore lisible>"]
+//! key = "<clé partagée avec Alice>"
 //! ```
 //!
-//! La première clé chiffre ce qu'on envoie à ce contact ; toutes servent à
-//! lire ce qu'il nous envoie. Une clé partagée est symétrique : ce qu'on
-//! chiffre pour Alice, on peut aussi le relire soi-même.
+//! Un contact, une clé : elle chiffre ce qu'on lui envoie et ouvre ce qu'il
+//! nous envoie. Une clé partagée est symétrique : ce qu'on chiffre pour
+//! Alice, on peut aussi le relire soi-même.
 //!
 //! Les fonctions d'édition travaillent sur le texte TOML et en préservent
 //! commentaires et mise en forme, comme [`crate::pairing::append_key_to_toml`].
 
-use toml_edit::{Array, ArrayOfTables, DocumentMut, Item, Table, Value};
+use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, Value};
 
 use crate::config::{same_name, Config};
 use crate::crypto::{decrypt_tokens_multi, SymKey};
@@ -61,89 +61,49 @@ fn position(arr: &ArrayOfTables, name: &str) -> Option<usize> {
     })
 }
 
-fn keys_of(table: &mut Table) -> Result<&mut Array, String> {
-    table
-        .entry("keys")
-        .or_insert(Item::Value(Value::Array(Array::new())))
-        .as_array_mut()
-        .ok_or_else(|| "`keys` d'un contact doit être une liste".into())
-}
-
-/// Ajoute une clé à un contact, en le créant s'il n'existe pas (la clé est
-/// alors sa clé active). Pour un contact existant, la clé rejoint les
-/// suivantes ; [`set_active_key`] la fait passer en tête.
-pub fn add_key(existing: &str, name: &str, key: &str) -> Result<String, String> {
+/// Ajoute un contact. Un contact du même nom (casse indifférente) est
+/// refusé : remplacer sa clé se fait explicitement, avec [`set_key`].
+pub fn add(existing: &str, name: &str, key: &str) -> Result<String, String> {
     let name = check_name(name)?;
     let key = check_key(key)?;
     let mut doc = parse(existing)?;
     let arr = contacts(&mut doc)?;
-    match position(arr, &name) {
-        Some(i) => {
-            let keys = keys_of(arr.get_mut(i).expect("indice trouvé"))?;
-            if !keys.iter().any(|v| v.as_str() == Some(key.as_str())) {
-                keys.push(key);
-            }
-        }
-        None => {
-            let mut t = Table::new();
-            t.insert("name", toml_edit::value(name));
-            let mut keys = Array::new();
-            keys.push(key);
-            t.insert("keys", Item::Value(Value::Array(keys)));
-            arr.push(t);
-        }
+    if position(arr, &name).is_some() {
+        return Err(format!("un contact « {name} » existe déjà"));
     }
+    let mut t = Table::new();
+    t.insert("name", toml_edit::value(name));
+    t.insert("key", toml_edit::value(key));
+    arr.push(t);
     Ok(doc.to_string())
 }
 
-/// Fait de `key` la clé active du contact (celle qui chiffre).
-pub fn set_active_key(existing: &str, name: &str, key: &str) -> Result<String, String> {
+/// Remplace la clé d'un contact. Ce qu'il avait chiffré avec l'ancienne
+/// devient illisible : c'est le but quand elle a fuité.
+pub fn set_key(existing: &str, name: &str, key: &str) -> Result<String, String> {
+    let key = check_key(key)?;
     let mut doc = parse(existing)?;
     let arr = contacts(&mut doc)?;
     let i = position(arr, name).ok_or_else(|| format!("contact « {name} » inconnu"))?;
-    let keys = keys_of(arr.get_mut(i).expect("indice trouvé"))?;
-    let at = keys
-        .iter()
-        .position(|v| v.as_str() == Some(key))
-        .ok_or("cette clé n'appartient pas au contact")?;
-    let v = keys.remove(at);
-    keys.insert(0, v.as_str().unwrap_or_default());
+    arr.get_mut(i)
+        .expect("indice trouvé")
+        .insert("key", toml_edit::value(key));
     Ok(doc.to_string())
 }
 
-/// Retire une clé d'un contact. Le contact reste, même sans clé — mais il
-/// n'est alors plus destinataire du proxy (`encrypt_to`) : sans clé, le proxy
-/// refuserait de démarrer.
-pub fn remove_key(existing: &str, name: &str, key: &str) -> Result<String, String> {
+/// Retire un contact, et le retire des destinataires du proxy
+/// (`encrypt_to`) : sinon le proxy refuserait de démarrer.
+pub fn remove(existing: &str, name: &str) -> Result<String, String> {
     let mut doc = parse(existing)?;
     let arr = contacts(&mut doc)?;
     let i = position(arr, name).ok_or_else(|| format!("contact « {name} » inconnu"))?;
-    let keys = keys_of(arr.get_mut(i).expect("indice trouvé"))?;
-    keys.retain(|v| v.as_str() != Some(key));
-    if keys.is_empty() {
-        unlist(&mut doc, name);
-    }
-    Ok(doc.to_string())
-}
-
-/// Retire un nom des destinataires du proxy.
-fn unlist(doc: &mut DocumentMut, name: &str) {
+    arr.remove(i);
     if let Some(to) = doc.get_mut("encrypt_to").and_then(|v| v.as_array_mut()) {
         to.retain(|v| !v.as_str().is_some_and(|n| same_name(n, name)));
         if to.is_empty() {
             doc.remove("encrypt_to");
         }
     }
-}
-
-/// Retire un contact et toutes ses clés, et le retire des destinataires du
-/// proxy (`encrypt_to`) : sinon le proxy refuserait de démarrer.
-pub fn remove(existing: &str, name: &str) -> Result<String, String> {
-    let mut doc = parse(existing)?;
-    let arr = contacts(&mut doc)?;
-    let i = position(arr, name).ok_or_else(|| format!("contact « {name} » inconnu"))?;
-    arr.remove(i);
-    unlist(&mut doc, name);
     Ok(doc.to_string())
 }
 
@@ -176,7 +136,7 @@ pub fn set_encrypt_to(existing: &str, names: &[String]) -> Result<String, String
     if names.is_empty() {
         doc.remove("encrypt_to");
     } else {
-        let mut arr = Array::new();
+        let mut arr = toml_edit::Array::new();
         for n in names {
             arr.push(check_name(n)?);
         }
@@ -185,19 +145,16 @@ pub fn set_encrypt_to(existing: &str, names: &[String]) -> Result<String, String
     Ok(doc.to_string())
 }
 
-/// Les contacts dont une clé ouvre au moins un jeton du texte : « de qui
-/// vient ce message ». Une clé partagée avec plusieurs contacts (clé de
+/// Les contacts dont la clé ouvre au moins un jeton du texte : « de qui
+/// vient ce message ». Une clé partagée par plusieurs contacts (clé de
 /// groupe) les nomme tous.
 pub fn readers(input: &str, cfg: &Config) -> Vec<String> {
     cfg.contacts
         .iter()
         .filter(|c| {
-            let keys: Vec<SymKey> = c
-                .keys
-                .iter()
-                .filter_map(|k| SymKey::from_base64(k.trim()).ok())
-                .collect();
-            !keys.is_empty() && decrypt_tokens_multi(input, &keys).1 > 0
+            c.key()
+                .and_then(|k| SymKey::from_base64(k).ok())
+                .is_some_and(|k| decrypt_tokens_multi(input, &[k]).1 > 0)
         })
         .map(|c| c.name.clone())
         .collect()
@@ -213,38 +170,24 @@ mod tests {
     }
 
     #[test]
-    fn creer_completer_activer_retirer() {
+    fn creer_changer_de_cle_renommer_retirer() {
         let (k1, k2) = (
             SymKey::generate().to_base64(),
             SymKey::generate().to_base64(),
         );
         let t = "# mes réglages\nlisten = \"127.0.0.1:8080\"\nkey = \"x\"\n";
-        let t = add_key(t, "Alice", &k1).unwrap();
-        let t = add_key(&t, "alice ", &k2).unwrap(); // même contact
+        let t = add(t, "Alice", &k1).unwrap();
         assert!(t.contains("# mes réglages"), "commentaires préservés");
+        assert_eq!(cfg(&t).contact("alice").unwrap().key(), Some(k1.as_str()));
+        assert!(
+            add(&t, "alice ", &k2).is_err(),
+            "un contact du même nom existe déjà"
+        );
+
+        let t = set_key(&t, "ALICE", &k2).unwrap();
         let c = cfg(&t);
         assert_eq!(c.contacts.len(), 1);
-        assert_eq!(c.contacts[0].keys, [k1.clone(), k2.clone()]);
-        assert_eq!(c.contacts[0].active_key(), Some(k1.as_str()));
-
-        let t = set_active_key(&t, "ALICE", &k2).unwrap();
-        assert_eq!(
-            cfg(&t).contact("alice").unwrap().active_key(),
-            Some(k2.as_str())
-        );
-
-        let t = remove_key(&t, "Alice", &k2).unwrap();
-        assert_eq!(
-            cfg(&t).contact("Alice").unwrap().keys,
-            std::slice::from_ref(&k1)
-        );
-
-        // Sa dernière clé retirée, un contact cesse d'être destinataire.
-        let sans = set_encrypt_to(&t, &["Alice".into()]).unwrap();
-        let sans = remove_key(&sans, "Alice", &k1).unwrap();
-        let c = cfg(&sans);
-        assert!(c.contact("Alice").unwrap().keys.is_empty());
-        assert!(c.encrypt_to.is_empty() && c.encryption_targets().unwrap().is_none());
+        assert_eq!(c.contact("Alice").unwrap().key(), Some(k2.as_str()));
 
         let t = set_encrypt_to(&t, &["Alice".into()]).unwrap();
         let t = rename(&t, "Alice", "Alice Martin").unwrap();
@@ -269,14 +212,16 @@ mod tests {
     #[test]
     fn refus_clairs() {
         let k = SymKey::generate().to_base64();
-        assert!(add_key("", "  ", &k).is_err(), "nom vide");
+        assert!(add("", "  ", &k).is_err(), "nom vide");
         assert!(
-            add_key("", &"x".repeat(NAME_MAX + 1), &k).is_err(),
+            add("", &"x".repeat(NAME_MAX + 1), &k).is_err(),
             "nom trop long"
         );
-        assert!(add_key("", "Bob", "pas une clé").is_err());
-        let t = add_key("", "Bob", &k).unwrap();
-        let t = add_key(&t, "Carole", &SymKey::generate().to_base64()).unwrap();
+        assert!(add("", "Bob", "pas une clé").is_err());
+        let t = add("", "Bob", &k).unwrap();
+        assert!(set_key(&t, "Bob", "QUJD").is_err(), "clé trop courte");
+        assert!(set_key(&t, "Zoé", &k).is_err(), "contact inconnu");
+        let t = add(&t, "Carole", &SymKey::generate().to_base64()).unwrap();
         assert!(
             rename(&t, "Bob", "carole").is_err(),
             "deux contacts du même nom"
@@ -287,8 +232,8 @@ mod tests {
     #[test]
     fn de_qui_vient_le_message() {
         let (alice, bob) = (SymKey::generate(), SymKey::generate());
-        let t = add_key("", "Alice", &alice.to_base64()).unwrap();
-        let t = add_key(&t, "Bob", &bob.to_base64()).unwrap();
+        let t = add("", "Alice", &alice.to_base64()).unwrap();
+        let t = add(&t, "Bob", &bob.to_base64()).unwrap();
         let c = cfg(&t);
         let (de_bob, _) = encrypt_message("salut", &[bob]).unwrap();
         assert_eq!(readers(&de_bob, &c), ["Bob"]);

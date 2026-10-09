@@ -57,8 +57,8 @@ pub enum Tab {
 /// Le petit champ de saisie ouvert dans une carte.
 #[derive(Clone, Debug, PartialEq)]
 enum Edit {
-    /// Coller une clé reçue de ce contact.
-    AddKey(String),
+    /// Changer la clé de ce contact.
+    Rekey(String),
     Rename(String),
     /// Ranger cette clé sans nom sous un contact.
     Assign(String),
@@ -72,9 +72,6 @@ enum Act {
     Open(Edit),
     Save,
     CancelEdit,
-    Use(String, String),
-    RemoveKey(String, String),
-    Generate(String),
     AskDelete(String),
     Delete(String),
     CancelDelete,
@@ -217,8 +214,7 @@ impl BrocolisApp {
         self.book = keyring::load(&self.opts.files.config).unwrap_or_default();
         // Un destinataire supprimé, renommé ou sans clé n'est plus choisi.
         let book = &self.book;
-        self.send_to
-            .retain(|n| book.person(n).is_some_and(|p| !p.keys.is_empty()));
+        self.send_to.retain(|n| book.person(n).is_some());
         for n in &mut self.send_to {
             if let Some(p) = book.person(n) {
                 n.clone_from(&p.name);
@@ -384,7 +380,13 @@ impl BrocolisApp {
     fn start_pairing(&mut self) {
         let code = self.pair_code.trim().to_owned();
         let name = self.pair_name.trim().to_owned();
-        if code.is_empty() || self.busy() {
+        if code.is_empty() || name.is_empty() || self.busy() {
+            return;
+        }
+        // Vérifié avant d'aller sur le réseau : l'autre attendrait pour rien.
+        if self.book.person(&name).is_some() {
+            let msg = self.t().contact_exists.replace("{name}", &name);
+            self.notify(Kind::Err, msg);
             return;
         }
         self.pair_fingerprint = None;
@@ -406,11 +408,7 @@ impl BrocolisApp {
                     Duration::from_secs(120),
                 )
                 .await?;
-                if name.is_empty() {
-                    keyring::add(&files.config, &derived.symmetric_key_base64)?;
-                } else {
-                    keyring::contact_add(&files.config, &name, &derived.symmetric_key_base64)?;
-                }
+                keyring::contact_add(&files.config, &name, &derived.symmetric_key_base64)?;
                 anyhow::Ok(JobDone::Paired {
                     fingerprint: derived.fingerprint,
                 })
@@ -682,7 +680,7 @@ impl BrocolisApp {
                     }
                     for p in &self.book.contacts {
                         let on = self.book.is_target(&p.name);
-                        if chip(ui, &p.name, on, !p.keys.is_empty()).clicked() {
+                        if chip(ui, &p.name, on, true).clicked() {
                             if on {
                                 targets.retain(|n| !brocolis::config::same_name(n, &p.name));
                             } else {
@@ -740,35 +738,18 @@ impl BrocolisApp {
                         badge(ui, t.browser_badge);
                     }
                 });
-                for key in &person.keys {
-                    ui.add_space(4.0);
-                    key_line(ui, key, t.active);
-                    ui.horizontal(|ui| {
-                        if small_button(ui, t.copy).clicked() {
-                            acts.push(Act::Copy(key.b64.clone()));
-                        }
-                        if !key.primary && small_button(ui, t.make_active).clicked() {
-                            acts.push(Act::Use(name.clone(), key.b64.clone()));
-                        }
-                        if small_button(ui, t.remove).clicked() {
-                            acts.push(Act::RemoveKey(name.clone(), key.b64.clone()));
-                        }
-                    });
-                }
+                ui.add_space(4.0);
+                key_line(ui, &person.key, "");
                 ui.add_space(8.0);
                 let editing = |e: &Edit| match e {
-                    Edit::AddKey(n) | Edit::Rename(n) => n == name,
+                    Edit::Rekey(n) | Edit::Rename(n) => n == name,
                     Edit::Assign(_) => false,
                 };
                 match self.edit.clone().filter(editing) {
-                    Some(Edit::AddKey(_)) => edit_row(
-                        ui,
-                        &mut self.edit_input,
-                        t.contact_key_hint,
-                        true,
-                        t,
-                        &mut acts,
-                    ),
+                    Some(Edit::Rekey(_)) => {
+                        ui.label(RichText::new(t.rekey_note).size(12.0).color(DANGER));
+                        edit_row(ui, &mut self.edit_input, t.rekey_hint, true, t, &mut acts);
+                    }
                     Some(_) => edit_row(
                         ui,
                         &mut self.edit_input,
@@ -790,11 +771,11 @@ impl BrocolisApp {
                     }
                     None => {
                         ui.horizontal_wrapped(|ui| {
-                            if small_button(ui, t.gen_key).clicked() {
-                                acts.push(Act::Generate(name.clone()));
+                            if small_button(ui, t.copy).clicked() {
+                                acts.push(Act::Copy(person.key.b64.clone()));
                             }
-                            if small_button(ui, t.add_key).clicked() {
-                                acts.push(Act::Open(Edit::AddKey(name.clone())));
+                            if small_button(ui, t.change_key).clicked() {
+                                acts.push(Act::Open(Edit::Rekey(name.clone())));
                             }
                             if small_button(ui, t.rename).clicked() {
                                 acts.push(Act::Open(Edit::Rename(name.clone())));
@@ -864,7 +845,9 @@ impl BrocolisApp {
             resp.widget_info(|| WidgetInfo::labeled(WidgetType::TextEdit, true, t.pair_hint));
             if ui
                 .add_enabled(
-                    !pairing && !self.pair_code.trim().is_empty(),
+                    !pairing
+                        && !self.pair_code.trim().is_empty()
+                        && !self.pair_name.trim().is_empty(),
                     small(t.pair_btn),
                 )
                 .clicked()
@@ -1016,8 +999,17 @@ impl BrocolisApp {
             Act::Save => {
                 let input = self.edit_input.trim().to_owned();
                 let done = match self.edit.clone() {
-                    Some(Edit::AddKey(name)) => keyring::contact_add(&config, &name, &input)
-                        .map(|()| Some(t.add_done.to_owned())),
+                    // Champ vide : une clé neuve, copiée pour la lui transmettre.
+                    Some(Edit::Rekey(name)) if input.is_empty() => {
+                        keyring::contact_set_key(&config, &name, None).map(|b64| {
+                            ctx.copy_text(b64);
+                            Some(t.rekey_done.replace("{name}", &name))
+                        })
+                    }
+                    Some(Edit::Rekey(name)) => {
+                        keyring::contact_set_key(&config, &name, Some(&input))
+                            .map(|_| Some(t.rekey_set.replace("{name}", &name)))
+                    }
                     Some(Edit::Rename(old)) => {
                         keyring::contact_rename(&config, &old, &input).map(|()| None)
                     }
@@ -1034,14 +1026,6 @@ impl BrocolisApp {
             }
             Act::OwnPrimary(b64) => keyring::make_primary(&config, &b64).map(|()| None),
             Act::OwnRemove(b64) => keyring::remove(&config, &b64).map(|()| None),
-            Act::Use(name, b64) => keyring::contact_use(&config, &name, &b64).map(|()| None),
-            Act::RemoveKey(name, b64) => {
-                keyring::contact_remove_key(&config, &name, &b64).map(|()| None)
-            }
-            Act::Generate(name) => keyring::contact_generate(&config, &name).map(|b64| {
-                ctx.copy_text(b64);
-                Some(t.gen_key_done.replace("{name}", &name))
-            }),
             Act::Delete(name) => {
                 self.confirm_delete = None;
                 keyring::contact_delete(&config, &name).map(|()| None)
@@ -1084,7 +1068,7 @@ impl BrocolisApp {
                     .send_to
                     .iter()
                     .any(|n| brocolis::config::same_name(n, &p.name));
-                if chip(ui, &p.name, on, !p.keys.is_empty()).clicked() {
+                if chip(ui, &p.name, on, true).clicked() {
                     if on {
                         self.send_to
                             .retain(|n| !brocolis::config::same_name(n, &p.name));
