@@ -1,9 +1,10 @@
 use yew::prelude::*;
 
 use crate::components::footer::Footer;
+use crate::components::marquee::Marquee;
 use crate::components::skip_link::SkipLink;
 use crate::components::switchers::Switchers;
-use crate::markup::raw;
+use crate::markup::{raw, rolling, words};
 use crate::route::Route;
 use crate::settings::use_t;
 
@@ -30,7 +31,7 @@ pub fn DownloadPage() -> Html {
                 <div class="container nav-inner">
                     <a class="nav-brand" href={Route::Home.href()}>
                         <span class="nav-leaf" aria-hidden="true">{ "🥦" }</span>
-                        <span>{ "Brocolis" }</span>
+                        <span data-scramble="">{ "Brocolis" }</span>
                     </a>
                     <div class="nav-switchers">
                         <Switchers />
@@ -40,50 +41,50 @@ pub fn DownloadPage() -> Html {
 
             <main id="contenu" class="container dl-main" tabindex="-1">
                 <a class="dl-back" href={Route::Home.href()}>
-                    <span aria-hidden="true">{ "← " }</span>{ t.dl_back }
+                    <span aria-hidden="true">{ "← " }</span><span data-scramble="">{ t.dl_back }</span>
                 </a>
-                <h1 id="dl-h" class="dl-title" data-reveal="mask">{ t.dl_h }</h1>
-                <p class="dl-intro" data-reveal="">{ raw(t.dl_intro) }</p>
-                <p class="dl-version" data-reveal="">{ raw(t.dl_version) }</p>
+                <h1 id="dl-h" class="dl-title" data-reveal="words">{ words(t.dl_h) }</h1>
+                <p class="dl-intro" data-reveal="blur">{ raw(t.dl_intro) }</p>
+                <p class="dl-version" data-reveal="blur">{ raw(t.dl_version) }</p>
 
                 <section id="downloads" class="grid grid-3 dl-grid" aria-labelledby="dl-h">
-                    <article class="card platform-card" data-reveal="" data-spot="">
+                    <article class="card platform-card" data-reveal="card" data-tilt="" data-spot="">
                         <div class="platform-head">
                             <span class="platform-icon" aria-hidden="true">{ "🍎" }</span>
                             <h2>{ t.dl_macos_t }</h2>
                         </div>
                         <p>{ raw(t.dl_macos_d) }</p>
-                        <a class="btn primary platform-cta" href={DL_MACOS}>
-                            { t.dl_macos_btn }
+                        <a class="btn primary platform-cta" data-magnetic="" href={DL_MACOS}>
+                            { rolling(t.dl_macos_btn) }
                         </a>
                         <p class="dl-note">{ raw(t.dl_macos_note) }</p>
                     </article>
 
-                    <article class="card platform-card" data-reveal="" data-spot="">
+                    <article class="card platform-card" data-reveal="card" data-tilt="" data-spot="">
                         <div class="platform-head">
                             <span class="platform-icon" aria-hidden="true">{ "🐧" }</span>
                             <h2>{ t.dl_linux_t }</h2>
                         </div>
                         <p>{ raw(t.dl_linux_d) }</p>
                         <div class="dl-btn-row">
-                            <a class="btn primary platform-cta" href={DL_LINUX_DEB}>
-                                { t.dl_linux_deb }
+                            <a class="btn primary platform-cta" data-magnetic="" href={DL_LINUX_DEB}>
+                                { rolling(t.dl_linux_deb) }
                             </a>
-                            <a class="btn platform-cta" href={DL_LINUX_RPM}>
-                                { t.dl_linux_rpm }
+                            <a class="btn platform-cta" data-magnetic="" href={DL_LINUX_RPM}>
+                                { rolling(t.dl_linux_rpm) }
                             </a>
                         </div>
                         <p class="dl-note">{ raw(t.dl_linux_note) }</p>
                     </article>
 
-                    <article class="card platform-card" data-reveal="" data-spot="">
+                    <article class="card platform-card" data-reveal="card" data-tilt="" data-spot="">
                         <div class="platform-head">
                             <span class="platform-icon" aria-hidden="true">{ "🪟" }</span>
                             <h2>{ t.dl_windows_t }</h2>
                         </div>
                         <p>{ raw(t.dl_windows_d) }</p>
-                        <a class="btn primary platform-cta" href={DL_WINDOWS}>
-                            { t.dl_windows_btn }
+                        <a class="btn primary platform-cta" data-magnetic="" href={DL_WINDOWS}>
+                            { rolling(t.dl_windows_btn) }
                         </a>
                         <p class="dl-note">{ raw(t.dl_windows_note) }</p>
                     </article>
@@ -94,6 +95,7 @@ pub fn DownloadPage() -> Html {
                 </p>
             </main>
 
+            <Marquee words={vec!["macOS", "Linux", "Windows", "Intel", "Apple Silicon", ".deb", ".rpm", "x86_64"]} />
             <Footer cta={false} />
         </>
     }

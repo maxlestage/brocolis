@@ -47,8 +47,12 @@ donc sur des **valeurs calculées par le navigateur** : `getComputedStyle`,
   défilement, poussière réellement peinte dans le canevas, photo révélée en
   fin de scène, apparitions au défilement, barre qui s'efface et revient,
   manifeste, curseur anneau, aimantation des boutons, volet entre les pages ;
-- mouvement réduit (`reducedMotion: "reduce"`) : ni rideau ni épinglage, et
-  aucun contenu caché en attente d'une animation ;
+- deuxième passe : texte « déchiffré » rendu intact, y compris quand la langue
+  change en plein brouillage ; démonstration (jeton côté serveur, clair chez
+  les proches) ; bandeau qui avance ; carte inclinée puis redressée ; section
+  courante (`--spy`, lien marqué) ; commande tapée jusqu'au bout ;
+- mouvement réduit (`reducedMotion: "reduce"`) : ni rideau ni épinglage,
+  aucun contenu caché en attente d'une animation, démonstration lisible ;
 - aucune erreur de console ni requête en échec.
 
 ## Lancer

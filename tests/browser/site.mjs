@@ -399,13 +399,20 @@ for (const [locale, expected, marker] of [
   photo === "1" ? ok("la photo recouvre la mosaïque une fois formée") : bad(`opacité de la photo en fin de scène : ${photo}`);
 
   // Apparitions : caché avant, révélé en entrant dans la vue.
-  const avant = await page.$eval("#privacy-h", (e) => [e.hasAttribute("data-in"), getComputedStyle(e).clipPath]);
+  // Les mots du titre sont sous leur ligne, puis montent.
+  const mot = () => page.$eval("#privacy-h .w > span", (e) => getComputedStyle(e).transform);
+  const avant = [await page.$eval("#privacy-h", (e) => e.hasAttribute("data-in")), await mot()];
   await page.evaluate(() => document.querySelector("#privacy").scrollIntoView());
   await until(page, () => document.querySelector("#privacy-h").hasAttribute("data-in"));
-  const apres = await page.$eval("#privacy-h", (e) => e.hasAttribute("data-in"));
-  !avant[0] && avant[1] !== "none" && apres
-    ? ok("un titre se dévoile en entrant dans la vue (data-in)")
-    : bad(`apparition : avant=${JSON.stringify(avant)}, après=${apres}`);
+  await until(page, () => getComputedStyle(document.querySelector("#privacy-h .w > span")).transform === "none");
+  const apres = [await page.$eval("#privacy-h", (e) => e.hasAttribute("data-in")), await mot()];
+  const titre = await page.$eval("#privacy-h", (e) => e.textContent);
+  !avant[0] && avant[1] !== "none" && apres[0] && apres[1] === "none"
+    ? ok("un titre se dévoile mot à mot en entrant dans la vue")
+    : bad(`apparition : avant=${JSON.stringify(avant)}, après=${JSON.stringify(apres)}`);
+  titre === "Vie privée et sécurité"
+    ? ok(`le découpage en mots garde le texte intact (« ${titre} »)`)
+    : bad(`texte du titre altéré : ${JSON.stringify(titre)}`);
 
   // Barre de navigation : elle s'efface en descendant, revient en remontant.
   await page.evaluate(() => window.scrollBy(0, 400));
@@ -444,6 +451,93 @@ for (const [locale, expected, marker] of [
   await ctx.close();
 }
 
+// --- 7 bis. Mouvement, deuxième passe -------------------------------------
+{
+  const { ctx, page, errors } = await newPage({ width: 1280, height: 800 });
+  await load(page, BASE + "/");
+  await until(page, () => document.documentElement.classList.contains("ready"));
+
+  // Texte « déchiffré » : il défile puis revient exactement à l'original.
+  const eyebrow = "[data-scramble]";
+  await until(page, (s) => document.querySelector(".hero-eyebrow " + s).textContent === "Proxy MITM · Rust · AES-256-GCM", eyebrow);
+  const net = await page.$eval(".hero-eyebrow [data-scramble]", (e) => e.textContent);
+  net === "Proxy MITM · Rust · AES-256-GCM" ? ok("le texte déchiffré revient intact") : bad(`surtitre : ${net}`);
+
+  // Pendant un déchiffrage, la langue change : c'est la nouvelle qui gagne.
+  const box = await page.$eval(".hero-eyebrow [data-scramble]", (e) => { const r = e.getBoundingClientRect(); return [r.x + 20, r.y + r.height / 2]; });
+  await page.mouse.move(box[0], box[1]);
+  await until(page, () => document.querySelector(".hero-eyebrow [data-scramble]").textContent !== "Proxy MITM · Rust · AES-256-GCM");
+  const pendant = await page.$eval(".hero-eyebrow [data-scramble]", (e) => e.textContent);
+  await page.click('.switcher button:has-text("EN")');
+  await until(page, () => document.querySelector(".hero-eyebrow [data-scramble]").textContent === "MITM proxy · Rust · AES-256-GCM");
+  const apres = await page.$eval(".hero-eyebrow [data-scramble]", (e) => e.textContent);
+  apres === "MITM proxy · Rust · AES-256-GCM" && pendant !== "Proxy MITM · Rust · AES-256-GCM"
+    ? ok(`changement de langue en plein déchiffrage : texte final anglais (pendant : « ${pendant} »)`)
+    : bad(`après changement de langue : « ${apres} » (pendant : « ${pendant} »)`);
+  await page.click('.switcher button:has-text("FR")');
+  await until(page, () => document.documentElement.lang === "fr");
+
+  // Démonstration : le secret se scelle en jeton, puis se rouvre chez les proches.
+  await page.evaluate(() => document.querySelector(".demo-board").scrollIntoView({ block: "center" }));
+  await until(page, () => document.querySelector(".demo-row:nth-child(2) .demo-token")?.textContent.startsWith("[[BROCOLIS:v1:"));
+  const jeton = await page.$eval(".demo-row:nth-child(2) .demo-token", (e) => e.textContent);
+  await page.waitForFunction(() => document.querySelector(".demo-row:nth-child(3) .demo-token.clear")?.textContent === "demain à 18h", null, { timeout: 12000 }).catch(() => {});
+  const clair = await page.$eval(".demo-row:nth-child(3) .demo-token", (e) => e.textContent);
+  jeton.startsWith("[[BROCOLIS:v1:") && clair === "demain à 18h"
+    ? ok(`démonstration : « ${jeton} » côté serveur, « ${clair} » chez les proches`)
+    : bad(`démonstration : serveur=${jeton}, proches=${clair}`);
+
+  // Bandeau : il avance tout seul.
+  await page.evaluate(() => document.querySelector(".marquee").scrollIntoView({ block: "center" }));
+  const pos = () => page.$eval(".marquee .marquee-track", (e) => new DOMMatrix(getComputedStyle(e).transform).m41);
+  const x0 = await pos();
+  await page.waitForTimeout(400);
+  const x1 = await pos();
+  Math.abs(x1 - x0) > 5 ? ok(`le bandeau défile (${Math.round(x0)} → ${Math.round(x1)}px)`) : bad(`bandeau immobile (${x0} → ${x1})`);
+
+  // Carte : inclinée sous le pointeur, redressée en la quittant.
+  const card = await page.$("#platforms .card");
+  await card.scrollIntoViewIfNeeded();
+  await until(page, () => document.querySelector("#platforms .card").hasAttribute("data-in"));
+  const cb = await card.boundingBox();
+  await page.mouse.move(cb.x + cb.width * 0.85, cb.y + cb.height * 0.2);
+  await page.mouse.move(cb.x + cb.width * 0.9, cb.y + cb.height * 0.15);
+  const incl = await card.evaluate((e) => [e.style.getPropertyValue("--rx"), e.style.getPropertyValue("--ry")]);
+  await page.mouse.move(5, 400);
+  await page.mouse.move(6, 401);
+  const repos = await card.evaluate((e) => e.style.getPropertyValue("--ry"));
+  parseFloat(incl[1]) > 0 && parseFloat(incl[0]) > 0 && repos === ""
+    ? ok(`carte inclinée sous le pointeur (${incl.join(", ")}), redressée ensuite`)
+    : bad(`inclinaison : ${JSON.stringify(incl)}, au repos : ${JSON.stringify(repos)}`);
+
+  // Section courante : rang sur <html>, lien marqué, repère affiché.
+  await page.evaluate(() => document.querySelector("#features").scrollIntoView());
+  await until(page, () => document.querySelector('.nav-links a[href="#features"]').hasAttribute("data-current"));
+  const spy = await page.evaluate(() => [
+    document.documentElement.style.getPropertyValue("--spy"),
+    document.querySelector('.nav-links a[href="#features"]').hasAttribute("data-current"),
+    document.querySelectorAll(".nav-links a[data-current]").length,
+    document.documentElement.classList.contains("spy-on"),
+  ]);
+  spy[0] === "2" && spy[1] && spy[2] === 1 && spy[3]
+    ? ok("section courante suivie (--spy=2, lien « Fonctionnalités » marqué)")
+    : bad(`section courante : ${JSON.stringify(spy)}`);
+
+  // Terminal : la commande se tape jusqu'au bout.
+  await page.evaluate(() => document.querySelector("#auto .terminal").scrollIntoView({ block: "center" }));
+  await until(page, () => {
+    const t = document.querySelector("#auto .typed");
+    return t.getBoundingClientRect().width >= t.scrollWidth - 1 && t.scrollWidth > 0;
+  });
+  const frappe = await page.$eval("#auto .typed", (e) => [Math.round(e.getBoundingClientRect().width), e.scrollWidth, e.textContent]);
+  frappe[0] >= frappe[1] - 1 && frappe[2] === "sudo brocolis auto"
+    ? ok(`commande tapée en entier (« ${frappe[2]} », ${frappe[0]}px)`)
+    : bad(`frappe : ${JSON.stringify(frappe)}`);
+
+  errors.length === 0 ? ok("aucune erreur console (deuxième passe)") : bad(`console : ${errors.join(" | ")}`);
+  await ctx.close();
+}
+
 // --- 8. Mouvement réduit : rien de caché, rien d'épinglé --------------------
 {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "fr-FR", reducedMotion: "reduce" });
@@ -457,6 +551,7 @@ for (const [locale, expected, marker] of [
     photo: getComputedStyle(document.querySelector(".hero-art img")).opacity,
     caches: [...document.querySelectorAll("[data-reveal]")].filter((e) => getComputedStyle(e).opacity !== "1").length,
     lettres: [...document.querySelectorAll(".hero-title .char")].filter((e) => getComputedStyle(e).transform !== "none").length,
+    demo: document.querySelector(".demo-row:nth-child(3) .demo-token")?.textContent,
   }));
   !etat.motion && !etat.rideau ? ok("mouvement réduit : ni classe `motion`, ni rideau") : bad(`réduit : motion=${etat.motion}, rideau=${etat.rideau}`);
   Math.abs(etat.pin - etat.stage) < 1 && etat.photo === "1"
@@ -465,6 +560,9 @@ for (const [locale, expected, marker] of [
   etat.caches === 0 && etat.lettres === 0
     ? ok("mouvement réduit : aucun contenu caché en attente d'animation")
     : bad(`réduit : ${etat.caches} bloc(s) et ${etat.lettres} lettre(s) masqués`);
+  etat.demo === "demain à 18h"
+    ? ok("mouvement réduit : démonstration figée sur son état final, lisible")
+    : bad(`réduit : démonstration « ${etat.demo} »`);
   await ctx.close();
 }
 
