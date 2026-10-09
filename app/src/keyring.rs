@@ -1,5 +1,5 @@
-//! Le trousseau de l'application, lu et écrit dans `brocolis.toml` : vos clés
-//! sans nom, et vos contacts avec leurs clés.
+//! Le trousseau de l'application, lu et écrit dans `brocolis.toml` : vos
+//! contacts (un nom, une clé) et vos clés sans nom.
 //!
 //! Le fichier reste la seule source de vérité : chaque modification y est
 //! écrite aussitôt (en préservant commentaires et mise en forme), puis relue.
@@ -13,8 +13,7 @@ use brocolis::{Config, SymKey, contacts};
 #[derive(Clone, Debug, PartialEq)]
 pub struct Entry {
     pub b64: String,
-    /// Clé sans nom : la principale chiffre par défaut. Clé d'un contact : la
-    /// clé active, celle qui chiffre pour lui. Les autres servent à lire.
+    /// La clé principale (clés sans nom) : elle chiffre par défaut.
     pub primary: bool,
     /// Empreinte courte, à comparer de vive voix (même calcul que l'app iOS).
     pub fingerprint: String,
@@ -30,11 +29,11 @@ impl Entry {
     }
 }
 
-/// Un contact et ses clés, la clé active d'abord.
+/// Un contact et sa clé.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Person {
     pub name: String,
-    pub keys: Vec<Entry>,
+    pub key: Entry,
 }
 
 /// Tout ce que le fichier contient de clés.
@@ -82,14 +81,7 @@ pub fn load(config: &Path) -> anyhow::Result<Book> {
         .iter()
         .map(|c| Person {
             name: c.name.clone(),
-            keys: c
-                .keys
-                .iter()
-                .map(|k| k.trim())
-                .filter(|k| !k.is_empty())
-                .enumerate()
-                .map(|(i, k)| Entry::new(k, i == 0))
-                .collect(),
+            key: Entry::new(c.key.trim(), false),
         })
         .collect();
     Ok(Book {
@@ -147,49 +139,39 @@ pub fn make_primary(config: &Path, b64: &str) -> anyhow::Result<()> {
     })
 }
 
-/// Range une clé sans nom sous un contact (créé s'il n'existe pas) : on saura
-/// désormais de qui viennent les messages qu'elle ouvre.
+/// Fait d'une clé sans nom un contact : on saura désormais de qui viennent
+/// les messages qu'elle ouvre.
 pub fn assign(config: &Path, b64: &str, name: &str) -> anyhow::Result<()> {
     edit(config, |s| {
-        let s = contacts::add_key(s, name, b64)?;
+        let s = contacts::add(s, name, b64)?;
         brocolis::pairing::remove_key_from_toml(&s, b64)
     })
 }
 
 // --- Contacts --------------------------------------------------------------
 
-/// Ajoute une clé reçue à un contact, en le créant au besoin.
+/// Nouveau contact, avec la clé qu'il nous a donnée.
 pub fn contact_add(config: &Path, name: &str, b64: &str) -> anyhow::Result<()> {
     let b64 = validate(b64)?;
-    edit(config, |s| contacts::add_key(s, name, &b64))
+    edit(config, |s| contacts::add(s, name, &b64))
 }
 
-/// Crée une clé neuve pour un contact (créé au besoin) ; c'est sa clé active
-/// s'il n'en avait pas. Renvoie la clé, à lui transmettre.
+/// Nouveau contact, avec une clé créée ici. Renvoie la clé, à lui transmettre.
 pub fn contact_generate(config: &Path, name: &str) -> anyhow::Result<String> {
     let b64 = SymKey::generate().to_base64();
-    let had_keys = load(config)?
-        .person(name)
-        .is_some_and(|p| !p.keys.is_empty());
-    edit(config, |s| {
-        let s = contacts::add_key(s, name, &b64)?;
-        // Une clé créée pour quelqu'un est faite pour lui écrire : elle
-        // devient active.
-        if had_keys {
-            contacts::set_active_key(&s, name, &b64)
-        } else {
-            Ok(s)
-        }
-    })?;
+    edit(config, |s| contacts::add(s, name, &b64))?;
     Ok(b64)
 }
 
-pub fn contact_use(config: &Path, name: &str, b64: &str) -> anyhow::Result<()> {
-    edit(config, |s| contacts::set_active_key(s, name, b64))
-}
-
-pub fn contact_remove_key(config: &Path, name: &str, b64: &str) -> anyhow::Result<()> {
-    edit(config, |s| contacts::remove_key(s, name, b64))
+/// Remplace la clé d'un contact : celle qu'il a donnée, ou (`None`) une clé
+/// neuve, renvoyée pour la lui transmettre.
+pub fn contact_set_key(config: &Path, name: &str, b64: Option<&str>) -> anyhow::Result<String> {
+    let b64 = match b64 {
+        Some(k) => validate(k)?,
+        None => SymKey::generate().to_base64(),
+    };
+    edit(config, |s| contacts::set_key(s, name, &b64))?;
+    Ok(b64)
 }
 
 pub fn contact_rename(config: &Path, old: &str, new: &str) -> anyhow::Result<()> {
@@ -207,8 +189,8 @@ pub fn set_encrypt_to(config: &Path, names: &[String]) -> anyhow::Result<()> {
 
 // --- Chiffrer, déchiffrer ------------------------------------------------
 
-/// Les clés pour chiffrer un message : la clé principale si `me`, et la clé
-/// active de chaque contact nommé. Sans doublon.
+/// Les clés pour chiffrer un message : la clé principale si `me`, et celle de
+/// chaque contact nommé. Sans doublon.
 pub fn recipients(config: &Path, me: bool, names: &[String]) -> anyhow::Result<Vec<SymKey>> {
     let book = load(config)?;
     let mut b64s: Vec<&str> = Vec::new();
@@ -219,11 +201,7 @@ pub fn recipients(config: &Path, me: bool, names: &[String]) -> anyhow::Result<V
         let person = book
             .person(n)
             .ok_or_else(|| anyhow::anyhow!("contact « {n} » inconnu"))?;
-        let active = person
-            .keys
-            .first()
-            .ok_or_else(|| anyhow::anyhow!("« {n} » n'a aucune clé"))?;
-        b64s.push(&active.b64);
+        b64s.push(&person.key.b64);
     }
     let mut keys: Vec<SymKey> = Vec::new();
     for b in b64s {
@@ -315,28 +293,38 @@ mod tests {
     }
 
     #[test]
-    fn contacts_a_plusieurs_cles() {
+    fn un_contact_une_cle() {
         let f = fresh("contacts");
         let a1 = contact_generate(&f.config, "Alice").unwrap();
-        let a2 = SymKey::generate().to_base64();
-        contact_add(&f.config, "alice", &a2).unwrap();
+        assert!(
+            contact_generate(&f.config, "alice").is_err(),
+            "Alice existe déjà"
+        );
+        assert!(contact_add(&f.config, "ALICE", &SymKey::generate().to_base64()).is_err());
+        assert_eq!(
+            load(&f.config).unwrap().person("alice").unwrap().key.b64,
+            a1
+        );
+
+        // Changer de clé : celle reçue, ou une neuve.
+        let recue = SymKey::generate().to_base64();
+        contact_set_key(&f.config, "Alice", Some(&recue)).unwrap();
+        assert_eq!(
+            load(&f.config).unwrap().person("Alice").unwrap().key.b64,
+            recue
+        );
+        let neuve = contact_set_key(&f.config, "Alice", None).unwrap();
+        assert_ne!(neuve, recue);
         let book = load(&f.config).unwrap();
-        let alice = book.person("ALICE").unwrap();
-        assert_eq!(alice.keys.len(), 2);
-        assert!(alice.keys[0].primary && alice.keys[0].b64 == a1);
+        assert_eq!(book.contacts.len(), 1);
+        assert_eq!(book.person("Alice").unwrap().key.b64, neuve);
 
-        // Une clé GÉNÉRÉE pour un contact existant devient active.
-        let a3 = contact_generate(&f.config, "Alice").unwrap();
-        assert_eq!(load(&f.config).unwrap().contacts[0].keys[0].b64, a3);
-        contact_use(&f.config, "Alice", &a2).unwrap();
-        assert_eq!(load(&f.config).unwrap().contacts[0].keys[0].b64, a2);
-
-        // Une clé sans nom rangée sous un contact quitte vos clés.
+        // Une clé sans nom devient un contact, et quitte vos clés.
         let anonyme = generate(&f.config).unwrap();
         assign(&f.config, &anonyme, "Bob").unwrap();
         let book = load(&f.config).unwrap();
         assert!(!book.own.iter().any(|e| e.b64 == anonyme));
-        assert_eq!(book.person("Bob").unwrap().keys[0].b64, anonyme);
+        assert_eq!(book.person("Bob").unwrap().key.b64, anonyme);
 
         set_encrypt_to(&f.config, &["Bob".into()]).unwrap();
         assert!(load(&f.config).unwrap().is_target("bob"));
@@ -345,8 +333,6 @@ mod tests {
         contact_delete(&f.config, "Robert").unwrap();
         let book = load(&f.config).unwrap();
         assert!(book.person("Robert").is_none() && book.encrypt_to.is_empty());
-        contact_remove_key(&f.config, "Alice", &a2).unwrap();
-        assert_eq!(load(&f.config).unwrap().contacts[0].keys.len(), 2);
         let _ = std::fs::remove_dir_all(&f.dir);
     }
 

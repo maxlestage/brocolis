@@ -9,11 +9,10 @@
 //! key = "<clé base64 de 32 octets, optionnel>"
 //! encrypt_hosts = ["twitter.com", "x.com"]
 //!
-//! # Un contact par correspondant, une ou plusieurs clés chacun : la première
-//! # chiffre, les suivantes (plus anciennes) servent encore à lire.
+//! # Un contact, une clé : celle que l'on partage avec cette personne.
 //! [[contacts]]
 //! name = "Alice"
-//! keys = ["<clé partagée avec Alice>"]
+//! key = "<clé partagée avec Alice>"
 //! ```
 
 use std::net::SocketAddr;
@@ -21,22 +20,19 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-/// Un correspondant et les clés partagées avec lui.
+/// Un correspondant et LA clé partagée avec lui : elle chiffre ce qu'on lui
+/// envoie et ouvre ce qu'il nous envoie.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Contact {
     pub name: String,
-    /// La première clé est la clé ACTIVE : c'est elle qui chiffre pour ce
-    /// contact. Les suivantes (anciennes clés, clé de groupe…) servent
-    /// seulement à lire ce qu'il nous a envoyé avec.
-    #[serde(default)]
-    pub keys: Vec<String>,
+    pub key: String,
 }
 
 impl Contact {
-    /// La clé qui chiffre pour ce contact.
-    pub fn active_key(&self) -> Option<&str> {
-        self.keys.iter().map(|k| k.trim()).find(|k| !k.is_empty())
+    /// La clé du contact, sans les espaces autour ; `None` si elle est vide.
+    pub fn key(&self) -> Option<&str> {
+        Some(self.key.trim()).filter(|k| !k.is_empty())
     }
 }
 
@@ -73,12 +69,12 @@ pub struct Config {
     /// correspondants). Défaut : faux (jeton `v1`, compatible proxy/iOS).
     #[serde(default)]
     pub encrypt_multi: bool,
-    /// Correspondants nommés, chacun avec ses clés (`[[contacts]]`).
+    /// Correspondants nommés, une clé chacun (`[[contacts]]`).
     #[serde(default)]
     pub contacts: Vec<Contact>,
     /// Pour qui le proxy chiffre : des noms de contacts. Vide = la clé `key`
     /// (ou tout le trousseau si `encrypt_multi`). Plusieurs noms = un seul
-    /// jeton `v2` que chacun d'eux peut ouvrir.
+    /// jeton `v2` que chacun d'eux ouvre avec sa clé.
     #[serde(default)]
     pub encrypt_to: Vec<String>,
     /// Hôtes dont le trafic doit être traité (sous-chaîne du nom d'hôte).
@@ -96,7 +92,7 @@ impl Config {
     /// qu'une fois.
     pub fn all_key_b64(&self) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
-        let contact_keys = self.contacts.iter().flat_map(|c| c.keys.iter());
+        let contact_keys = self.contacts.iter().map(|c| &c.key);
         for k in self.key.iter().chain(self.keys.iter()).chain(contact_keys) {
             let k = k.trim();
             if !k.is_empty() && !out.iter().any(|o| o == k) {
@@ -112,7 +108,7 @@ impl Config {
     }
 
     /// Clés avec lesquelles CHIFFRER quand `encrypt_to` désigne des contacts :
-    /// la clé active de chacun. `Ok(None)` si `encrypt_to` est vide (règle
+    /// la clé de chacun. `Ok(None)` si `encrypt_to` est vide (règle
     /// par défaut). Un nom inconnu, ou un contact sans clé, est une erreur :
     /// chiffrer pour quelqu'un d'autre que prévu, ou ne pas chiffrer du tout,
     /// serait pire que de refuser de démarrer.
@@ -125,7 +121,7 @@ impl Config {
             let contact = self
                 .contact(name)
                 .ok_or_else(|| anyhow::anyhow!("encrypt_to : contact « {name} » inconnu"))?;
-            let key = contact.active_key().ok_or_else(|| {
+            let key = contact.key().ok_or_else(|| {
                 anyhow::anyhow!("encrypt_to : le contact « {name} » n'a aucune clé")
             })?;
             if !keys.iter().any(|k: &String| k == key) {
@@ -221,29 +217,31 @@ encrypt_hosts = ["twitter.com", "x.com"]
     fn contacts_et_destinataires() {
         let toml = r#"
 key = "PRINCIPALE"
-keys = ["ANONYME", "ALICE1"]
+keys = ["ANONYME", "ALICE"]
 encrypt_to = ["alice", "Bob"]
 
 [[contacts]]
 name = "Alice"
-keys = ["ALICE1", "ALICE0"]
+key = "ALICE"
 
 [[contacts]]
 name = "Bob"
-keys = ["BOB1"]
+key = "BOB"
 "#;
         let cfg: Config = toml::from_str(toml).unwrap();
         assert_eq!(
             cfg.all_key_b64(),
-            ["PRINCIPALE", "ANONYME", "ALICE1", "ALICE0", "BOB1"],
+            ["PRINCIPALE", "ANONYME", "ALICE", "BOB"],
             "toutes les clés, sans doublon, contacts compris"
         );
-        assert_eq!(cfg.contact("ALICE").unwrap().active_key(), Some("ALICE1"));
+        assert_eq!(cfg.contact("ALICE").unwrap().key(), Some("ALICE"));
         assert_eq!(
             cfg.encryption_targets().unwrap().unwrap(),
-            ["ALICE1", "BOB1"],
-            "la clé ACTIVE de chaque destinataire"
+            ["ALICE", "BOB"],
+            "la clé de chaque destinataire"
         );
+        // Un contact a UNE clé : une liste est refusée.
+        assert!(toml::from_str::<Config>("[[contacts]]\nname = \"A\"\nkeys = [\"K\"]\n").is_err());
     }
 
     #[test]
@@ -251,7 +249,8 @@ keys = ["BOB1"]
         let inconnu: Config = toml::from_str("encrypt_to = [\"Zoé\"]").unwrap();
         assert!(inconnu.encryption_targets().is_err());
         let vide: Config =
-            toml::from_str("encrypt_to = [\"Zoé\"]\n[[contacts]]\nname = \"Zoé\"\n").unwrap();
+            toml::from_str("encrypt_to = [\"Zoé\"]\n[[contacts]]\nname = \"Zoé\"\nkey = \" \"\n")
+                .unwrap();
         assert!(vide.encryption_targets().is_err());
         assert!(Config::default().encryption_targets().unwrap().is_none());
     }

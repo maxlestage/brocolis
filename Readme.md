@@ -78,8 +78,8 @@ Cette architecture permet de séparer clairement les responsabilités :
 | Certificats SSL       | Génération de certificats auto-signés           |
 | Chiffrement AES-256   | Chiffrement du contenu textuel ciblé            |
 | Gestion des clés      | Partage sécurisé des clés symétriques           |
-| Contacts              | Plusieurs clés par correspondant, chiffrer pour l'un ou plusieurs |
-| Message entier        | Sans `((…))`, tout le message est chiffré (hors navigateur) |
+| Contacts              | Un contact, une clé ; chiffrer pour l'un ou plusieurs (application) |
+| Message entier        | Sans `((…))`, tout le message est chiffré (application) |
 | Régénération des clés | Rotation automatique en cas de compromission    |
 | CLI                   | Interface en ligne de commande                  |
 | Application de bureau | Interrupteur, contacts, messages — macOS, Linux, Windows |
@@ -189,14 +189,14 @@ commandes. Trois onglets :
   continu : un `brocolis on`/`off` lancé dans un terminal s'y reflète. On y
   choisit aussi **pour qui le navigateur chiffre** : vous (clé principale) ou
   un ou plusieurs contacts.
-- **Contacts** — un nom, et **une ou plusieurs clés** par contact : la clé
-  active chiffre ce qu'on lui envoie, les autres (anciennes, clé de groupe…)
-  servent encore à lire. Créer un contact (sa clé est générée et copiée, ou
-  collée), ajouter une clé, choisir l'active, renommer, supprimer (avec
-  confirmation), **appairer par un code** convenu de vive voix et ranger la
-  clé obtenue sous un nom (même protocole et même empreinte que
-  `brocolis pair` et l'app iOS). Les clés sans nom restent gérées comme avant,
-  et peuvent être rangées sous un contact.
+- **Contacts** — **un contact, une clé** : celle que vous partagez avec cette
+  personne, qui chiffre ce que vous lui envoyez et ouvre ce qu'elle vous
+  envoie. Créer un contact (sa clé est créée et copiée, ou collée), copier sa
+  clé, en changer, le renommer, le supprimer (avec confirmation), ou
+  **appairer par un code** convenu de vive voix : la clé obtenue devient
+  celle du contact (même protocole et même empreinte que `brocolis pair` et
+  l'app iOS). Les clés sans nom d'avant restent gérées, et peuvent devenir des
+  contacts.
 - **Message** — choisir les destinataires (vous, un ou plusieurs contacts),
   puis chiffrer : les `((segments marqués))` s'il y en a, **sinon tout le
   message**. Plusieurs destinataires : un seul jeton que chacun ouvre avec sa
@@ -382,12 +382,11 @@ Pour une installation persistante, voir le dossier
 > qu'il faut pointer le client sur `127.0.0.1:<port>` manuellement.
 > `--no-system` lance le proxy sans aucune modification système.
 
-### Chiffrer un message sans navigateur : `encrypt` / `decrypt`
+### Vérifier sa clé sans navigateur : `encrypt` / `decrypt`
 
-Hors ligne, pour vérifier une clé, préparer un message à coller ailleurs ou
-lire un jeton reçu par un autre canal. Avec des `((parenthèses))`, seuls ces
-segments sont chiffrés — exactement comme le proxy ; **sans parenthèses, c'est
-tout le message** qui devient un seul jeton.
+Les deux commandes appliquent exactement la transformation du proxy, hors
+ligne. C'est le moyen le plus rapide de s'assurer qu'une clé est la bonne, ou
+de lire un jeton reçu par un autre canal.
 
 ```sh
 $ cle=$(brocolis keygen)                 # la clé seule sur stdout
@@ -398,43 +397,11 @@ $ echo '<jeton collé ici>' | brocolis decrypt --key "$cle"
 rdv code 4291 a 18h
 ```
 
-Sans `--key`, `encrypt` chiffre pour les contacts `--to` (répétable), sinon
-pour les destinataires `encrypt_to` de `brocolis.toml`, sinon avec la clé
-principale ; `decrypt` essaie tout le trousseau, contacts compris, et dit de
-qui vient le message. Le texte peut venir de `--text` ou de l'entrée standard.
-Seul le texte transformé va sur stdout (le compte de segments et les journaux
-partent sur stderr), donc les commandes s'enchaînent dans un tube. Un jeton
-qu'aucune clé n'ouvre est laissé tel quel, sans erreur : c'est un message
-destiné à quelqu'un d'autre.
-
-### Contacts : plusieurs clés par correspondant
-
-```sh
-$ brocolis contacts add Alice              # crée Alice ; sa clé seule sur stdout,
-<clé base64, à transmettre à Alice>        # à lui transmettre par un canal sûr
-$ brocolis contacts add Alice --key "$k"   # une clé de plus pour Alice
-$ brocolis pair --code 4291 --name Bob     # appairage, clé rangée sous Bob
-$ brocolis contacts
-Alice
-   active   617E-6FC9-ABFF-B902
-   lecture  4D03-935B-179B-219C
-Bob
-   active   D6FA-8246-03F6-0ED4
-
-$ brocolis encrypt --to Alice --text 'On se voit demain'
-[[BROCOLIS:v1:…]]                          # tout le message, pour Alice
-$ brocolis encrypt --to Alice --to Bob --text 'rdv ((18h))'
-rdv [[BROCOLIS:v2:…]]                      # un seul jeton, lisible par les deux
-$ brocolis decrypt --text '[[BROCOLIS:v1:…]]'
-On se voit demain
-# 1 jeton(s) déchiffré(s) — de : Alice
-```
-
-La première clé d'un contact est sa clé **active** (elle chiffre) ;
-`contacts use NOM CLÉ` en change, `contacts remove NOM [--key CLÉ]` retire un
-contact ou l'une de ses clés, `contacts rename ANCIEN NOUVEAU` le renomme. Pour
-que le proxy chiffre pour des contacts, listez-les dans `encrypt_to` (voir
-`brocolis.example.toml`).
+Sans `--key`, le trousseau de `brocolis.toml` est utilisé. Le texte peut venir
+de `--text` ou de l'entrée standard. Seul le texte transformé va sur stdout (le
+compte de segments et les journaux partent sur stderr), donc les commandes s'enchaînent dans un
+tube. Un jeton qu'aucune clé n'ouvre est laissé tel quel, sans erreur : c'est un
+message destiné à quelqu'un d'autre.
 
 ### Commandes de base
 
@@ -640,9 +607,9 @@ que les utilisateurs partageant la clé voient le texte en clair.
 
 Dans le trafic web, seul ce qui est marqué est chiffré (chiffrer une requête
 entière la rendrait illisible pour le service). Le message entier, lui, se
-chiffre hors navigateur : `brocolis encrypt` ou l'onglet Message de
-l'application. Les destinataires du proxy se choisissent avec `encrypt_to` :
-la clé active de chaque contact nommé, un jeton `v2` s'ils sont plusieurs.
+chiffre dans l'onglet Message de l'application. Les contacts choisis dans
+l'onglet Protection sont les destinataires du proxy (`encrypt_to` dans la
+configuration) : la clé de chacun, un seul jeton `v2` s'ils sont plusieurs.
 
 ### Format de jeton (contrat d'interopérabilité)
 

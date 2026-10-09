@@ -14,16 +14,6 @@
 #   brocolis pair-group --code 4291 --found   # fondateur : crée + distribue
 #   brocolis pair-group --code 4291           # membre : récupère la clé
 #                              # la clé de groupe est ajoutée à `keys`.
-#
-# Contacts (un nom, une ou plusieurs clés) :
-#   brocolis contacts add Alice          # crée Alice et sa clé (à lui transmettre)
-#   brocolis contacts add Alice --key K  # ajoute une clé reçue d'Alice
-#   brocolis pair --code 4291 --name Bob # appaire et range la clé sous Bob
-#   brocolis contacts                    # la liste, avec les empreintes
-#
-# Chiffrer un message hors ligne, pour un ou plusieurs contacts :
-#   brocolis encrypt --to Alice --text 'rdv ((demain 18h))'   # le segment
-#   brocolis encrypt --to Alice --to Bob --text 'tout ceci'   # tout le message
 
 # Adresse d'écoute du proxy (HTTP et HTTPS via CONNECT).
 listen = "127.0.0.1:8080"
@@ -53,24 +43,23 @@ ca_key = "brocolis-ca.key"
 # Défaut : false (jeton v1, une seule clé, compatible proxy/iOS).
 # encrypt_multi = false
 
-# Contacts : un correspondant, une ou plusieurs clés. La PREMIÈRE est la clé
-# active (elle chiffre ce qu'on lui envoie) ; les suivantes — anciennes clés,
-# clé de groupe… — servent encore à lire ce qu'il nous a envoyé. Toutes les
-# clés des contacts s'ajoutent au trousseau de déchiffrement, et la CLI comme
-# l'application disent de quel contact vient un message.
+# Contacts — gérés depuis l'application (onglet Contacts). Un contact, une
+# clé : celle que l'on partage avec cette personne. Elle chiffre ce qu'on lui
+# envoie et ouvre ce qu'elle nous envoie ; toutes les clés des contacts
+# s'ajoutent au trousseau de déchiffrement.
 # [[contacts]]
 # name = "Alice"
-# keys = ["CLE_ACTIVE_D_ALICE", "ANCIENNE_CLE_D_ALICE"]
+# key = "CLE_PARTAGEE_AVEC_ALICE"
 #
 # [[contacts]]
 # name = "Bob"
-# keys = ["CLE_DE_BOB"]
+# key = "CLE_PARTAGEE_AVEC_BOB"
 
-# Pour qui le proxy chiffre les ((segments)) : des noms de contacts. Un seul
-# nom = jeton v1 avec sa clé active ; plusieurs = un seul jeton v2 que chacun
-# ouvre avec sa propre clé. Absent : la clé `key` (règle par défaut). Un nom
-# inconnu, ou un contact sans clé, empêche le démarrage plutôt que de chiffrer
-# pour quelqu'un d'autre.
+# Pour qui le proxy chiffre les ((segments)) : des noms de contacts (l'onglet
+# Protection de l'application le règle). Un seul nom = jeton v1 avec sa clé ;
+# plusieurs = un seul jeton v2 que chacun ouvre avec sa clé. Absent : la clé
+# `key`. Un nom inconnu empêche le démarrage plutôt que de chiffrer pour
+# quelqu'un d'autre.
 # encrypt_to = ["Alice", "Bob"]
 
 # Hôtes dont le trafic doit subir le chiffrement sélectif.

@@ -289,12 +289,10 @@ fn la_protection_restee_active_relance_le_proxy() {
     assert!(app.snapshot.engaged && app.snapshot.listening);
 }
 
-/// La clé de ce contact (la première : l'active).
+/// La clé de ce contact.
 fn cle_de(bench: &Bench, nom: &str) -> String {
     let book = crate::keyring::load(&bench.files.config).unwrap();
-    book.person(nom).expect("contact présent").keys[0]
-        .b64
-        .clone()
+    book.person(nom).expect("contact présent").key.b64.clone()
 }
 
 fn taper(h: &mut Harness<'static, BrocolisApp>, champ: &str, texte: &str) {
@@ -305,7 +303,7 @@ fn taper(h: &mut Harness<'static, BrocolisApp>, champ: &str, texte: &str) {
 }
 
 #[test]
-fn des_contacts_a_plusieurs_cles() {
+fn un_contact_une_cle() {
     let bench = Bench::new("contacts");
     let mut h = harness(bench.app(false));
     h.state_mut().tab = Tab::Contacts;
@@ -320,22 +318,46 @@ fn des_contacts_a_plusieurs_cles() {
     h.get_by_label_contains("Contact « Alice » créé");
     let premiere = cle_de(&bench, "Alice");
 
-    // Une seconde clé, reçue d'elle : elle s'ajoute, la première reste active.
-    h.get_by_label(FR.add_key).click();
+    // Un second « alice » est refusé : on ne remplace pas une clé par mégarde.
+    taper(&mut h, FR.name_hint, "alice");
+    h.get_by_label(&format!("+  {}", FR.create_contact)).click();
     h.run_steps(2);
+    h.get_by_label_contains("existe déjà");
+    assert_eq!(
+        crate::keyring::load(&bench.files.config)
+            .unwrap()
+            .contacts
+            .len(),
+        1
+    );
+    assert_eq!(cle_de(&bench, "Alice"), premiere);
+
+    // Changer de clé : celle qu'elle nous donne…
+    h.get_by_label(FR.change_key).click();
+    h.run_steps(2);
+    h.get_by_label(FR.rekey_note);
     let recue = brocolis::SymKey::generate().to_base64();
-    taper(&mut h, FR.contact_key_hint, &recue);
+    taper(&mut h, FR.rekey_hint, &recue);
     h.get_by_label(FR.save).click();
     h.run_steps(2);
-    let book = crate::keyring::load(&bench.files.config).unwrap();
-    assert_eq!(book.person("Alice").unwrap().keys.len(), 2);
-    assert_eq!(cle_de(&bench, "Alice"), premiere);
-    assert_eq!(h.query_all_by_label(FR.active).count(), 1);
-
-    // La rendre active.
-    h.get_by_label(FR.make_active).click();
-    h.run_steps(2);
     assert_eq!(cle_de(&bench, "Alice"), recue);
+    h.get_by_label("Clé de Alice remplacée.");
+
+    // … ou une neuve, créée ici (champ laissé vide).
+    h.get_by_label(FR.change_key).click();
+    h.run_steps(2);
+    h.get_by_label(FR.save).click();
+    h.run_steps(2);
+    let neuve = cle_de(&bench, "Alice");
+    assert!(neuve != recue && neuve != premiere);
+    h.get_by_label_contains("Nouvelle clé pour Alice");
+    assert_eq!(
+        crate::keyring::load(&bench.files.config)
+            .unwrap()
+            .contacts
+            .len(),
+        1
+    );
 
     // Renommer.
     h.get_by_label(FR.rename).click();
@@ -382,7 +404,7 @@ fn ranger_une_cle_sans_nom_sous_un_contact() {
     h.run_steps(2);
     let book = crate::keyring::load(&bench.files.config).unwrap();
     assert!(book.own.is_empty(), "la clé a quitté les clés sans nom");
-    assert_eq!(book.person("Bob").unwrap().keys[0].b64, cle);
+    assert_eq!(book.person("Bob").unwrap().key.b64, cle);
     h.get_by_label(FR.keys_empty);
 }
 
