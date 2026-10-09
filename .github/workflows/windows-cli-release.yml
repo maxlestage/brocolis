@@ -51,7 +51,10 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $bin = "target/release/brocolis.exe"
-          $help = & $bin --help
+          # Out-String : la sortie d'une commande est un TABLEAU de lignes, et
+          # `tableau -notmatch motif` renvoie les lignes qui ne correspondent pas
+          # (toujours « vrai » dès qu'une ligne ne cite pas le nom).
+          $help = (& $bin --help | Out-String)
           if ($help -notmatch 'brocolis') { throw "--help n'a pas retourné l'aide attendue" }
           $key = (& $bin keygen | Select-Object -First 1).Trim()
           if ($key.Length -lt 40) { throw "clé trop courte : $key" }
