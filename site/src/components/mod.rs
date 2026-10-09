@@ -1,5 +1,6 @@
 pub mod ambient;
 pub mod curtain;
+pub mod demo;
 pub mod download;
 pub mod footer;
 pub mod hero;

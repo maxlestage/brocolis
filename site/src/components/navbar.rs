@@ -4,6 +4,7 @@ use yew::prelude::*;
 
 use crate::components::switchers::Switchers;
 use crate::dom::{Listener, scroll_to_id, scroll_to_top};
+use crate::markup::rolling;
 use crate::route::Route;
 use crate::settings::use_t;
 
@@ -48,7 +49,7 @@ pub fn Navbar() -> Html {
         };
         html! {
             <li style={format!("--i: {i}")}>
-                <a href={format!("#{id}")} {onclick}>{ item.label }</a>
+                <a href={format!("#{id}")} {onclick}>{ rolling(item.label) }</a>
             </li>
         }
     });
@@ -77,7 +78,7 @@ pub fn Navbar() -> Html {
             <div class="container nav-inner">
                 <a class="nav-brand" href="#top" onclick={on_brand}>
                     <span class="nav-leaf" aria-hidden="true">{ "🥦" }</span>
-                    <span>{ "Brocolis" }</span>
+                    <span data-scramble="">{ "Brocolis" }</span>
                 </a>
                 <button
                     type="button"
@@ -98,7 +99,7 @@ pub fn Navbar() -> Html {
                                 href={Route::Download.href()}
                                 onclick={on_download}
                             >
-                                { t.nav_download }
+                                { rolling(t.nav_download) }
                             </a>
                         </li>
                     </ul>

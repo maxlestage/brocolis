@@ -124,6 +124,18 @@ pub struct Strings {
     pub manifesto: &'static str,
     pub marquee: [&'static str; 6],
     pub footer_h: &'static str,
+    pub footer_top: &'static str,
+
+    // Démonstration animée du chiffrement sélectif.
+    pub demo_kicker: &'static str,
+    pub demo_h: &'static str,
+    pub demo_sr: &'static str,
+    pub demo_rows: [&'static str; 4],
+    pub demo_before: &'static str,
+    pub demo_secret: &'static str,
+    pub demo_after: &'static str,
+    pub demo_locked: &'static str,
+    pub demo_unlocked: &'static str,
 }
 
 impl Strings {
@@ -370,6 +382,21 @@ pub static FR: Strings = Strings {
         "macOS · Linux · Windows",
     ],
     footer_h: "Prêt à chiffrer <em>ce qui compte</em> ?",
+    footer_top: "Haut de page",
+    demo_kicker: "Démonstration",
+    demo_h: "Un message, quatre lecteurs",
+    demo_sr: "Démonstration : vous écrivez « Rendez-vous ((demain à 18h)) au café. » Le serveur ne stocke que le jeton chiffré à la place du segment marqué ; vos proches qui partagent la clé lisent « demain à 18h » en clair ; tous les autres ne voient que le jeton.",
+    demo_rows: [
+        "Vous écrivez",
+        "Le serveur stocke",
+        "Vos proches lisent",
+        "Les autres voient",
+    ],
+    demo_before: "Rendez-vous ",
+    demo_secret: "demain à 18h",
+    demo_after: " au café.",
+    demo_locked: "chiffré",
+    demo_unlocked: "déchiffré",
 };
 
 // ---------------------------------------------------------------------------
@@ -504,6 +531,21 @@ pub static EN: Strings = Strings {
         "macOS · Linux · Windows",
     ],
     footer_h: "Ready to encrypt <em>what matters</em>?",
+    footer_top: "Back to top",
+    demo_kicker: "Demo",
+    demo_h: "One message, four readers",
+    demo_sr: "Demo: you write \"Meet me ((tomorrow at 6pm)) at the café.\" The server only stores the encrypted token in place of the marked segment; friends who share the key read \"tomorrow at 6pm\" in clear; everyone else only sees the token.",
+    demo_rows: [
+        "You write",
+        "The server stores",
+        "Your friends read",
+        "Everyone else sees",
+    ],
+    demo_before: "Meet me ",
+    demo_secret: "tomorrow at 6pm",
+    demo_after: " at the café.",
+    demo_locked: "encrypted",
+    demo_unlocked: "decrypted",
 };
 
 // ---------------------------------------------------------------------------
@@ -638,4 +680,19 @@ pub static ES: Strings = Strings {
         "macOS · Linux · Windows",
     ],
     footer_h: "¿Listo para cifrar <em>lo que importa</em>?",
+    footer_top: "Volver arriba",
+    demo_kicker: "Demostración",
+    demo_h: "Un mensaje, cuatro lectores",
+    demo_sr: "Demostración: escribes «Nos vemos ((mañana a las 18h)) en el café.» El servidor solo almacena el token cifrado en lugar del segmento marcado; tus contactos que comparten la clave leen «mañana a las 18h» en claro; los demás solo ven el token.",
+    demo_rows: [
+        "Tú escribes",
+        "El servidor guarda",
+        "Tus contactos leen",
+        "Los demás ven",
+    ],
+    demo_before: "Nos vemos ",
+    demo_secret: "mañana a las 18h",
+    demo_after: " en el café.",
+    demo_locked: "cifrado",
+    demo_unlocked: "descifrado",
 };

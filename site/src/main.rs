@@ -123,7 +123,9 @@ fn App() -> Html {
                 Route::Download => html! { <DownloadPage /> },
             } }
             if wipe > 0 {
-                <div class="wipe" key={wipe.to_string()} aria-hidden="true" />
+                <div class="wipe" key={wipe.to_string()} aria-hidden="true">
+                    <span class="wipe-brand">{ "🥦 Brocolis" }</span>
+                </div>
             }
             <Ambient />
         </ContextProvider<Settings>>
