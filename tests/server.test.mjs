@@ -19,11 +19,12 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const DIST = path.join(ROOT, "site", "dist");
 
-/** Premier fichier de `site/dist` dont le nom porte une empreinte de contenu. */
+/** Premier fichier de `site/dist` dont le nom porte une empreinte de contenu
+ * (entier de 64 bits sans zéros de tête : souvent 16 chiffres, parfois moins). */
 function hashedFile(extension) {
   const found = fs
     .readdirSync(DIST)
-    .find((name) => /-[0-9a-f]{16}(?:_bg)?\./.test(name) && name.endsWith(extension));
+    .find((name) => /-[0-9a-f]{8,16}(?:_bg)?\./.test(name) && name.endsWith(extension));
   assert.ok(found, `le build doit produire un fichier ${extension} empreinté`);
   return found;
 }
