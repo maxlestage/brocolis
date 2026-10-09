@@ -184,10 +184,12 @@ const MIME = {
   ".txt": "text/plain; charset=utf-8",
 };
 
-// Noms produits par Trunk : `<nom>-<16 chiffres hexadécimaux>.<ext>`, et
+// Noms produits par Trunk : `<nom>-<empreinte hexadécimale>.<ext>`, et
 // `<nom>-<empreinte>_bg.wasm` pour le module WebAssembly. L'empreinte est
-// calculée sur le contenu.
-const HASHED_NAME = /-[0-9a-f]{16}(?:_bg)?\.(?:js|wasm|css)$/;
+// calculée sur le contenu. C'est un entier de 64 bits écrit SANS zéros de
+// tête : 16 chiffres le plus souvent, 15 une fois sur seize (vu :
+// `brocolis-site-dbe60483dd59cda.js`), parfois moins.
+const HASHED_NAME = /-[0-9a-f]{8,16}(?:_bg)?\.(?:js|wasm|css)$/;
 
 function sendFile(res, filePath, status) {
   fs.readFile(filePath, (err, data) => {
