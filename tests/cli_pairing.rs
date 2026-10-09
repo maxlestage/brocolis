@@ -159,7 +159,11 @@ fn items_bruts(corps: &str) -> Vec<String> {
     let fin = reste.find(']').unwrap_or(reste.len());
     reste[..fin]
         .split("},")
-        .map(|o| o.trim_start_matches(['{', ',']).trim_end_matches('}').to_string())
+        .map(|o| {
+            o.trim_start_matches(['{', ','])
+                .trim_end_matches('}')
+                .to_string()
+        })
         .filter(|o| !o.is_empty())
         .collect()
 }
@@ -264,8 +268,16 @@ fn deux_correspondants_derivent_la_meme_cle() {
 
     let ra = pa.wait_with_output().unwrap();
     let rb = pb.wait_with_output().unwrap();
-    assert!(ra.status.success(), "alice: {}", String::from_utf8_lossy(&ra.stderr));
-    assert!(rb.status.success(), "bob: {}", String::from_utf8_lossy(&rb.stderr));
+    assert!(
+        ra.status.success(),
+        "alice: {}",
+        String::from_utf8_lossy(&ra.stderr)
+    );
+    assert!(
+        rb.status.success(),
+        "bob: {}",
+        String::from_utf8_lossy(&rb.stderr)
+    );
 
     let ka = cles_du_config(&a.join("brocolis.toml"));
     let kb = cles_du_config(&b.join("brocolis.toml"));
@@ -325,7 +337,10 @@ fn la_cle_appairee_permet_de_se_lire() {
         .unwrap();
     assert!(chiffre.status.success());
     let chiffre = String::from_utf8(chiffre.stdout).unwrap();
-    assert!(!chiffre.contains("secret partage"), "pas de fuite : {chiffre}");
+    assert!(
+        !chiffre.contains("secret partage"),
+        "pas de fuite : {chiffre}"
+    );
 
     // …et Bob doit pouvoir le lire avec la sienne.
     let clair = Command::new(bin())
@@ -353,7 +368,15 @@ fn pair_abandonne_au_bout_du_delai() {
 
     let debut = std::time::Instant::now();
     let out = Command::new(bin())
-        .args(["pair", "--code", "PERSONNE", "--server", &serveur, "--timeout", "3"])
+        .args([
+            "pair",
+            "--code",
+            "PERSONNE",
+            "--server",
+            &serveur,
+            "--timeout",
+            "3",
+        ])
         .arg("--config")
         .arg(d.join("brocolis.toml"))
         .arg("--identity")
@@ -392,18 +415,38 @@ fn lidentite_est_reutilisee_entre_deux_appairages() {
 
     // Un premier appel, même voué à l'échec, crée l'identité.
     let _ = Command::new(bin())
-        .args(["pair", "--code", "A", "--server", &serveur, "--timeout", "1"])
-        .arg("--config").arg(d.join("brocolis.toml"))
-        .arg("--identity").arg(&id)
+        .args([
+            "pair",
+            "--code",
+            "A",
+            "--server",
+            &serveur,
+            "--timeout",
+            "1",
+        ])
+        .arg("--config")
+        .arg(d.join("brocolis.toml"))
+        .arg("--identity")
+        .arg(&id)
         .current_dir(&d)
         .output()
         .unwrap();
     let premiere = std::fs::read_to_string(&id).expect("identité créée");
 
     let _ = Command::new(bin())
-        .args(["pair", "--code", "B", "--server", &serveur, "--timeout", "1"])
-        .arg("--config").arg(d.join("brocolis.toml"))
-        .arg("--identity").arg(&id)
+        .args([
+            "pair",
+            "--code",
+            "B",
+            "--server",
+            &serveur,
+            "--timeout",
+            "1",
+        ])
+        .arg("--config")
+        .arg(d.join("brocolis.toml"))
+        .arg("--identity")
+        .arg(&id)
         .current_dir(&d)
         .output()
         .unwrap();
@@ -422,9 +465,18 @@ fn un_groupe_partage_la_meme_cle() {
     let m = tmpdir("membre");
 
     let pf = Command::new(bin())
-        .args(["pair-group", "--code", "GROUPE", "--found", "--server", &serveur])
-        .arg("--config").arg(f.join("brocolis.toml"))
-        .arg("--identity").arg(f.join("id.key"))
+        .args([
+            "pair-group",
+            "--code",
+            "GROUPE",
+            "--found",
+            "--server",
+            &serveur,
+        ])
+        .arg("--config")
+        .arg(f.join("brocolis.toml"))
+        .arg("--identity")
+        .arg(f.join("id.key"))
         .args(["--timeout", "30"])
         .current_dir(&f)
         .stdout(std::process::Stdio::piped())
@@ -434,8 +486,10 @@ fn un_groupe_partage_la_meme_cle() {
     std::thread::sleep(std::time::Duration::from_millis(400));
     let pm = Command::new(bin())
         .args(["pair-group", "--code", "GROUPE", "--server", &serveur])
-        .arg("--config").arg(m.join("brocolis.toml"))
-        .arg("--identity").arg(m.join("id.key"))
+        .arg("--config")
+        .arg(m.join("brocolis.toml"))
+        .arg("--identity")
+        .arg(m.join("id.key"))
         .args(["--timeout", "30"])
         .current_dir(&m)
         .stdout(std::process::Stdio::piped())

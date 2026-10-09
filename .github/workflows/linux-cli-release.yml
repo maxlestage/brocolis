@@ -19,6 +19,7 @@ on:
       - "src/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "app/**"
       - "linux/**"
       - ".github/workflows/linux-cli-release.yml"
   workflow_dispatch:
@@ -30,9 +31,9 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -44,10 +45,14 @@ jobs:
         run: |
           cargo deb --version >/dev/null 2>&1 || cargo install cargo-deb --locked
           cargo generate-rpm --version >/dev/null 2>&1 || cargo install cargo-generate-rpm --locked
-      - name: Run unit tests
-        run: cargo test --lib --no-fail-fast
-      - name: Build release binary
-        run: cargo build --release --bin brocolis
+      - name: Tests (bibliothèque et application)
+        run: |
+          cargo test --lib --no-fail-fast
+          cargo test -p brocolis-app --no-fail-fast
+      # La ligne de commande ET l'application de bureau : les paquets
+      # installent les deux (voir [package.metadata.deb] dans Cargo.toml).
+      - name: Build release binaries
+        run: cargo build --release --workspace --bin brocolis --bin brocolis-app
       - name: CLI smoke test
         run: |
           set -e
@@ -62,9 +67,26 @@ jobs:
           rm -rf "$TMP"
           echo "✓ CLI smoke test OK"
       - name: Build .deb
-        run: cargo deb --no-build
+        run: cargo deb --no-build -p brocolis
       - name: Build .rpm
         run: cargo generate-rpm
+      - name: Contenu des paquets
+        run: |
+          set -e
+          DEB=$(ls target/debian/*.deb | head -1)
+          dpkg-deb -c "$DEB" | tee /tmp/deb.txt
+          for f in usr/local/bin/brocolis usr/local/bin/brocolis-app \
+                   usr/share/applications/brocolis.desktop \
+                   usr/share/icons/hicolor/256x256/apps/brocolis.png; do
+            grep -q "$f" /tmp/deb.txt || { echo "absent du .deb : $f" >&2; exit 1; }
+          done
+          dpkg-deb -f "$DEB" Depends | grep -q libxkbcommon-x11-0
+          desktop-file-validate linux/brocolis.desktop || true
+          RPM=$(ls target/generate-rpm/*.rpm | head -1)
+          if command -v rpm >/dev/null; then
+            rpm -qlp "$RPM" | grep -q /usr/local/bin/brocolis-app
+          fi
+          echo "✓ paquets complets"
       - name: Collect artifacts
         run: |
           mkdir -p artifacts
@@ -75,7 +97,7 @@ jobs:
           cp target/debian/*.deb artifacts/brocolis-linux-amd64.deb
           cp target/generate-rpm/*.rpm artifacts/brocolis-linux-x86_64.rpm
           ls -lh artifacts/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: brocolis-linux-packages
           path: artifacts/*
@@ -84,7 +106,7 @@ jobs:
     needs: [build-linux]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
       - name: Collect files
@@ -102,8 +124,8 @@ jobs:
           gh release create cli-latest-linux ${{ steps.collect.outputs.files }} \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${GITHUB_SHA}" \
-            --title "Brocolis CLI Linux (dernier ${GITHUB_REF_NAME})" \
-            --notes "Build automatique du dernier ${GITHUB_REF_NAME} (.deb pour Debian/Ubuntu, .rpm pour Fedora/RHEL ; x86_64)." \
+            --title "Brocolis Linux (dernier ${GITHUB_REF_NAME})" \
+            --notes "Build automatique du dernier ${GITHUB_REF_NAME} : application de bureau Brocolis et ligne de commande (.deb pour Debian/Ubuntu, .rpm pour Fedora/RHEL ; x86_64)." \
             --prerelease
 
       - name: Publish tagged release

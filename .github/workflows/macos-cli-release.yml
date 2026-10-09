@@ -20,34 +20,66 @@ jobs:
   build-macos:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-apple-darwin,aarch64-apple-darwin
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
           key: macos-cargo-${{ hashFiles('Cargo.lock') }}
-      - name: Run unit tests (Apple Silicon target)
-        run: cargo test --lib --no-fail-fast
+      - name: Tests (bibliothèque et application)
+        run: |
+          cargo test --lib --no-fail-fast
+          cargo test -p brocolis-app --no-fail-fast
+      # La ligne de commande ET l'application, pour les deux architectures.
       - name: Build (Apple Silicon)
-        run: cargo build --release --bin brocolis --target aarch64-apple-darwin
+        run: cargo build --release --workspace --bin brocolis --bin brocolis-app --target aarch64-apple-darwin
       - name: Build (Intel)
-        run: cargo build --release --bin brocolis --target x86_64-apple-darwin
-      - name: Universal binary
+        run: cargo build --release --workspace --bin brocolis --bin brocolis-app --target x86_64-apple-darwin
+      - name: Universal binaries
         run: |
           mkdir -p target/universal
-          lipo -create \
-            target/aarch64-apple-darwin/release/brocolis \
-            target/x86_64-apple-darwin/release/brocolis \
-            -output target/universal/brocolis
-          lipo -info target/universal/brocolis
+          for bin in brocolis brocolis-app; do
+            lipo -create \
+              target/aarch64-apple-darwin/release/$bin \
+              target/x86_64-apple-darwin/release/$bin \
+              -output target/universal/$bin
+            lipo -info target/universal/$bin
+          done
+      # Bundle de l'application : Info.plist, icône, et la ligne de commande
+      # embarquée (c'est elle que l'application lance avec les droits
+      # administrateur pour `on` / `off`).
+      - name: Brocolis.app
+        run: |
+          set -e
+          VERSION=$(cargo metadata --no-deps --format-version 1 | python3 -c "import json,sys; print(next(p['version'] for p in json.load(sys.stdin)['packages'] if p['name']=='brocolis-app'))")
+          APP=dist/Brocolis.app
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          sed "s/__VERSION__/$VERSION/g" macos/Info.plist > "$APP/Contents/Info.plist"
+          plutil -lint "$APP/Contents/Info.plist"
+          cp target/universal/brocolis-app "$APP/Contents/MacOS/brocolis-app"
+          cp target/universal/brocolis "$APP/Contents/MacOS/brocolis"
+          ICONSET=$(mktemp -d)/brocolis.iconset
+          mkdir -p "$ICONSET"
+          for s in 16 32 128 256; do
+            sips -z $s $s app/assets/brocolis-512.png --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
+            d=$((s * 2))
+            sips -z $d $d app/assets/brocolis-512.png --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
+          done
+          cp app/assets/brocolis-512.png "$ICONSET/icon_512x512.png"
+          iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/brocolis.icns"
+          # Signature ad hoc : sans elle, Apple Silicon refuse un bundle dont
+          # les exécutables ont été recomposés par lipo.
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict "$APP"
+          cp target/universal/brocolis dist/brocolis
       - name: Package
-        run: tar -czf brocolis-macos-universal.tar.gz -C target/universal brocolis
-      - name: CLI smoke test (universal)
+        run: tar -czf brocolis-macos-universal.tar.gz -C dist brocolis Brocolis.app
+      - name: Smoke test (CLI + bundle)
         run: |
           set -e
           target/universal/brocolis --help | grep -q 'brocolis'
@@ -57,9 +89,13 @@ jobs:
           target/universal/brocolis ca --ca-cert "$TMP/ca.crt" --ca-key "$TMP/ca.key" >/dev/null
           openssl x509 -in "$TMP/ca.crt" -noout -subject | grep -q 'Brocolis'
           file target/universal/brocolis | grep -q 'universal binary'
+          file dist/Brocolis.app/Contents/MacOS/brocolis-app | grep -q 'universal binary'
+          dist/Brocolis.app/Contents/MacOS/brocolis --version
+          test -s dist/Brocolis.app/Contents/Resources/brocolis.icns
+          tar -tzf brocolis-macos-universal.tar.gz | grep -q 'Brocolis.app/Contents/MacOS/brocolis-app'
           rm -rf "$TMP"
-          echo "✓ CLI smoke test OK"
-      - uses: actions/upload-artifact@v4
+          echo "✓ CLI et Brocolis.app OK"
+      - uses: actions/upload-artifact@v7
         with:
           name: brocolis-macos-universal
           path: brocolis-macos-universal.tar.gz
@@ -68,7 +104,7 @@ jobs:
     needs: [build-macos]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
       - name: Collect files
@@ -86,8 +122,8 @@ jobs:
           gh release create cli-latest ${{ steps.collect.outputs.files }} \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${GITHUB_SHA}" \
-            --title "Brocolis CLI macOS (dernier ${GITHUB_REF_NAME})" \
-            --notes "Build automatique du dernier ${GITHUB_REF_NAME} (macOS universel Intel + Apple Silicon)." \
+            --title "Brocolis macOS (dernier ${GITHUB_REF_NAME})" \
+            --notes "Build automatique du dernier ${GITHUB_REF_NAME} : application Brocolis.app et ligne de commande brocolis (macOS universel Intel + Apple Silicon)." \
             --prerelease
 
       - name: Publish tagged release

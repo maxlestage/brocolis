@@ -40,7 +40,9 @@ async fn origin(reply: String, content_type: &'static str) -> Origin {
                 let mut raw = Vec::new();
                 let mut buf = [0u8; 16 * 1024];
                 loop {
-                    let Ok(n) = sock.read(&mut buf).await else { return };
+                    let Ok(n) = sock.read(&mut buf).await else {
+                        return;
+                    };
                     if n == 0 {
                         break;
                     }
@@ -261,14 +263,26 @@ async fn une_reponse_chunked_enorme_reste_plafonnee() {
                 let _ = sock.read(&mut b).await;
                 let head = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\
                             Transfer-Encoding: chunked\r\n\r\n";
-                if sock.write_all(head.as_bytes()).await.is_err() { return; }
+                if sock.write_all(head.as_bytes()).await.is_err() {
+                    return;
+                }
                 let payload = vec![b'a'; 64 * 1024];
                 let mut sent = 0usize;
                 while sent < SIZE {
                     let n = payload.len().min(SIZE - sent);
-                    if sock.write_all(format!("{n:x}\r\n").as_bytes()).await.is_err() { return; }
-                    if sock.write_all(&payload[..n]).await.is_err() { return; }
-                    if sock.write_all(b"\r\n").await.is_err() { return; }
+                    if sock
+                        .write_all(format!("{n:x}\r\n").as_bytes())
+                        .await
+                        .is_err()
+                    {
+                        return;
+                    }
+                    if sock.write_all(&payload[..n]).await.is_err() {
+                        return;
+                    }
+                    if sock.write_all(b"\r\n").await.is_err() {
+                        return;
+                    }
                     sent += n;
                 }
                 let _ = sock.write_all(b"0\r\n\r\n").await;
@@ -294,7 +308,11 @@ async fn une_reponse_chunked_enorme_reste_plafonnee() {
         }
     }
     let growth = rss().saturating_sub(before);
-    eprintln!("chunked : reçu {} Mio, croissance {} Mio", recu / 1048576, growth / 1048576);
+    eprintln!(
+        "chunked : reçu {} Mio, croissance {} Mio",
+        recu / 1048576,
+        growth / 1048576
+    );
     assert_eq!(recu, SIZE, "le corps doit arriver entier");
     assert!(
         growth < (SIZE as u64) / 3,
@@ -336,7 +354,10 @@ async fn une_coupure_amont_ne_passe_pas_pour_un_succes() {
         .expect("les en-têtes arrivent");
     let status = resp.status();
     let corps = resp.bytes().await;
-    eprintln!("coupure amont : status={status} corps={:?}", corps.as_ref().map(|b| b.len()));
+    eprintln!(
+        "coupure amont : status={status} corps={:?}",
+        corps.as_ref().map(|b| b.len())
+    );
 
     let succes_silencieux = status == 200 && matches!(corps.as_ref().map(|b| b.len()), Ok(1000));
     assert!(
@@ -348,7 +369,11 @@ async fn une_coupure_amont_ne_passe_pas_pour_un_succes() {
 /// Mémoire résidente du processus, en octets.
 fn rss() -> u64 {
     let statm = std::fs::read_to_string("/proc/self/statm").unwrap_or_default();
-    let pages: u64 = statm.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let pages: u64 = statm
+        .split_whitespace()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
     pages * 4096
 }
 

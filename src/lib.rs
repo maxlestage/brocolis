@@ -2,7 +2,7 @@
 //!
 //! Le cœur est exposé sous forme de bibliothèque pour être réutilisé par
 //! plusieurs frontends : la CLI (`src/main.rs`) et l'application de bureau
-//! (`src/bin/brocolis-gui.rs`).
+//! (`app/`, paquet `brocolis-app`).
 
 pub mod agreement;
 pub mod ca;

@@ -80,6 +80,7 @@ Cette architecture permet de séparer clairement les responsabilités :
 | Gestion des clés      | Partage sécurisé des clés symétriques           |
 | Régénération des clés | Rotation automatique en cas de compromission    |
 | CLI                   | Interface en ligne de commande                  |
+| Application de bureau | Interrupteur, clés, messages — macOS, Linux, Windows |
 
 ## Architecture globale
 
@@ -156,9 +157,11 @@ L'architecture interne comprend :
 
 ## Architecture du code
 
-Le cœur est une **bibliothèque** Rust (`src/lib.rs` : modules `ca`, `config`,
-`crypto`, `keys`, `proxy`, `system`) exposée via un unique frontend, la
-**ligne de commande** `brocolis`. La configuration système automatique
+Le cœur est une **bibliothèque** Rust (`src/lib.rs` : modules `agreement`,
+`ca`, `config`, `crypto`, `keys`, `pairing`, `proxy`, `system`) exposée via deux
+frontends : la **ligne de commande** `brocolis` (`src/main.rs`) et
+l'**application de bureau** (`app/`, paquet `brocolis-app`). Les deux forment
+un espace de travail Cargo et partagent le même `target/`. La configuration système automatique
 (`brocolis auto`) est prise en charge nativement sur **macOS, Linux et
 Windows** (module `system`, un sous-module par OS) ; le proxy et le
 chiffrement eux-mêmes fonctionnent partout où Rust compile.
@@ -172,6 +175,58 @@ git clone https://github.com/maxlestage/brocolis
 cd brocolis
 cargo build --release      # binaire: target/release/brocolis
 ```
+
+## Application de bureau (macOS, Linux, Windows)
+
+Une petite fenêtre pour ce que la ligne de commande fait en plusieurs
+commandes. Trois onglets :
+
+- **Protection** — un interrupteur. Il démarre le proxy dans l'application
+  (ou utilise le service système s'il tourne déjà), puis branche le système
+  dessus ; recliqué, il remet la configuration d'origine. L'état est relu en
+  continu : un `brocolis on`/`off` lancé dans un terminal s'y reflète.
+- **Clés** — le trousseau : créer une clé (copiée aussitôt, pour la
+  partager), ajouter une clé reçue, choisir la clé principale, en retirer une,
+  et **appairer par un code** convenu de vive voix (même protocole et même
+  empreinte que `brocolis pair` et l'app iOS).
+- **Message** — chiffrer les `((segments marqués))` d'un texte, ou déchiffrer
+  un message reçu, sans navigateur.
+
+Brancher le système (magasin de confiance, proxy système) exige les droits
+administrateur, que l'application ne garde jamais : elle les demande au clic,
+avec la boîte de dialogue native — mot de passe ou Touch ID sur macOS, `pkexec`
+sur Linux, contrôle de compte d'utilisateur sur Windows — et fait exécuter
+`brocolis on` / `off` par la ligne de commande livrée avec elle. Si on la ferme
+protection active, elle la coupe d'abord : sinon le système resterait dirigé
+vers un proxy arrêté.
+
+Ses données sont propres à chaque utilisateur : `~/Library/Application
+Support/Brocolis` (macOS), `~/.config/brocolis` (Linux), `%APPDATA%\Brocolis`
+(Windows) — configuration au même format que `brocolis.toml`, CA et identité
+d'appairage. Interface en français, anglais ou espagnol selon le système.
+
+| OS      | Livraison                                                          |
+| ------- | ------------------------------------------------------------------ |
+| macOS   | `Brocolis.app` dans l'archive universelle, à glisser dans Applications |
+| Linux   | installée par les paquets `.deb` / `.rpm` (menu des applications)  |
+| Windows | `brocolis-app.exe` dans l'archive, à côté de `brocolis.exe`        |
+
+> macOS : l'application n'est pas signée par un compte développeur Apple. Au
+> premier lancement, clic droit → **Ouvrir** (ou Réglages Système →
+> Confidentialité et sécurité → **Ouvrir quand même**).
+
+Développement :
+
+```sh
+cargo run -p brocolis-app      # lancer l'application
+cargo test -p brocolis-app     # tests, dont l'interface pilotée par egui_kittest
+```
+
+L'interface est écrite avec [egui](https://github.com/emilk/egui) (rendu
+OpenGL via glow), aux couleurs et dans la police du site. Ses tests la
+pilotent comme un utilisateur, par l'arbre d'accessibilité : activer puis
+couper la protection, refuser l'autorisation, gérer le trousseau, chiffrer
+puis déchiffrer un message.
 
 ## Utilisation (CLI)
 
@@ -198,7 +253,9 @@ tourner en tâche de fond ; `on`/`off` ne font que brancher ou débrancher le
 système dessus.
 
 L'état d'avant-activation est mémorisé dans `/etc/brocolis/etat-precedent.json`
-(modifiable avec `--state`). C'est lui qui permet à `off` de restaurer
+— `%ProgramData%\Brocolis\etat-precedent.json` sous Windows — (modifiable avec
+`--state`). Sous Windows, où aucun service n'est installé, c'est l'application
+de bureau qui fait tourner le proxy et sert d'interrupteur. C'est lui qui permet à `off` de restaurer
 fidèlement — un `on` déjà actif refuse donc de réengager, pour ne pas écraser
 cette trace. Au premier `on`, le CA est généré s'il n'existe pas encore.
 
@@ -372,9 +429,12 @@ publient/actualisent automatiquement la release GitHub **`cli-latest`** :
 
 | OS      | Workflow                                  | Artefact                          |
 | ------- | ----------------------------------------- | --------------------------------- |
-| macOS   | `.github/workflows/macos-cli-release.yml` | `brocolis-macos-universal.tar.gz` (universel Intel + Apple Silicon) |
-| Linux   | `.github/workflows/linux-cli-release.yml` | paquets `.deb` (Debian/Ubuntu) et `.rpm` (Fedora/RHEL), x86_64 |
-| Windows | `.github/workflows/windows-cli-release.yml` | `brocolis-windows-x86_64.zip` (`brocolis.exe` + `install.ps1` / `uninstall.ps1`) |
+| macOS   | `.github/workflows/macos-cli-release.yml` | `brocolis-macos-universal.tar.gz` (`Brocolis.app` + `brocolis`, universels Intel + Apple Silicon) |
+| Linux   | `.github/workflows/linux-cli-release.yml` | paquets `.deb` (Debian/Ubuntu) et `.rpm` (Fedora/RHEL), x86_64 — application + CLI |
+| Windows | `.github/workflows/windows-cli-release.yml` | `brocolis-windows-x86_64.zip` (`brocolis-app.exe` + `brocolis.exe` + `install.ps1` / `uninstall.ps1`) |
+
+`Rust CI` compile et teste en plus tout l'espace de travail sur les **trois
+OS** à chaque push, sur toutes les branches.
 
 Il suffit de télécharger l'artefact correspondant à votre OS depuis l'onglet
 *Releases*. Un tag `v*` produit en plus une release versionnée.

@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Brocolis
+GenericName=Chiffrement sélectif
+GenericName[en]=Selective encryption
+GenericName[es]=Cifrado selectivo
+Comment=Activer le chiffrement sélectif, gérer ses clés, chiffrer un message
+Comment[en]=Turn selective encryption on, manage your keys, encrypt a message
+Comment[es]=Activar el cifrado selectivo, gestionar tus claves, cifrar un mensaje
+Exec=brocolis-app
+Icon=brocolis
+Terminal=false
+Categories=System;Security;
+Keywords=chiffrement;proxy;clé;encryption;key;cifrado;
+StartupWMClass=brocolis

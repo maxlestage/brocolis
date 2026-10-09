@@ -24,6 +24,22 @@ Note : `scripts/test-macos.sh` (à la racine) teste le chemin natif
 | **`sudo brocolis auto`**         | Test rapide / utilisation ad hoc. Tout configuré, restauré à Ctrl-C. **Recommandé** pour démarrer. |
 | **`install.sh --enable-launchd`** | Installation persistante : CA + Firefox + service LaunchDaemon. Idéal sur poste perso.  |
 | **`install.sh` (sans flag)**     | Setup persistant côté trousseau + Firefox, on lance `brocolis run` à la main quand on veut. |
+| **`Brocolis.app`**               | L'application de bureau : un interrupteur, les clés, les messages. **Le plus simple.**   |
+
+## Application `Brocolis.app`
+
+L'archive `brocolis-macos-universal.tar.gz` contient l'application et la ligne
+de commande. Glissez `Brocolis.app` dans **Applications**. Elle n'est pas
+signée par un compte développeur Apple : au premier lancement, clic droit →
+**Ouvrir**, ou Réglages Système → Confidentialité et sécurité → **Ouvrir quand
+même**.
+
+Activer la protection demande le mot de passe administrateur (ou Touch ID) :
+l'application fait alors exécuter `brocolis on` par la ligne de commande
+embarquée dans le bundle (`Contents/MacOS/brocolis`). Si le service
+LaunchDaemon tourne déjà, elle l'utilise ; sinon elle fait tourner le proxy
+elle-même tant qu'elle est ouverte. Ses données sont dans
+`~/Library/Application Support/Brocolis`.
 
 ## Usage : `brocolis auto`
 

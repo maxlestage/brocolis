@@ -10,7 +10,7 @@
 #     utilisateur brocolis.
 #
 # La gestion systemd (purge des liens) est ajoutée par cargo-deb via
-# le placeholder #DEBHELPER#.
+# le placeholder DEBHELPER (le jeton entre dièses ci-dessous).
 set -e
 
 ETC=/etc/brocolis

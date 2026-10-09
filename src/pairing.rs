@@ -196,6 +196,85 @@ fn enc(s: &str) -> String {
         .collect()
 }
 
+/// Appairage à deux : publie la clé publique de `identity` sous `code`, attend
+/// qu'un correspondant en fasse autant (au plus `timeout`), puis dérive la clé
+/// partagée avec le premier arrivé.
+///
+/// Les deux côtés obtiennent la même clé et la même empreinte ; l'empreinte
+/// doit être comparée de vive voix avant tout secret (elle trahirait un
+/// serveur qui substituerait les clés publiques).
+pub async fn pair_two(
+    client: &RendezvousClient,
+    code: &str,
+    identity: &crate::agreement::PrivateKey,
+    timeout: Duration,
+) -> anyhow::Result<crate::agreement::Derived> {
+    let peer_id = random_peer_id();
+    let my_pub = identity.public_key_base64();
+    tracing::info!("Publication de la clé publique (code « {code} »)…");
+    let mut peers = client.publish(code, &peer_id, &my_pub).await?;
+
+    let deadline = tokio::time::Instant::now() + timeout;
+    while peers.is_empty() {
+        if tokio::time::Instant::now() >= deadline {
+            anyhow::bail!(
+                "aucun correspondant n'a rejoint le code « {code} » dans le délai imparti"
+            );
+        }
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        peers = client.fetch(code, &peer_id).await?;
+    }
+
+    identity
+        .derive(&peers[0].public_key)
+        .map_err(|e| anyhow::anyhow!("dérivation de la clé partagée: {e}"))
+}
+
+/// Retire une clé du trousseau d'un document TOML : du champ `key` (clé
+/// principale) comme du tableau `keys`. Commentaires et mise en forme sont
+/// préservés. Renvoie le TOML mis à jour.
+///
+/// Retirer la clé principale ne promeut pas une autre clé à sa place : choisir
+/// avec quelle clé chiffrer reste une décision de l'utilisateur.
+pub fn remove_key_from_toml(existing: &str, key_b64: &str) -> Result<String, String> {
+    let mut doc = existing
+        .parse::<DocumentMut>()
+        .map_err(|e| format!("TOML invalide : {e}"))?;
+    if doc.get("key").and_then(|v| v.as_str()) == Some(key_b64) {
+        doc.remove("key");
+    }
+    if let Some(arr) = doc.get_mut("keys").and_then(|v| v.as_array_mut()) {
+        arr.retain(|v| v.as_str() != Some(key_b64));
+    }
+    Ok(doc.to_string())
+}
+
+/// Fait d'une clé la clé principale (champ `key`, celle qui chiffre). L'ancienne
+/// clé principale rejoint le tableau `keys` : elle reste utilisable pour LIRE
+/// ce qu'on a reçu avec elle.
+pub fn set_primary_key_in_toml(existing: &str, key_b64: &str) -> Result<String, String> {
+    let mut doc = existing
+        .parse::<DocumentMut>()
+        .map_err(|e| format!("TOML invalide : {e}"))?;
+    let previous = doc.get("key").and_then(|v| v.as_str()).map(str::to_owned);
+    if previous.as_deref() == Some(key_b64) {
+        return Ok(doc.to_string());
+    }
+    doc["key"] = toml_edit::value(key_b64);
+    let mut out = remove_from_keys(doc, key_b64);
+    if let Some(prev) = previous {
+        out = append_key_to_toml(&out, &prev)?;
+    }
+    Ok(out)
+}
+
+fn remove_from_keys(mut doc: DocumentMut, key_b64: &str) -> String {
+    if let Some(arr) = doc.get_mut("keys").and_then(|v| v.as_array_mut()) {
+        arr.retain(|v| v.as_str() != Some(key_b64));
+    }
+    doc.to_string()
+}
+
 /// Ajoute une clé base64 au tableau `keys` d'un document TOML, en créant le
 /// tableau s'il n'existe pas et en préservant commentaires et mise en forme.
 /// Les doublons exacts sont ignorés. Renvoie le TOML mis à jour.
@@ -288,6 +367,51 @@ mod tests {
         let parsed: toml::Value = toml::from_str(&out).unwrap();
         let keys = parsed.get("keys").unwrap().as_array().unwrap();
         assert_eq!(keys.len(), 2);
+    }
+
+    #[test]
+    fn remove_key_from_primary_and_array() {
+        let toml = "# garde\nlisten = \"127.0.0.1:8080\"\nkey = \"AAA\"\nkeys = [\"BBB\", \"AAA\", \"CCC\"]\n";
+        let out = remove_key_from_toml(toml, "AAA").unwrap();
+        assert!(
+            out.contains("# garde"),
+            "commentaire des autres champs préservé"
+        );
+        let parsed: toml::Value = toml::from_str(&out).unwrap();
+        assert!(parsed.get("key").is_none(), "clé principale retirée");
+        let keys: Vec<_> = parsed["keys"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert_eq!(keys, ["BBB", "CCC"]);
+    }
+
+    #[test]
+    fn set_primary_moves_previous_to_keys() {
+        let toml = "key = \"AAA\"\nkeys = [\"BBB\"]\n";
+        let out = set_primary_key_in_toml(toml, "BBB").unwrap();
+        let parsed: toml::Value = toml::from_str(&out).unwrap();
+        assert_eq!(parsed["key"].as_str(), Some("BBB"));
+        let keys: Vec<_> = parsed["keys"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert_eq!(
+            keys,
+            ["AAA"],
+            "l'ancienne principale reste lisible, la nouvelle n'est pas en double"
+        );
+    }
+
+    #[test]
+    fn set_primary_on_empty_document() {
+        let out = set_primary_key_in_toml("", "ZZZ").unwrap();
+        let parsed: toml::Value = toml::from_str(&out).unwrap();
+        assert_eq!(parsed["key"].as_str(), Some("ZZZ"));
     }
 
     #[test]

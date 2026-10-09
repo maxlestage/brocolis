@@ -2,7 +2,7 @@
 # Brocolis — Debian prerm.
 #
 # Exécuté avant le retrait des fichiers. La gestion systemd (arrêt + disable)
-# est ajoutée par cargo-deb via le placeholder #DEBHELPER#.
+# est ajoutée par cargo-deb via le placeholder DEBHELPER (le jeton entre dièses ci-dessous).
 set -e
 
 #DEBHELPER#

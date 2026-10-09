@@ -8,6 +8,7 @@ on:
     paths:
       - 'src/**'
       - 'tests/**'
+      - 'app/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/rust.yml'
@@ -15,6 +16,7 @@ on:
     paths:
       - 'src/**'
       - 'tests/**'
+      - 'app/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/rust.yml'
@@ -25,21 +27,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Les trois OS à chaque push, sur toutes les branches. Auparavant seul Linux
+  # était vérifié ici : macOS et Windows ne l'étaient qu'au moment de publier,
+  # sur master — c'est ainsi que la version Windows a pu rester cassée deux
+  # mois sans que rien ne le signale.
   test:
-    name: Build, test & clippy
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    name: Build, test & clippy (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - name: Composant clippy
-        run: rustup component add clippy
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
 
       - name: Cache des dépendances
         uses: Swatinem/rust-cache@v2
 
-      - name: Build & tests
-        run: cargo test --locked --all-targets
+      - name: Format
+        if: runner.os == 'Linux'
+        run: cargo fmt --all --check
+
+      - name: Build & tests (proxy, CLI, application)
+        run: cargo test --workspace --locked --all-targets
 
       - name: Clippy (zéro warning)
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings

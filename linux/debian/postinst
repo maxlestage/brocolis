@@ -9,7 +9,7 @@
 #   - CA déposé dans /usr/local/share/ca-certificates/ + update-ca-certificates ;
 #   - politique entreprise Firefox dans /etc/firefox/policies/policies.json.
 #
-# Le démarrage du service systemd est délégué au placeholder #DEBHELPER#
+# Le démarrage du service systemd est délégué au placeholder DEBHELPER (le jeton entre dièses ci-dessous)
 # (cargo-deb le remplace par les appels deb-systemd-helper).
 #
 # Idempotent : safe sur upgrade. Les fichiers préexistants ne sont pas écrasés.
