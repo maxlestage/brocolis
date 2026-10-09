@@ -19,17 +19,35 @@ license = "LicenseRef-Proprietary"
 yew = { version = "0.23", features = ["csr"] }
 wasm-bindgen = "0.2"
 web-sys = { version = "0.3", features = [
+    "CanvasRenderingContext2d",
+    "CssStyleDeclaration",
     "Document",
+    "DomRect",
+    "DomTokenList",
     "Element",
     "Event",
     "EventTarget",
+    "HtmlCanvasElement",
     "HtmlElement",
+    "HtmlImageElement",
+    "ImageData",
+    "IntersectionObserver",
+    "IntersectionObserverEntry",
+    "IntersectionObserverInit",
     "KeyboardEvent",
     "Location",
+    "MediaQueryList",
+    "MutationObserver",
+    "MutationObserverInit",
     "Navigator",
+    "NodeList",
+    "PointerEvent",
     "Storage",
     "Window",
 ] }
+# `Array` et `Math.random` : les entrées d'un IntersectionObserver arrivent dans
+# un tableau JS, et la poussière du héros a besoin d'un peu de hasard.
+js-sys = "0.3"
 
 # Le binaire part sur le réseau : on optimise la taille, pas le temps de
 # compilation. `panic = "abort"` supprime la machinerie de déroulement, inutile

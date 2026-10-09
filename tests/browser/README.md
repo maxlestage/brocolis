@@ -41,6 +41,14 @@ donc sur des **valeurs calculées par le navigateur** : `getComputedStyle`,
 - lien d'évitement : premier élément focalisable, déplace réellement le focus
   sur `<main>`, sans toucher au fragment ;
 - balisage des traductions interprété et non affiché en texte brut ;
+- mouvement, lu dans les variables CSS et attributs écrits par le
+  WebAssembly : rideau d'ouverture (transparent aux clics, levé, non rejoué
+  dans la session), scène du héros épinglée dont la progression suit le
+  défilement, poussière réellement peinte dans le canevas, photo révélée en
+  fin de scène, apparitions au défilement, barre qui s'efface et revient,
+  manifeste, curseur anneau, aimantation des boutons, volet entre les pages ;
+- mouvement réduit (`reducedMotion: "reduce"`) : ni rideau ni épinglage, et
+  aucun contenu caché en attente d'une animation ;
 - aucune erreur de console ni requête en échec.
 
 ## Lancer

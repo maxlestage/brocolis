@@ -15,8 +15,8 @@
     />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="./brocolisMan.png" />
-    <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#22803a" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#0f2a18" />
 
     <!-- Les trois pipelines Trunk. `data-wasm-opt` déclenche la passe de
          réduction de taille de binaryen sur le module compilé.
@@ -26,6 +26,11 @@
     <link data-trunk rel="rust" data-wasm-opt="z" data-wasm-opt-params="-all" />
     <link data-trunk rel="css" href="styles.css" />
     <link data-trunk rel="copy-file" href="public/brocolisMan.png" />
+    <link data-trunk rel="copy-dir" href="public/fonts" />
+    <!-- La police du titre géant est demandée tout de suite, en parallèle du
+         WebAssembly : sinon le héros s'afficherait d'abord dans la police de
+         repli, puis sauterait. -->
+    <link rel="preload" href="./fonts/archivo.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="icon" type="image/png" href="./brocolisMan.png" />
 
     <script>

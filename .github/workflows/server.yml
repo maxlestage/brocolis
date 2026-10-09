@@ -33,12 +33,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           # Même plancher que `engines` dans package.json.
-          node-version: '22.22'
+          node-version: '24.21'
 
       # Pas de build ici : le site est une application WebAssembly dont le
       # `site/dist` est versionné (voir .github/workflows/site.yml). Les tests

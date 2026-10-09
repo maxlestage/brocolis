@@ -1,174 +1,116 @@
 /* ==========================================================================
-   Feuille de style — écrite EN MOBILE FIRST.
+   Brocolis — feuille de style. Langage visuel inspiré de zamocorp.com :
+   fond profond, crème, un accent vif, typographie géante, grain de pellicule,
+   et du mouvement partout où il raconte quelque chose.
 
-   Les règles de base décrivent le téléphone : c'est le rendu par défaut, celui
-   qu'on obtient sans qu'aucune media query ne s'applique. Les écrans plus
-   larges sont ensuite ENRICHIS via des `min-width`, jamais corrigés via des
-   `max-width`.
+   Écrite EN MOBILE FIRST : les règles de base décrivent le téléphone, les
+   écrans plus larges sont ENRICHIS via `min-width`, jamais corrigés via
+   `max-width`. Paliers :
+     ≥ 601px  — tablette : typographie et espacements desserrés d'un cran
+     ≥ 761px  — barre de la page de téléchargement sur une seule ligne
+     ≥ 960px  — accueil : la navigation passe du plein écran au menu
+                horizontal (mesuré : le menu demande 904px en français)
 
-   Paliers :
-     ≥ 601px  — tablette et plus : typographie et espacements desserrés d'un cran
-     ≥ 761px  — barre de la page de téléchargement (marque + sélecteurs) sur
-                une seule ligne : ce contenu-là tient dès cette largeur
-     ≥ 960px  — accueil : la navigation passe du tiroir au menu horizontal.
-                Mesuré : le menu déroulé demande 904px en français (871 en
-                espagnol, 779 en anglais). L'ancien palier de 761px le
-                déclenchait trop tôt et la barre débordait, ce qui provoquait un
-                défilement horizontal de toute la page entre 761 et 904px.
+   Le mouvement est conditionné à la classe `motion` sur <html>, posée par
+   l'application quand `prefers-reduced-motion` ne demande PAS de réduction.
+   Sans elle, rien n'est caché en attente d'une animation : tout le contenu
+   est visible, statique, lisible. Le curseur et l'aimantation demandent en
+   plus `fine` (souris ou pavé tactile).
 
-   Pourquoi le mobile first importe ici : en desktop-first, une règle mobile ne
-   s'applique que si elle bat la règle de base en spécificité. Deux règles
-   étaient de fait mortes (`h2` battu par `main section > h2`, `.dl-note` battu
-   par `.platform-card p`), et les titres restaient donc en 30px sur téléphone.
-   En mobile first ce piège disparaît : le mobile est la base, il n'a rien à
-   battre.
-
-   Contrastes : les couleurs de texte ont été calculées, pas choisies à l'œil.
-   Les valeurs qui échouaient au ratio 4.5:1 du niveau AA sont corrigées et
-   annotées sur place — notamment sur le héros, où du blanc à 85 % d'opacité
-   posé sur un vert clair tombait à 2.7:1.
+   Contrastes calculés, pas choisis à l'œil : texte et accent ≥ 4.5:1 sur
+   le fond et sur les cartes, dans les trois thèmes.
    ========================================================================== */
 
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  src: url("fonts/archivo.woff2") format("woff2-variations");
+}
+@font-face {
+  font-family: "Fraunces";
+  font-style: italic;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("fonts/fraunces-italic.woff2") format("woff2-variations");
+}
+
+/* Thèmes ------------------------------------------------------------------ */
+
+/* Vert (par défaut) : forêt profonde, crème, accent citron vert. */
 :root,
 :root[data-theme="green"] {
-  --green: #2f9e4a;
-  /* #1f6d2c auparavant : 4.33:1 pour « Télécharger » du menu sur le fond de
-     barre translucide, donc sous le seuil AA. Assombri d'un cran, ce qui fait
-     passer du même coup tous les autres usages de ce jeton. */
-  --green-dark: #1a5c25;
-  --green-soft: #b9d6c1;
-  --bg: #c9dfd0;
-  --ink: #0f1f15;
-  --muted: #3d5746;
-  --card: #dceee2;
-  --border: #8fb89c;
-  --code-bg: #0c1610;
-  --code-ink: #d6e0d9;
-  --code-inline-bg: #b1ceba;
-  --code-inline-ink: var(--ink);
-  /* Dégradé assombri : le blanc du titre et du sous-titre se posait sur
-     #2f9e4a, soit 3.37:1. Sur #22803a il atteint 4.98:1. */
-  --hero-bg: linear-gradient(135deg, #22803a 0%, #14581f 100%);
-  --hero-ink: #ffffff;
-  --hero-lead: #f0faf2;
-  --hero-art-bg: rgba(255, 255, 255, 0.12);
-  --hero-art-border: rgba(255, 255, 255, 0.4);
-  --hero-art-shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
-  /* Puce de code sur le héros : un voile BLANC à 20 % éclaircissait le fond et
-     ramenait le texte blanc à 3.45:1. Un voile sombre fait l'inverse. */
-  --inv-bg: rgba(8, 36, 16, 0.42);
-  --inv-ink: #ffffff;
-  --inv-border: rgba(255, 255, 255, 0.42);
-  --btn-primary-bg: #ffffff;
-  --btn-primary-ink: var(--green-dark);
-  --btn-primary-hover: #f4fff5;
-  --footer-bg: #95bca1;
-  --footer-ink: #15281c;
-  --switcher-bg: rgba(15, 31, 21, 0.08);
-  --switcher-border: rgba(15, 31, 21, 0.22);
-  --switcher-ink: var(--ink);
-  --switcher-active-bg: var(--green-dark);
-  --switcher-active-ink: #ffffff;
-  --nav-bg: rgba(185, 214, 193, 0.92);
-  --nav-ink: var(--ink);
-  --nav-border: #87ad94;
-  --nav-link-hover-bg: rgba(26, 92, 37, 0.18);
-  --accent-bar: var(--green-dark);
-  --focus-ring: #0a2011;
-  color-scheme: light;
+  --bg: #0f2a18;
+  --card: #15361f;
+  --ink: #f2eedf;
+  --muted: #b8c6b4;
+  --accent: #c8f25c;
+  --accent-ink: #0f2a18;
+  --line: rgba(242, 238, 223, 0.16);
+  --code-bg: #0a1d10;
+  --code-ink: #e6efd9;
+  --code-accent: #c8f25c;
+  --chip-bg: rgba(200, 242, 92, 0.12);
+  --spot: rgba(200, 242, 92, 0.14);
+  --nav-bg: rgba(15, 42, 24, 0.72);
+  color-scheme: dark;
 }
 
 :root[data-theme="light"] {
-  --green: #2f9e4a;
-  --green-dark: #1a5c25;
-  --green-soft: #e3f1e7;
-  --bg: #f7fbf8;
-  --ink: #1a221d;
-  --muted: #4f6155;
-  --card: #f1f8f3;
-  --border: #d6e6db;
-  --code-bg: #18221c;
-  --code-ink: #e6ede9;
-  --code-inline-bg: #e6f1ea;
-  --code-inline-ink: var(--ink);
-  --hero-bg: linear-gradient(180deg, #f4faf6 0%, #dceee2 100%);
-  --hero-ink: #14241a;
-  --hero-lead: #3e5446;
-  --hero-art-bg: #ffffff;
-  --hero-art-border: var(--green-dark);
-  --hero-art-shadow: 0 12px 28px rgba(26, 92, 37, 0.18);
-  --inv-bg: var(--green-soft);
-  --inv-ink: var(--green-dark);
-  --inv-border: var(--green-dark);
-  --btn-primary-bg: var(--green-dark);
-  --btn-primary-ink: #ffffff;
-  --btn-primary-hover: #113f18;
-  --footer-bg: #e3f1e7;
-  --footer-ink: var(--muted);
-  --switcher-bg: rgba(26, 92, 37, 0.07);
-  --switcher-border: rgba(26, 92, 37, 0.22);
-  --switcher-ink: var(--ink);
-  --switcher-active-bg: var(--green-dark);
-  --switcher-active-ink: #ffffff;
-  --nav-bg: rgba(231, 244, 235, 0.85);
-  --nav-ink: var(--ink);
-  --nav-border: #cae0d0;
-  --nav-link-hover-bg: rgba(26, 92, 37, 0.13);
-  --accent-bar: var(--green-dark);
-  --focus-ring: #0a2011;
+  --bg: #f3f0e6;
+  --card: #e9e5d7;
+  --ink: #121a13;
+  --muted: #4b5649;
+  --accent: #1e6b32;
+  --accent-ink: #f3f0e6;
+  --line: rgba(18, 26, 19, 0.16);
+  --code-bg: #121a13;
+  --code-ink: #e9e5d7;
+  /* L'accent du thème (5.75:1 sur le papier) tombe à 2.7:1 sur le terminal
+     sombre : le terminal a donc le sien. */
+  --code-accent: #9be0ac;
+  --chip-bg: rgba(30, 107, 50, 0.1);
+  --spot: rgba(30, 107, 50, 0.1);
+  --nav-bg: rgba(243, 240, 230, 0.78);
   color-scheme: light;
 }
 
 :root[data-theme="dark"] {
-  --green: #4cc66a;
-  /* Inchangé : sur le fond des cartes (#131c16) ce vert est à 5.11:1, il n'y
-     avait rien à corriger ici. */
-  --green-dark: #2f9e4a;
-  --green-soft: #18301f;
-  --bg: #0d1410;
-  --ink: #e6efe9;
-  --muted: #9cb3a4;
-  --card: #131c16;
-  --border: #27362c;
-  --code-bg: #060a07;
-  --code-ink: #c8d3cc;
-  --code-inline-bg: #1a261e;
-  --code-inline-ink: #e6efe9;
-  --hero-bg: linear-gradient(135deg, #1a4a2a 0%, #08200f 100%);
-  --hero-ink: #eef5f0;
-  --hero-lead: #dce8e0;
-  --hero-art-bg: rgba(76, 198, 106, 0.08);
-  --hero-art-border: rgba(76, 198, 106, 0.6);
-  --hero-art-shadow: 0 14px 32px rgba(0, 0, 0, 0.45);
-  --inv-bg: rgba(0, 0, 0, 0.35);
-  --inv-ink: #b6efc3;
-  --inv-border: rgba(76, 198, 106, 0.55);
-  --btn-primary-bg: var(--green);
-  --btn-primary-ink: #07120a;
-  --btn-primary-hover: #6cd687;
-  --footer-bg: #0a140d;
-  --footer-ink: var(--muted);
-  --switcher-bg: rgba(76, 198, 106, 0.1);
-  --switcher-border: rgba(76, 198, 106, 0.28);
-  --switcher-ink: #eef5f0;
-  --switcher-active-bg: var(--green);
-  --switcher-active-ink: #07120a;
-  --nav-bg: rgba(13, 20, 16, 0.88);
-  --nav-ink: var(--ink);
-  --nav-border: #27362c;
-  --nav-link-hover-bg: rgba(76, 198, 106, 0.2);
-  --accent-bar: var(--green);
-  --focus-ring: #7ff0a0;
+  --bg: #0b0d0c;
+  --card: #141816;
+  --ink: #ecebe3;
+  --muted: #a2a89f;
+  --accent: #74de8f;
+  --accent-ink: #0b0d0c;
+  --line: rgba(236, 235, 227, 0.13);
+  --code-bg: #060807;
+  --code-ink: #e2e6df;
+  --code-accent: #74de8f;
+  --chip-bg: rgba(116, 222, 143, 0.1);
+  --spot: rgba(116, 222, 143, 0.12);
+  --nav-bg: rgba(11, 13, 12, 0.72);
   color-scheme: dark;
 }
 
-/* Hauteur de la barre collante. Trois règles en dépendaient avec la valeur
-   écrite en dur ; une seule source évite qu'elles divergent. */
 :root {
-  --nav-h: 56px;
+  --nav-h: 64px;
+  --gutter: 24px;
+  --sans: "Archivo", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+  --serif: "Fraunces", Georgia, "Times New Roman", serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  /* Les deux courbes de tout le site : une sortie très amortie pour ce qui
+     arrive, un aller-retour symétrique pour ce qui couvre l'écran. */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-curtain: cubic-bezier(0.76, 0, 0.24, 1);
 }
 
-* {
+/* Base -------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 html,
@@ -177,9 +119,7 @@ body {
   padding: 0;
 }
 html {
-  /* Le défilement doux est une animation : il est donc conditionné à
-     `prefers-reduced-motion`, et le `scroll-padding` empêche une section
-     ciblée de finir sous la barre collante. */
+  /* Une section ciblée ne doit pas finir sous la barre fixe. */
   scroll-padding-top: calc(var(--nav-h) + 16px);
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -188,45 +128,45 @@ html {
   }
 }
 body {
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
-  /* Base = téléphone. Les écrans ≥601px repassent à 16px. */
+  font-family: var(--sans);
   font-size: 15px;
+  line-height: 1.6;
   background: var(--bg);
   color: var(--ink);
-  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   transition:
-    background-color 0.2s ease,
-    color 0.2s ease;
+    background-color 0.4s ease,
+    color 0.4s ease;
+}
+::selection {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+a {
+  color: inherit;
+}
+img {
+  max-width: 100%;
+  display: block;
+}
+p {
+  margin: 0 0 1em;
 }
 
 .container {
-  max-width: 880px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 0 24px;
+  padding: 0 var(--gutter);
 }
 
-/* Accessibilité ---------------------------------------------------------- */
+/* Accessibilité ----------------------------------------------------------- */
 
-/* Anneau de focus explicite partout. Le contour par défaut des navigateurs
-   disparaît sur les éléments dont on redéfinit `background` et `border`
-   (les pastilles, le hamburger) : sans cette règle, une navigation au clavier
-   se fait à l'aveugle. */
 :focus-visible {
-  outline: 3px solid var(--focus-ring);
-  outline-offset: 2px;
-  border-radius: 4px;
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 6px;
 }
-/* Sur un héros à fond sombre, l'anneau sombre ne se verrait pas. Le thème
-   clair, lui, a un héros pâle : il garde l'anneau foncé. */
-:root[data-theme="green"] .hero :focus-visible,
-:root[data-theme="dark"] .hero :focus-visible {
-  outline-color: #ffffff;
-}
-
-/* Texte réservé aux technologies d'assistance : les pastilles de thème
-   n'affichent qu'un pictogramme (🥦 ☀ 🌙), qui ne s'annonce pas. */
 .sr-only {
   position: absolute;
   width: 1px;
@@ -238,81 +178,329 @@ body {
   white-space: nowrap;
   border: 0;
 }
-
-/* Premier élément focalisable de la page : il saute la barre de navigation. */
 .skip-link {
   position: fixed;
-  top: 8px;
-  left: 8px;
-  z-index: 200;
-  padding: 10px 14px;
-  border-radius: 8px;
-  background: var(--card);
-  color: var(--ink);
-  border: 2px solid var(--green-dark);
-  font-weight: 600;
-  font-size: 15px;
+  top: 10px;
+  left: 10px;
+  z-index: 600;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
   text-decoration: none;
-  transform: translateY(-250%);
-  transition: transform 0.15s ease;
+  transform: translateY(-200%);
+  transition: transform 0.2s var(--ease-out);
 }
 .skip-link:focus {
-  transform: translateY(0);
+  transform: none;
 }
 
-/* Navbar — base : marque + bouton hamburger, liens dans un tiroir replié. */
-.navbar {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  background: var(--nav-bg);
-  color: var(--nav-ink);
-  border-bottom: 1px solid var(--nav-border);
-  backdrop-filter: saturate(180%) blur(12px);
-  -webkit-backdrop-filter: saturate(180%) blur(12px);
+/* Code en ligne ----------------------------------------------------------- */
+
+code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  padding: 0.12em 0.42em;
+  border-radius: 6px;
+  background: var(--chip-bg);
+  color: var(--ink);
+  overflow-wrap: anywhere;
 }
+/* La puce « ((votre secret)) » du héros : soulignée d'un trait d'accent. */
+code.inv {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--ink);
+}
+strong {
+  font-weight: 700;
+}
+
+/* Calques d'ambiance ------------------------------------------------------ */
+
+.progress,
+.grain,
+.cursor,
+.curtain,
+.wipe {
+  pointer-events: none;
+}
+
+.progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 160;
+  background: var(--accent);
+  transform-origin: 0 50%;
+  transform: scaleX(var(--progress, 0));
+  display: none;
+}
+.motion .progress {
+  display: block;
+}
+
+/* Grain de pellicule : un bruit SVG, déplacé par à-coups. Le conteneur fixe
+   coupe ce qui dépasse — le calque intérieur est plus grand que l'écran, et
+   sans ça il ouvrirait un défilement horizontal. */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  overflow: hidden;
+  opacity: 0.07;
+}
+.grain::before {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.motion.fine .grain::before {
+  animation: grain 0.9s steps(5) infinite;
+}
+@keyframes grain {
+  0% { transform: translate(0, 0); }
+  20% { transform: translate(-6%, 4%); }
+  40% { transform: translate(5%, -7%); }
+  60% { transform: translate(-3%, 8%); }
+  80% { transform: translate(7%, 3%); }
+  100% { transform: translate(-2%, -5%); }
+}
+:root[data-theme="light"] .grain {
+  opacity: 0.1;
+}
+
+/* Curseur anneau : suit le pointeur avec retard (position écrite par
+   `motion`), grossit sur ce qui se clique. Le curseur natif reste : l'anneau
+   l'accompagne, il ne le remplace pas. */
+.cursor {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 400;
+  mix-blend-mode: difference;
+}
+.motion.fine .cursor {
+  display: block;
+}
+.cursor span {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 50%;
+  border: 1.5px solid #fff;
+  opacity: 0;
+  transform: scale(0.4);
+  transition:
+    opacity 0.3s ease,
+    transform 0.45s var(--ease-out),
+    background-color 0.3s ease;
+}
+.cursor[data-on] span {
+  opacity: 1;
+  transform: scale(1);
+}
+.cursor[data-hover] span {
+  transform: scale(1.9);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+/* Rideau d'ouverture -------------------------------------------------------- */
+
+.curtain {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px var(--gutter);
+  background: var(--accent);
+  color: var(--accent-ink);
+  transition: transform 1s var(--ease-curtain);
+}
+.curtain[data-phase="up"] {
+  transform: translateY(-100%);
+}
+.curtain-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+}
+.curtain-word {
+  animation: rise 0.9s var(--ease-out) both;
+}
+.curtain-leaf {
+  font-size: 24px;
+  animation: rise 0.9s var(--ease-out) both;
+}
+.curtain-count {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-size: clamp(72px, 24vw, 260px);
+  font-weight: 800;
+  line-height: 0.8;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.curtain-bar {
+  display: block;
+  height: 2px;
+  background: currentColor;
+  transform-origin: 0 50%;
+  transform: scaleX(var(--n));
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(60%);
+  }
+}
+
+/* Volet entre deux pages : il couvre l'écran au changement de route puis se
+   lève, comme le rideau d'ouverture en plus bref. */
+.wipe {
+  display: none;
+}
+.motion .wipe {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 450;
+  background: var(--accent);
+  animation: wipe 0.85s var(--ease-curtain) forwards;
+}
+@keyframes wipe {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-100%);
+  }
+}
+
+/* Barre de navigation ----------------------------------------------------- */
+
+.navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 150;
+  color: var(--ink);
+  transition:
+    transform 0.6s var(--ease-out),
+    opacity 0.8s ease;
+}
+/* Le fond flouté est porté par un pseudo-élément, pas par la barre : un
+   `backdrop-filter` (comme un `transform`) sur la barre ferait d'elle le bloc
+   conteneur du menu plein écran, qui ne couvrirait alors plus que la barre. */
+.navbar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background: var(--nav-bg);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.scrolled .navbar::before,
+.navbar.dl-navbar::before {
+  opacity: 1;
+}
+/* Elle s'efface quand on descend et revient dès qu'on remonte — jamais
+   pendant que le menu est ouvert. */
+.nav-hidden .navbar:not(:has(.nav-drawer.open)) {
+  transform: translateY(-100%);
+}
+.motion:not(.ready) .navbar {
+  opacity: 0;
+}
+
 .nav-inner {
   display: flex;
   align-items: center;
   gap: 18px;
   height: var(--nav-h);
-  max-width: 1080px;
-  position: relative;
 }
 .nav-brand {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  font-size: 17px;
-  letter-spacing: -0.2px;
-  color: var(--nav-ink);
+  gap: 10px;
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.01em;
   text-decoration: none;
+  position: relative;
+  z-index: 1;
 }
 .nav-leaf {
-  font-size: 20px;
+  font-size: 22px;
   line-height: 1;
+  display: inline-block;
+  transition: transform 0.6s var(--ease-out);
 }
+.nav-brand:hover .nav-leaf {
+  transform: rotate(-18deg) scale(1.1);
+}
+
+/* Hamburger : deux traits qui se croisent à l'ouverture. */
+.nav-toggle {
+  margin-left: auto;
+  position: relative;
+  z-index: 1;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  display: grid;
+  place-content: center;
+  gap: 6px;
+}
+.nav-toggle span {
+  display: block;
+  width: 20px;
+  height: 1.5px;
+  background: currentColor;
+  transition: transform 0.5s var(--ease-out), opacity 0.3s ease;
+}
+.nav-toggle.open span:nth-child(1) {
+  transform: translateY(7.5px) rotate(45deg);
+}
+.nav-toggle.open span:nth-child(2) {
+  opacity: 0;
+}
+.nav-toggle.open span:nth-child(3) {
+  transform: translateY(-7.5px) rotate(-45deg);
+}
+
+/* Menu : plein écran sur téléphone et tablette, liens géants numérotés. */
 .nav-drawer {
   display: none;
-  position: absolute;
-  top: var(--nav-h);
-  left: 0;
-  right: 0;
+  position: fixed;
+  inset: 0;
+  z-index: -1;
   flex-direction: column;
-  align-items: stretch;
-  gap: 14px;
+  padding: calc(var(--nav-h) + 32px) var(--gutter) 32px;
   background: var(--bg);
-  border-bottom: 1px solid var(--nav-border);
-  padding: 14px 24px 18px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-  /* Le tiroir est ancré à une barre collante : ce qui dépasse de l'écran ne
-     peut PAS être rattrapé en faisant défiler la page. En paysage, le bas du
-     tiroir — les sélecteurs de langue et de thème — devenait donc
-     définitivement inatteignable. On le borne à la hauteur disponible et on le
-     rend défilant : quand le contenu tient (portrait), rien ne change. */
-  max-height: calc(100vh - var(--nav-h));
-  max-height: calc(100dvh - var(--nav-h));
+  overflow-x: hidden;
   overflow-y: auto;
 }
 .nav-drawer.open {
@@ -322,682 +510,1048 @@ body {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  counter-reset: nav;
+}
+.nav-links li {
+  counter-increment: nav;
+  border-bottom: 1px solid var(--line);
+}
+.motion .nav-drawer.open .nav-links li {
+  animation: rise-in 0.8s var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 55ms + 80ms);
 }
 .nav-links a {
-  display: inline-block;
-  padding: 10px 12px;
-  border-radius: 6px;
-  color: var(--nav-ink);
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 10px 0;
+  font-size: clamp(30px, 9vw, 60px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
   text-decoration: none;
-  font-size: 15px;
-  font-weight: 500;
-  transition: background 0.15s ease;
+  overflow-wrap: anywhere;
+}
+.nav-links a::before {
+  content: counter(nav, decimal-leading-zero);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--accent);
+  font-family: var(--mono);
 }
 .nav-links a:hover {
-  background: var(--nav-link-hover-bg);
+  color: var(--accent);
 }
-/* `justify-content` n'a rien à faire ici : .nav-switchers est un bloc, pas un
-   conteneur flex — c'est .switchers (plus bas) qui aligne réellement. */
 .nav-switchers {
-  margin-left: 0;
+  margin-top: auto;
+  padding-top: 32px;
 }
-.nav-toggle {
-  display: block;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  padding: 6px;
-  margin-left: auto;
-  /* 44px : cible tactile confortable, au-delà du minimum de 24px exigé. */
-  width: 44px;
-  height: 44px;
-  position: relative;
-}
-.nav-toggle span {
-  display: block;
-  width: 20px;
-  height: 2px;
-  background: var(--nav-ink);
-  margin: 4px auto;
-  border-radius: 2px;
-  transition:
-    transform 0.2s ease,
-    opacity 0.2s ease;
-}
-.nav-toggle.open span:nth-child(1) {
-  transform: translateY(6px) rotate(45deg);
-}
-.nav-toggle.open span:nth-child(2) {
-  opacity: 0;
-}
-.nav-toggle.open span:nth-child(3) {
-  transform: translateY(-6px) rotate(-45deg);
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
 }
 
-/* Hero */
-.hero {
-  background: var(--hero-bg);
-  color: var(--hero-ink);
-  padding: 48px 0 40px;
-  overflow: hidden;
-  position: relative;
-}
-.hero-stack {
+/* Sélecteurs langue / thème. */
+.switchers {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.switcher {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+.pill {
+  min-width: 36px;
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font: 600 12px/1 var(--sans);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+.pill:hover {
+  background: var(--chip-bg);
+}
+.pill.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* Boutons ----------------------------------------------------------------- */
+
+/* Une pastille qui se remplit par le bas au survol, et une flèche qui file.
+   Le déplacement magnétique (--mx, --my) est écrit par `motion`. */
+.btn {
   position: relative;
-}
-.hero-text {
-  min-width: 0;
-}
-.hero-art {
-  width: 160px;
-  height: 160px;
-  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 26px;
+  border-radius: 999px;
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1.2;
+  text-decoration: none;
   overflow: hidden;
-  background: var(--hero-art-bg);
-  border: 3px solid var(--hero-art-border);
-  box-shadow: var(--hero-art-shadow);
+  isolation: isolate;
+  transform: translate(var(--mx, 0px), var(--my, 0px));
+  transition:
+    transform 0.6s var(--ease-out),
+    color 0.4s ease,
+    border-color 0.4s ease;
+}
+.btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--ink);
+  border-radius: inherit;
+  transform: translateY(101%);
+  transition: transform 0.5s var(--ease-out);
+}
+.btn:hover {
+  color: var(--bg);
+}
+.btn:hover::before {
+  transform: none;
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.btn.primary::before {
+  background: var(--ink);
+}
+.btn.primary:hover {
+  color: var(--bg);
+  border-color: var(--ink);
+}
+.btn-arrow {
+  display: inline-block;
+  transition: transform 0.5s var(--ease-out);
+}
+.btn:hover .btn-arrow {
+  transform: translateX(5px);
+}
+
+/* Héros ------------------------------------------------------------------- */
+
+.hero-pin {
+  position: relative;
+  --hero: 1;
+}
+/* La scène est épinglée pendant 1,6 écran de défilement : c'est la course
+   pendant laquelle la poussière se rassemble. */
+.motion .hero-pin {
+  --hero: 0;
+  height: 260vh;
+  height: 260svh;
+}
+.hero-stage {
+  position: relative;
+  height: 100vh;
+  height: 100svh;
+  min-height: 560px;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  justify-items: start;
+  padding: calc(var(--nav-h) + 12px) var(--gutter) 20px;
+}
+.motion .hero-stage {
+  position: sticky;
+  top: 0;
+}
+.hero-dust {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  /* La mosaïque s'efface sous la photo : ses cases carrées dépassent du
+     disque et dentelleraient le bord. */
+  opacity: clamp(0, calc((0.95 - var(--hero)) * 10), 1);
+}
+.hero-eyebrow {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  position: relative;
+  z-index: 3;
+}
+.pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 var(--accent);
+}
+.motion .pulse {
+  animation: pulse 2.2s ease-out infinite;
+}
+@keyframes pulse {
+  70% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.hero-art {
+  place-self: center;
+  position: relative;
+  z-index: 2;
+  width: min(68vw, 40svh, 420px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: scale(calc(0.9 + var(--hero) * 0.1));
 }
 .hero-art img {
   width: 100%;
   height: 100%;
+  border-radius: 50%;
   object-fit: cover;
-  display: block;
+  /* Avec mouvement, la photo n'apparaît qu'une fois la poussière posée : elle
+     recouvre alors la mosaïque en fondu. */
+  opacity: clamp(0, calc((var(--hero) - 0.76) * 8), 1);
+  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.5);
 }
-.hero h1 {
-  font-size: 42px;
-  margin: 0 0 8px;
-  letter-spacing: -1.5px;
-  font-weight: 800;
-  text-wrap: balance;
+/* Balayage de lumière sur la mascotte formée. */
+.hero-sweep {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  pointer-events: none;
 }
-.hero .emoji {
-  font-size: 36px;
-  vertical-align: 4px;
-}
-/* Plus d'`opacity` empilée sur ces deux-là : 0.95 puis 0.85 de blanc sur le
-   vert du héros faisait tomber le sous-titre à 2.7:1. La nuance voulue est
-   maintenant dans le jeton de couleur, calculé pour rester lisible. */
-.hero .tagline {
-  font-size: 18px;
-  margin: 0 0 20px;
-  color: var(--hero-ink);
-  font-weight: 500;
-  text-wrap: balance;
-}
-.hero .lead {
-  font-size: 17px;
-  max-width: 680px;
-  margin: 0 auto 28px;
-  color: var(--hero-lead);
-  text-wrap: pretty;
-}
-
-/* Switchers */
-.switchers {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-.switcher {
-  display: inline-flex;
-  background: var(--switcher-bg);
-  border: 1px solid var(--switcher-border);
-  border-radius: 999px;
-  padding: 3px;
-  gap: 2px;
-}
-.switcher .pill {
-  border: 0;
-  background: transparent;
-  color: var(--switcher-ink);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-  /* 28px de haut : la version précédente tombait à 20.5px, sous le minimum de
-     24px des cibles de pointage. */
-  min-height: 28px;
-  min-width: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 11px;
-  border-radius: 999px;
-  cursor: pointer;
-  line-height: 1;
-  transition:
-    background 0.15s ease,
-    color 0.15s ease;
-}
-.switcher .pill:hover {
-  background: rgba(127, 127, 127, 0.15);
-}
-.switcher .pill.active {
-  background: var(--switcher-active-bg);
-  color: var(--switcher-active-ink);
-}
-
-/* CTAs */
-.cta {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-.cta-stack {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-.cta-sub {
-  color: var(--hero-lead);
-  font-size: 13.5px;
-  letter-spacing: 0.4px;
-  font-weight: 500;
-}
-.btn {
-  display: inline-block;
-  padding: 10px 16px;
-  border-radius: 8px;
-  text-decoration: none;
-  font-weight: 600;
-  font-size: 15px;
-  border: 2px solid transparent;
-  transition:
-    transform 0.08s ease,
-    background 0.15s ease,
-    color 0.15s ease;
-}
-.btn.primary {
-  background: var(--btn-primary-bg);
-  color: var(--btn-primary-ink);
-}
-/* Variante secondaire (bouton .rpm) : contour vert, pas de fond — sinon un
-   .btn nu hérite du bleu lien par défaut. */
-.btn:not(.primary) {
-  border-color: var(--green-dark);
-  color: var(--green-dark);
-  background: transparent;
-}
-.btn.primary:hover {
-  background: var(--btn-primary-hover);
-}
-.btn:active {
-  transform: translateY(1px);
-}
-
-/* Sections */
-main section {
-  padding: 36px 0;
-  border-bottom: 1px solid var(--border);
-  scroll-margin-top: calc(var(--nav-h) + 16px);
-}
-main section:last-child {
-  border-bottom: none;
-}
-main section > h2 {
-  font-size: 24px;
-  margin: 0 0 18px;
-  letter-spacing: -0.3px;
-  color: var(--ink);
-  position: relative;
-  padding-left: 16px;
-  text-wrap: balance;
-}
-main section > h2::before {
+.hero-sweep::before {
   content: "";
   position: absolute;
+  top: -20%;
+  bottom: -20%;
+  width: 45%;
   left: 0;
-  top: 8px;
-  bottom: 8px;
-  width: 4px;
-  border-radius: 2px;
-  background: var(--accent-bar, var(--green));
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  mix-blend-mode: soft-light;
+  transform: translateX(calc(-120% + clamp(0, (var(--hero) - 0.84) * 6.25, 1) * 360%)) rotate(12deg);
 }
-/* Les cartes de la page de téléchargement portent un `h2` et non un `h3` : sur
-   cette page le titre principal est le `h1`, donc un `h3` sauterait un niveau.
-   Elles suivent la même règle de style que les `h3` des cartes de l'accueil. */
-h3,
-.card h2 {
-  font-size: 16px;
-  margin: 0 0 8px;
-  color: var(--ink);
-}
-p {
-  margin: 0 0 12px;
-  color: var(--ink);
-  text-wrap: pretty;
-}
-
-/* Code */
-pre,
-code {
-  font-family: SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-}
-pre {
-  background: var(--code-bg);
-  color: var(--code-ink);
-  padding: 16px 18px;
-  border-radius: 10px;
-  overflow-x: auto;
-  font-size: 14px;
-  line-height: 1.5;
-  margin: 0 0 16px;
-}
-pre code {
-  background: none;
-  padding: 0;
-  color: inherit;
-}
-code {
-  background: var(--code-inline-bg);
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-size: 0.92em;
-  color: var(--code-inline-ink);
-}
-.inv {
-  background: var(--inv-bg);
-  color: var(--inv-ink);
-  border: 1px solid var(--inv-border);
-}
-
-/* Note */
-.note {
-  margin-top: 14px;
-  padding: 12px 14px;
-  background: var(--green-soft);
-  border-left: 3px solid var(--green-dark);
-  border-radius: 4px;
-  font-size: 14.5px;
-  color: var(--ink);
-}
-
-/* Checklist */
-.checklist {
-  padding-left: 0;
-  list-style: none;
-  margin: 0;
-}
-.checklist li {
-  padding-left: 28px;
-  position: relative;
-  margin-bottom: 8px;
-  color: var(--ink);
-}
-.checklist li::before {
-  content: "✓";
-  color: var(--green-dark);
-  font-weight: 800;
+.hero-art::after {
+  content: "";
   position: absolute;
-  left: 4px;
-  top: 0;
+  inset: -10px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  opacity: clamp(0, calc((var(--hero) - 0.8) * 6), 1);
 }
 
-/* Cards grid — une colonne sur téléphone, `auto-fit` élargit ensuite tout seul. */
+.hero-title {
+  position: relative;
+  z-index: 3;
+  margin: 0;
+  /* Le mot remplit la largeur. Mesuré dans Chromium : « Brocolis » dans
+     cette graisse et cette chasse occupe 3,75 em ; on divise la largeur utile
+     par 3,8 pour garder une marge. Plafonné en hauteur pour les écrans très
+     larges, où il écraserait la mascotte. */
+  font-size: min(calc((100vw - 2 * var(--gutter)) / 3.8), 42svh);
+  font-weight: 800;
+  font-stretch: 100%;
+  line-height: 0.84;
+  letter-spacing: -0.055em;
+  padding-top: 0.06em;
+  margin-left: -0.04em;
+  overflow: hidden;
+  white-space: nowrap;
+  transform: translateY(calc(var(--hero) * -4vh));
+}
+.hero-title .char {
+  display: inline-block;
+}
+.motion .hero-title .char {
+  transform: translateY(108%);
+  transition: transform 1.3s var(--ease-out);
+  transition-delay: calc(var(--i) * 50ms + 80ms);
+}
+.motion.ready .hero-title .char {
+  transform: none;
+}
+.hero-scroll {
+  position: relative;
+  z-index: 3;
+  margin: 14px 0 0;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: clamp(0, calc(1 - var(--hero) * 5), 1);
+}
+.hero-scroll-line {
+  width: 48px;
+  height: 1px;
+  background: var(--line);
+  position: relative;
+  overflow: hidden;
+}
+.hero-scroll-line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--ink);
+  transform: translateX(-100%);
+}
+.motion .hero-scroll-line::after {
+  animation: scroll-line 2s var(--ease-curtain) infinite;
+}
+@keyframes scroll-line {
+  50% {
+    transform: none;
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+.motion .hero-eyebrow,
+.motion .hero-scroll {
+  transition: opacity 1s ease 0.6s;
+}
+.motion:not(.ready) .hero-eyebrow,
+.motion:not(.ready) .hero-scroll {
+  opacity: 0;
+}
+
+.hero-intro {
+  padding-top: 72px;
+  padding-bottom: 72px;
+}
+.tagline {
+  font-size: clamp(30px, 7.4vw, 76px);
+  line-height: 1.04;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  margin: 0 0 32px;
+  max-width: 17ch;
+}
+.tagline strong,
+.footer-h em,
+.sec-head h2 em {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+}
+.lead {
+  font-size: 17px;
+  color: var(--muted);
+  max-width: 60ch;
+  margin-bottom: 36px;
+}
+.cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 20px;
+}
+.cta-sub {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Bandeau défilant -------------------------------------------------------- */
+
+.marquee {
+  overflow: clip;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 18px 0;
+  user-select: none;
+}
+.marquee-track {
+  display: flex;
+  width: max-content;
+}
+.motion .marquee-track {
+  animation: marquee 38s linear infinite;
+}
+.marquee-run {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.marquee-word {
+  font-size: clamp(28px, 6vw, 76px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+  padding: 0 0.35em;
+}
+.marquee-word:nth-child(4n + 3) {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+}
+.marquee-sep {
+  color: var(--accent);
+  font-size: clamp(18px, 3vw, 36px);
+}
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* Manifeste --------------------------------------------------------------- */
+
+.manifesto {
+  padding: 96px 0 40px;
+}
+.kicker {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 24px;
+}
+.manifesto-text {
+  font-size: clamp(26px, 5.6vw, 60px);
+  line-height: 1.12;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  margin: 0;
+  max-width: 22ch;
+}
+/* Chaque mot s'allume quand l'avancement (--p, 0 → 1) dépasse son rang. */
+.motion .manifesto-text .word {
+  opacity: clamp(0.16, calc(var(--p, 0) * (var(--n) + 6) - var(--i)), 1);
+  transition: opacity 0.25s linear;
+}
+
+/* Sections ---------------------------------------------------------------- */
+
+main section {
+  padding: 80px 0;
+  border-top: 1px solid var(--line);
+}
+main section:first-of-type {
+  border-top: 0;
+}
+.sec-head {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 36px;
+}
+.sec-index {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--accent);
+}
+.sec-head h2 {
+  margin: 0;
+  font-size: clamp(34px, 8.6vw, 92px);
+  line-height: 0.98;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+.sec-head h2 code {
+  font-size: 0.7em;
+  letter-spacing: -0.02em;
+}
+.sec-intro,
+main section > p {
+  color: var(--muted);
+  max-width: 64ch;
+  font-size: 16px;
+}
+main section > p strong,
+.sec-intro strong {
+  color: var(--ink);
+}
+
+h3 {
+  margin: 0 0 12px;
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* Grilles et cartes. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
-}
-.grid.grid-3 {
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px;
+  grid-template-columns: 1fr;
 }
-
-/* Platform cards */
-/* Pas de `padding` ici : ces cartes portent aussi la classe .card, déclarée
-   plus bas avec la même spécificité — c'est donc .card qui l'emporte, et le
-   padding qui figurait ici n'a jamais rien fait. Le retrait ne change donc
-   rien au rendu ; il évite de croire que la valeur s'applique. */
+.card {
+  position: relative;
+  padding: 28px 24px;
+  border-radius: 22px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  isolation: isolate;
+  transition: border-color 0.4s ease;
+}
+.card p {
+  color: var(--muted);
+}
+/* Projecteur : un halo d'accent sous le pointeur (position écrite par
+   `motion`). */
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(420px circle at var(--sx, 50%) var(--sy, 0%), var(--spot), transparent 60%);
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+.card:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.card:hover::before {
+  opacity: 1;
+}
+.card-index {
+  display: block;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+  margin-bottom: 40px;
+}
 .platform-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+}
+.platform-card > p {
+  flex: 1;
 }
 .platform-head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.platform-head h2,
+.platform-head h3 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 .platform-icon {
-  font-size: 18px;
-  line-height: 1;
+  font-size: 26px;
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--chip-bg);
 }
-.platform-card :is(h2, h3) {
-  margin: 0;
-}
-.platform-card p {
-  flex: 1;
-  margin: 0;
-  font-size: 14.5px;
-  line-height: 1.55;
-}
-/* `.btn.platform-cta` et non `.btn.primary.platform-cta` : le bouton .rpm est
-   la variante secondaire (pas de classe `primary`), il échappait donc à cette
-   règle et gardait la taille d'un bouton normal — 54px de haut à côté des 42px
-   du bouton .deb, juste à côté de lui. Les deux CTA d'une carte ont désormais
-   la même taille. */
-.btn.platform-cta {
+.platform-cta {
   align-self: flex-start;
-  padding: 8px 16px;
-  font-size: 14px;
-  margin-top: 4px;
-}
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-top: 3px solid var(--green);
-  border-radius: 10px;
-  padding: 14px 16px;
-  transition:
-    transform 0.1s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
-}
-.card:hover {
-  border-color: var(--green);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(47, 158, 74, 0.12);
-}
-.card :is(h2, h3) {
-  color: var(--green-dark);
+  margin-top: 8px;
 }
 
-/* Ordered list (quickstart) */
-ol {
-  padding-left: 22px;
+/* Terminal. */
+pre {
+  margin: 0 0 28px;
+  overflow-x: auto;
 }
-ol li {
-  margin-bottom: 8px;
-  color: var(--ink);
+.terminal {
+  position: relative;
+  padding: 52px 24px 24px;
+  border-radius: 18px;
+  background: var(--code-bg);
+  color: var(--code-ink);
+  border: 1px solid var(--line);
+  font-size: 13.5px;
+  line-height: 1.65;
 }
-
-/* Diagram */
-.diagram {
-  font-size: 13px;
-  line-height: 1.45;
+.terminal::before {
+  content: "";
+  position: absolute;
+  top: 20px;
+  left: 22px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ff5f57;
+  box-shadow:
+    16px 0 0 #febc2e,
+    32px 0 0 #28c840;
+}
+.terminal code {
+  background: none;
+  padding: 0;
+  color: inherit;
+  font-size: 1em;
+  overflow-wrap: normal;
   white-space: pre;
 }
-
-/* Footer */
-footer {
-  padding: 28px 0 36px;
-  color: var(--footer-ink);
-  font-size: 14px;
-  background: var(--footer-bg);
-  border-top: 1px solid var(--border);
+/* Invite de commande devant la commande unique de « brocolis auto ». */
+#auto .terminal code::before {
+  content: "$ ";
+  color: var(--code-accent);
 }
-footer p {
-  color: inherit;
+
+/* Listes. */
+.checklist,
+.steps {
+  list-style: none;
+  margin: 0 0 28px;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.checklist li,
+.steps li {
+  position: relative;
+  padding: 18px 0 18px 48px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+.checklist li strong,
+.steps li strong {
+  color: var(--ink);
+}
+.checklist li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  top: 16px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 14px;
+  font-weight: 800;
+}
+.steps {
+  counter-reset: step;
+}
+.steps li {
+  counter-increment: step;
+  padding-left: 64px;
+}
+.steps li::before {
+  content: counter(step, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 10px;
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: var(--accent);
+}
+.note {
+  padding: 18px 20px;
+  border-radius: 14px;
+  border: 1px dashed var(--line);
+  font-size: 14.5px;
+}
+
+/* Apparitions ------------------------------------------------------------- */
+
+/* Rien n'est caché sans la classe `motion` : sous mouvement réduit, tout est
+   simplement là. */
+.motion [data-reveal] {
+  transition:
+    opacity 1s var(--ease-out),
+    transform 1.2s var(--ease-out),
+    clip-path 1.2s var(--ease-out);
+}
+.motion [data-reveal]:not([data-in]) {
+  opacity: 0;
+  transform: translateY(36px);
+}
+.motion [data-reveal="mask"]:not([data-in]) {
+  opacity: 1;
+  clip-path: inset(0 0 100% 0);
+  transform: translateY(30%);
+}
+.motion [data-reveal="mask"][data-in] {
+  clip-path: inset(-0.2em -0.2em -0.3em -0.2em);
+}
+/* Décalage en cascade dans une grille ou une liste. */
+.motion .grid > [data-reveal]:nth-child(2),
+.motion .checklist > [data-reveal]:nth-child(2),
+.motion .steps > [data-reveal]:nth-child(2) {
+  transition-delay: 0.08s;
+}
+.motion .grid > [data-reveal]:nth-child(3),
+.motion .checklist > [data-reveal]:nth-child(3),
+.motion .steps > [data-reveal]:nth-child(3) {
+  transition-delay: 0.16s;
+}
+.motion .grid > [data-reveal]:nth-child(4),
+.motion .checklist > [data-reveal]:nth-child(4),
+.motion .steps > [data-reveal]:nth-child(4) {
+  transition-delay: 0.24s;
+}
+.motion .checklist > [data-reveal]:nth-child(n + 5) {
+  transition-delay: 0.3s;
+}
+/* Les boutons aimantés gardent une transition propre à leur translation : la
+   cascade ne doit pas la retarder. */
+.motion .btn[data-reveal] {
+  transition-delay: 0s;
+}
+
+/* Pied de page ------------------------------------------------------------ */
+
+.footer {
+  border-top: 1px solid var(--line);
+  overflow: clip;
+}
+.footer-cta {
+  padding-top: 96px;
+  padding-bottom: 48px;
+  display: grid;
+  gap: 32px;
+  justify-items: start;
+}
+.footer-h {
+  margin: 0;
+  font-size: clamp(40px, 10vw, 128px);
+  line-height: 0.98;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  max-width: 14ch;
+}
+.footer-word {
+  /* Même calcul que le titre du héros : 3,7 em mesurés pour le mot. */
+  font-size: calc((100vw - 2 * var(--gutter)) / 3.75);
+  padding-inline: var(--gutter);
+  font-weight: 800;
+  letter-spacing: -0.06em;
+  line-height: 0.78;
+  white-space: nowrap;
+  color: var(--accent);
+  padding-top: 0.1em;
+  user-select: none;
+}
+.footer-word span {
+  display: inline-block;
+  transform: translateY(var(--py, 0px));
+}
+.footer-meta {
+  padding-top: 28px;
+  padding-bottom: 28px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.footer-meta p {
   margin: 0;
 }
 
-/* -------------------------------------------------------------------------
-   ≥ 601px — tablette et bureau : on desserre la typographie et les espacements.
-   ------------------------------------------------------------------------- */
-@media (min-width: 601px) {
-  body {
-    font-size: 16px;
-  }
-  h3,
-  .card h2 {
-    font-size: 17px;
-  }
-  .btn {
-    padding: 12px 22px;
-    font-size: 16px;
-  }
-  .card {
-    padding: 18px 20px;
-  }
-  .hero {
-    padding: 64px 0 60px;
-  }
-  .hero-art {
-    width: 200px;
-    height: 200px;
-  }
-  .hero h1 {
-    font-size: 60px;
-  }
-  .hero .emoji {
-    font-size: 52px;
-  }
-  .hero .tagline {
-    font-size: 22px;
-  }
-  main section {
-    padding: 48px 0;
-  }
-  main section > h2 {
-    font-size: 30px;
-  }
-  .platform-icon {
-    font-size: 22px;
-  }
+/* Page de téléchargement --------------------------------------------------- */
+
+.dl-navbar .nav-switchers {
+  margin: 0 0 0 auto;
+  padding: 0;
 }
-
-/* -------------------------------------------------------------------------
-   ≥ 960px — bureau : le tiroir devient un menu horizontal, plus de hamburger.
-   Voir l'en-tête du fichier : 904px sont nécessaires en français, d'où ce
-   palier et non 761px.
-   ------------------------------------------------------------------------- */
-@media (min-width: 960px) {
-  .nav-toggle {
-    display: none;
-  }
-  /* Filet de sécurité : si une traduction future rallonge le menu au point de
-     ne plus tenir, la barre passe à la ligne au lieu de déborder et de rendre
-     la page entière défilable horizontalement. */
-  .nav-inner {
-    height: auto;
-    min-height: var(--nav-h);
-    flex-wrap: wrap;
-  }
-  .nav-drawer {
-    display: flex;
-    position: static;
-    flex-direction: row;
-    align-items: center;
-    gap: 18px;
-    flex: 1;
-    background: none;
-    border-bottom: 0;
-    padding: 0;
-    box-shadow: none;
-    max-height: none;
-    overflow: visible;
-  }
-  .nav-links {
-    flex-direction: row;
-    gap: 4px;
-  }
-  .nav-links a {
-    padding: 7px 12px;
-    font-size: 14.5px;
-  }
-  .nav-switchers {
-    margin-left: auto;
-  }
-}
-
-/* ----------------------------------------------------------------------- */
-/* Page de téléchargement (route #/telecharger)                            */
-/* ----------------------------------------------------------------------- */
-
-/* Sélecteur porté à `.nav-links a.nav-download` : la classe seule (0-1-0) était
-   battue par `.nav-links a` (0-1-1), donc l'entrée « Télécharger » du menu
-   s'affichait exactement comme les autres — ni verte, ni en gras. */
-.nav-links a.nav-download {
-  font-weight: 700;
-  color: var(--green-dark);
-}
-
-/* La barre du haut de cette page n'a pas de hamburger (juste marque +
-   sélecteurs) : sur téléphone on laisse les sélecteurs passer SOUS la marque
-   plutôt que de déborder sur le titre. */
 .dl-navbar .nav-inner {
   height: auto;
   min-height: var(--nav-h);
   flex-wrap: wrap;
-  row-gap: 10px;
-  padding-top: 10px;
-  padding-bottom: 10px;
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
-.dl-navbar .nav-switchers {
-  margin-left: 0;
-  width: 100%;
-}
-.dl-navbar .switchers {
-  justify-content: flex-start;
-}
-
-/* On garde les 24px horizontaux de .container : sinon le raccourci « padding »
-   les remet à 0 et les cartes touchent les bords (contrairement à l'accueil). */
 .dl-main {
-  padding: 18px 24px 44px;
+  padding-top: calc(var(--nav-h) + 72px);
+  padding-bottom: 96px;
 }
-
 .dl-back {
-  display: inline-block;
-  font-size: 14px;
-  margin-bottom: 14px;
-  color: var(--muted);
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: 28px;
+  font-family: var(--mono);
+  font-size: 13px;
   text-decoration: none;
-  font-weight: 600;
+  color: var(--muted);
 }
 .dl-back:hover {
-  color: var(--green-dark);
+  color: var(--accent);
 }
-
-/* Le titre reprend l'allure des titres de section de l'accueil : même taille,
-   même barre verte à gauche, pour une page de téléchargement plus compacte. */
 .dl-title {
-  margin: 0 0 14px;
-  font-size: 24px;
-  line-height: 1.15;
-  letter-spacing: -0.3px;
-  position: relative;
-  padding-left: 14px;
-  text-wrap: balance;
+  margin: 0 0 28px;
+  font-size: clamp(44px, 12vw, 132px);
+  line-height: 0.95;
+  font-weight: 800;
+  letter-spacing: -0.05em;
 }
-.dl-title::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 6px;
-  bottom: 6px;
-  width: 4px;
-  border-radius: 2px;
-  background: var(--accent-bar, var(--green));
-}
-
 .dl-intro {
-  max-width: 60ch;
-  font-size: 15px;
-  color: var(--ink);
+  font-size: 18px;
+  max-width: 56ch;
 }
-
 .dl-version {
-  max-width: 60ch;
   color: var(--muted);
-  font-size: 13.5px;
-  margin-bottom: 20px;
+  max-width: 64ch;
+  margin-bottom: 48px;
 }
-
-/* La grille est un <section>, elle hérite donc du padding/bordure de
-   « main section ». On les neutralise pour coller au rendu de l'accueil,
-   où les cartes suivent directement l'intro sans grand vide. */
-.dl-grid {
-  margin-top: 8px;
-  padding: 0;
-  border-bottom: none;
-}
-
 .dl-btn-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  margin-top: 8px;
 }
-
-/* Sélecteur volontairement porté à la même spécificité que `.platform-card p`
-   (0-1-1) : sinon la taille de la note ne s'applique jamais, la règle de la
-   carte gagnant sur la classe seule. */
-.platform-card .dl-note {
-  margin-top: 12px;
-  font-size: 13px;
-  color: var(--muted);
+.dl-btn-row .platform-cta {
+  margin-top: 0;
 }
-
+.dl-note {
+  margin: 18px 0 0;
+  font-size: 13.5px;
+}
 .dl-all {
-  margin-top: 32px;
+  margin-top: 40px;
 }
 .dl-all a {
-  color: var(--green-dark);
   font-weight: 600;
+  text-underline-offset: 4px;
+}
+.dl-all a:hover {
+  color: var(--accent);
 }
 
+/* ≥ 601px : tablette -------------------------------------------------------- */
+
 @media (min-width: 601px) {
-  .dl-main {
-    padding: 32px 24px 64px;
+  :root {
+    --gutter: 40px;
   }
-  .dl-back {
-    font-size: inherit;
-    margin-bottom: 18px;
+  body {
+    font-size: 16px;
   }
-  .dl-title {
-    font-size: 30px;
-    padding-left: 16px;
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
   }
-  .dl-intro {
-    font-size: inherit;
+  .card {
+    padding: 34px 30px;
   }
-  .dl-version {
-    font-size: 15px;
-    margin-bottom: 28px;
+  .hero-eyebrow,
+  .hero-scroll {
+    font-size: 13px;
   }
-  .platform-card .dl-note {
+  .hero-intro {
+    padding-top: 110px;
+    padding-bottom: 96px;
+  }
+  .lead {
+    font-size: 19px;
+  }
+  main section {
+    padding: 120px 0;
+  }
+  .sec-head {
+    grid-template-columns: 64px 1fr;
+    align-items: start;
+  }
+  .sec-index {
+    padding-top: 0.9em;
+  }
+  /* Le corps de section s'aligne sur le titre, pas sur le numéro. */
+  main section > :not(.sec-head) {
+    margin-left: 76px;
+  }
+  .manifesto {
+    padding: 140px 0 60px;
+  }
+  .terminal {
     font-size: 14px;
+    padding: 56px 32px 28px;
   }
 }
+
+/* ≥ 761px : barre de téléchargement sur une ligne --------------------------- */
 
 @media (min-width: 761px) {
   .dl-navbar .nav-inner {
-    height: var(--nav-h);
-    min-height: 0;
     flex-wrap: nowrap;
-    /* `gap` et non `row-gap: 0` : on restaure la valeur de .nav-inner, sinon
-       la gouttière calculée devient « 0px 18px » au lieu de « 18px ». */
-    gap: 18px;
+    height: var(--nav-h);
     padding-top: 0;
     padding-bottom: 0;
   }
-  .dl-navbar .nav-switchers {
-    margin-left: auto;
-    width: auto;
-  }
-  .dl-navbar .switchers {
-    justify-content: flex-end;
+}
+
+/* ≥ 900px : grilles à trois colonnes --------------------------------------- */
+
+@media (min-width: 900px) {
+  .grid-3 {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
-/* -------------------------------------------------------------------------
-   Préférences système
-   ------------------------------------------------------------------------- */
+/* ≥ 960px : menu horizontal, scène du héros en deux plans ------------------- */
 
-/* Mouvement réduit : plus aucune animation ni translation. Les survols et
-   l'ouverture du tiroir restent fonctionnels, ils deviennent instantanés. */
+@media (min-width: 960px) {
+  .nav-toggle {
+    display: none;
+  }
+  .nav-drawer,
+  .nav-drawer.open {
+    display: flex;
+    position: static;
+    flex-direction: row;
+    align-items: center;
+    gap: 22px;
+    margin-left: auto;
+    padding: 0;
+    background: none;
+    overflow: visible;
+    z-index: auto;
+  }
+  .nav-links {
+    display: flex;
+    gap: 4px;
+  }
+  .nav-links li {
+    border: 0;
+  }
+  .motion .nav-drawer.open .nav-links li {
+    animation: none;
+  }
+  .nav-links a {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0;
+    padding: 8px 10px;
+    position: relative;
+  }
+  .nav-links a::before {
+    content: none;
+  }
+  /* Soulignement qui se trace au survol. */
+  .nav-links a::after {
+    content: "";
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 4px;
+    height: 1px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: right;
+    transition: transform 0.5s var(--ease-out);
+  }
+  .nav-links a:hover {
+    color: inherit;
+  }
+  .nav-links a:hover::after {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+  .nav-links .nav-download {
+    margin-left: 8px;
+    padding: 9px 18px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+  .nav-links .nav-download:hover {
+    color: var(--accent-ink);
+  }
+  .nav-links .nav-download::after {
+    content: none;
+  }
+  .nav-switchers {
+    margin: 0;
+    padding: 0;
+  }
+
+  .hero-stage {
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto 1fr auto;
+    padding-top: calc(var(--nav-h) + 24px);
+    padding-bottom: 28px;
+  }
+  .hero-eyebrow {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .hero-art {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    align-self: center;
+    margin-right: 6vw;
+    /* Bornée en hauteur : le titre géant occupe le bas de la scène, la
+       mascotte ne doit pas descendre dessus. */
+    width: min(30vw, 44svh, 460px);
+  }
+  .hero-title {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+  .hero-scroll {
+    grid-column: 2;
+    grid-row: 1;
+    margin: 0;
+    align-self: start;
+  }
+  .hero-intro {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: 24px 64px;
+    align-items: end;
+  }
+  .tagline {
+    grid-row: 1 / 3;
+    margin: 0;
+  }
+  .lead {
+    margin: 0;
+  }
+  .grid:not(.grid-3) .card:nth-child(even) {
+    transform: translateY(48px);
+  }
+  .motion .grid:not(.grid-3) .card[data-reveal]:nth-child(even):not([data-in]) {
+    transform: translateY(84px);
+  }
+  #features .grid {
+    padding-bottom: 48px;
+  }
+  .footer-cta {
+    grid-template-columns: 1fr auto;
+    align-items: end;
+  }
+}
+
+/* Mouvement réduit --------------------------------------------------------- */
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -1006,21 +1560,22 @@ footer p {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-  .card:hover,
-  .btn:active {
-    transform: none;
-  }
 }
 
-/* Contraste renforcé : on raffermit les séparateurs, qui sont volontairement
-   discrets par défaut. */
+/* Contraste renforcé : plus de voiles ni de grain. */
 @media (prefers-contrast: more) {
-  .card,
-  .navbar,
-  footer {
-    border-color: var(--ink);
+  .grain {
+    display: none;
   }
-  .switcher {
-    border-color: var(--ink);
+  :root {
+    --line: currentColor;
+  }
+  .card p,
+  .lead,
+  .sec-intro,
+  main section > p,
+  .checklist li,
+  .steps li {
+    color: var(--ink);
   }
 }

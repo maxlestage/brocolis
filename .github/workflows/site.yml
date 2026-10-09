@@ -41,7 +41,7 @@ jobs:
       run:
         working-directory: site
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Vérifié AVANT de reconstruire : c'est le dist du dépôt qu'on déploie,
       # pas celui que ce job vient de produire.
@@ -63,7 +63,7 @@ jobs:
       # binaire d'un run à l'autre, invalidé par le numéro de version.
       - name: Cache de trunk
         id: cache-trunk
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cargo/bin/trunk
           key: trunk-${{ env.TRUNK_VERSION }}-${{ runner.os }}
@@ -99,11 +99,11 @@ jobs:
       run:
         working-directory: tests/browser
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: '22.22'
+          node-version: '24.21'
 
       # Le site servi est le `site/dist` versionné : ce job vérifie donc
       # exactement ce qui sera déployé, pas une reconstruction locale.

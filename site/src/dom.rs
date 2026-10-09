@@ -33,6 +33,44 @@ pub fn storage_set(key: &str, value: &str) {
     }
 }
 
+/// Lit une clé du stockage de session (perdu à la fermeture de l'onglet).
+pub fn session_get(key: &str) -> Option<String> {
+    window().session_storage().ok()??.get_item(key).ok()?
+}
+
+pub fn session_set(key: &str, value: &str) {
+    if let Ok(Some(store)) = window().session_storage() {
+        let _ = store.set_item(key, value);
+    }
+}
+
+/// Vrai si la media query correspond. Faux si le navigateur ne sait pas
+/// l'évaluer : on retombe alors sur le comportement par défaut.
+pub fn matches_media(query: &str) -> bool {
+    window()
+        .match_media(query)
+        .ok()
+        .flatten()
+        .is_some_and(|m| m.matches())
+}
+
+/// `<html>`, en tant qu'élément stylable.
+pub fn root() -> Option<web_sys::HtmlElement> {
+    document().document_element()?.dyn_into().ok()
+}
+
+/// Ajoute ou retire une classe de `<html>`.
+pub fn set_root_class(class: &str, on: bool) {
+    if let Some(root) = document().document_element() {
+        let list = root.class_list();
+        let _ = if on {
+            list.add_1(class)
+        } else {
+            list.remove_1(class)
+        };
+    }
+}
+
 /// Langue préférée du navigateur, telle que déclarée par `navigator.language`.
 pub fn navigator_language() -> Option<String> {
     window().navigator().language()
@@ -98,7 +136,15 @@ pub struct Listener {
 impl Listener {
     /// Écoute un événement sur `window`.
     pub fn on_window(kind: &'static str, handler: impl FnMut(Event) + 'static) -> Self {
-        let target: EventTarget = window().into();
+        Self::on(window().into(), kind, handler)
+    }
+
+    /// Écoute un événement sur une cible quelconque.
+    pub fn on(
+        target: EventTarget,
+        kind: &'static str,
+        handler: impl FnMut(Event) + 'static,
+    ) -> Self {
         let callback = Closure::<dyn FnMut(Event)>::new(handler);
         let _ = target.add_event_listener_with_callback(kind, callback.as_ref().unchecked_ref());
         Self {

@@ -169,7 +169,7 @@ async function load(page, url) {
   // au lieu de rgb(13,20,16) sur un runner d'intégration continue). On attend
   // que la peinture converge au lieu de deviner un délai — l'assertion porte
   // bien sur l'état final, elle ne le suppose plus atteint.
-  const FOND_SOMBRE = "rgb(13, 20, 16)";
+  const FOND_SOMBRE = "rgb(11, 13, 12)";
   await page.click('.switcher button[title="Dark"]');
   await until(
     page,
@@ -338,6 +338,133 @@ for (const [locale, expected, marker] of [
   seen === expected && heading.trim() === marker
     ? ok(`${locale} → ${expected} (« ${heading.trim()} »)`)
     : bad(`${locale} : attendu ${expected}/${marker}, obtenu ${seen}/${heading.trim()}`);
+  await ctx.close();
+}
+
+// --- 7. Mouvement : rideau, poussière, apparitions, curseur ------------------
+// Les animations sont pilotées par le WebAssembly et écrites en variables CSS
+// ou en attributs : on lit ces valeurs, pas des captures.
+{
+  const { ctx, page, errors } = await newPage({ width: 1280, height: 800 });
+  await load(page, BASE + "/");
+
+  const motion = await page.evaluate(() => document.documentElement.classList.contains("motion"));
+  motion ? ok("classe `motion` posée (pas de préférence de réduction)") : bad("classe `motion` absente");
+
+  // Le rideau couvre l'arrivée, ne bloque aucun clic, puis disparaît.
+  const curtainPE = await page.$eval(".curtain", (e) => getComputedStyle(e).pointerEvents).catch(() => null);
+  curtainPE === "none" ? ok("rideau d'ouverture présent, transparent aux clics") : bad(`rideau : pointer-events=${curtainPE}`);
+  await until(page, () => !document.querySelector(".curtain") && document.documentElement.classList.contains("ready"));
+  const gone = await page.evaluate(() => [!document.querySelector(".curtain"), document.documentElement.classList.contains("ready")]);
+  gone[0] && gone[1] ? ok("le rideau se lève puis disparaît (html.ready)") : bad(`rideau : retiré=${gone[0]}, ready=${gone[1]}`);
+
+  // Une fois par session : un rechargement ne le rejoue pas.
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector("nav.navbar");
+  const again = await page.$(".curtain");
+  !again ? ok("rideau non rejoué au rechargement (une fois par session)") : bad("le rideau revient à chaque rechargement");
+
+  // Scène épinglée : plus haute que l'écran, intérieur collant.
+  const pin = await page.evaluate(() => ({
+    pin: document.querySelector(".hero-pin").getBoundingClientRect().height,
+    stage: getComputedStyle(document.querySelector(".hero-stage")).position,
+  }));
+  pin.pin > 800 * 2 && pin.stage === "sticky"
+    ? ok(`scène du héros épinglée (${Math.round(pin.pin)}px de course, sticky)`)
+    : bad(`scène : hauteur=${pin.pin}, position=${pin.stage}`);
+
+  // La poussière : la progression suit le défilement, et le canevas peint.
+  const at = async (y) => {
+    await page.evaluate((v) => window.scrollTo(0, v), y);
+    await until(page, (v) => Math.abs(window.scrollY - v) < 2, y);
+    await page.waitForFunction(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    return page.evaluate(() => {
+      const c = document.querySelector("canvas.hero-dust");
+      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      let painted = 0;
+      for (let i = 3; i < d.length; i += 16) if (d[i] > 0) painted++;
+      return { hero: parseFloat(document.querySelector(".hero-pin").style.getPropertyValue("--hero")), painted, w: c.width };
+    });
+  };
+  const debut = await at(0);
+  const milieu = await at(700);
+  const fin = await at(1700);
+  debut.hero === 0 && milieu.hero > 0.3 && milieu.hero < 0.8 && fin.hero === 1
+    ? ok(`progression de la scène : ${debut.hero} → ${milieu.hero.toFixed(2)} → ${fin.hero}`)
+    : bad(`progression : ${debut.hero} / ${milieu.hero} / ${fin.hero}`);
+  debut.w > 0 && debut.painted > 100 && milieu.painted > 100
+    ? ok(`la poussière est dessinée (${milieu.painted} pixels échantillonnés peints)`)
+    : bad(`canevas : largeur=${debut.w}, peints=${debut.painted}/${milieu.painted}`);
+  const photo = await page.$eval(".hero-art img", (e) => getComputedStyle(e).opacity);
+  photo === "1" ? ok("la photo recouvre la mosaïque une fois formée") : bad(`opacité de la photo en fin de scène : ${photo}`);
+
+  // Apparitions : caché avant, révélé en entrant dans la vue.
+  const avant = await page.$eval("#privacy-h", (e) => [e.hasAttribute("data-in"), getComputedStyle(e).clipPath]);
+  await page.evaluate(() => document.querySelector("#privacy").scrollIntoView());
+  await until(page, () => document.querySelector("#privacy-h").hasAttribute("data-in"));
+  const apres = await page.$eval("#privacy-h", (e) => e.hasAttribute("data-in"));
+  !avant[0] && avant[1] !== "none" && apres
+    ? ok("un titre se dévoile en entrant dans la vue (data-in)")
+    : bad(`apparition : avant=${JSON.stringify(avant)}, après=${apres}`);
+
+  // Barre de navigation : elle s'efface en descendant, revient en remontant.
+  await page.evaluate(() => window.scrollBy(0, 400));
+  await until(page, () => document.documentElement.classList.contains("nav-hidden"));
+  const cachee = await page.evaluate(() => document.documentElement.classList.contains("nav-hidden"));
+  await page.evaluate(() => window.scrollBy(0, -200));
+  await until(page, () => !document.documentElement.classList.contains("nav-hidden"));
+  const revenue = await page.evaluate(() => !document.documentElement.classList.contains("nav-hidden"));
+  cachee && revenue ? ok("la barre s'efface en descendant et revient en remontant") : bad(`barre : cachée=${cachee}, revenue=${revenue}`);
+
+  // Manifeste : l'avancement est écrit sur le bloc.
+  await page.evaluate(() => document.querySelector(".manifesto").scrollIntoView({ block: "center" }));
+  await until(page, () => parseFloat(document.querySelector(".manifesto").style.getPropertyValue("--p")) > 0);
+  const p = await page.$eval(".manifesto", (e) => parseFloat(e.style.getPropertyValue("--p")));
+  p > 0 && p <= 1 ? ok(`le manifeste s'allume au défilement (--p=${p.toFixed(2)})`) : bad(`manifeste : --p=${p}`);
+
+  // Curseur anneau et aimantation (souris).
+  const btn = await page.$(".footer .btn.primary");
+  await btn.scrollIntoViewIfNeeded();
+  const box = await btn.boundingBox();
+  await page.mouse.move(box.x + box.width / 2 + 20, box.y + box.height / 2 + 10);
+  await page.mouse.move(box.x + box.width / 2 + 24, box.y + box.height / 2 + 12);
+  await until(page, () => document.querySelector(".cursor").hasAttribute("data-hover"));
+  const cur = await page.$eval(".cursor", (e) => [getComputedStyle(e).display, e.hasAttribute("data-on"), e.hasAttribute("data-hover")]);
+  cur[0] === "block" && cur[1] && cur[2] ? ok("curseur anneau affiché, grossi sur un bouton") : bad(`curseur : ${JSON.stringify(cur)}`);
+  const mx = await btn.evaluate((e) => parseFloat(e.style.getPropertyValue("--mx")));
+  mx > 0 ? ok(`le bouton est attiré par le pointeur (--mx=${mx}px)`) : bad(`aimantation : --mx=${mx}`);
+
+  // Volet de transition au changement de page.
+  await page.click('.footer a.btn.primary');
+  await page.waitForSelector(".dl-title");
+  const wipe = await page.$(".wipe");
+  wipe ? ok("volet de transition joué au changement de page") : bad("pas de volet au changement de page");
+
+  errors.length === 0 ? ok("aucune erreur console (mouvement)") : bad(`console : ${errors.join(" | ")}`);
+  await ctx.close();
+}
+
+// --- 8. Mouvement réduit : rien de caché, rien d'épinglé --------------------
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "fr-FR", reducedMotion: "reduce" });
+  const page = await ctx.newPage();
+  await load(page, BASE + "/");
+  const etat = await page.evaluate(() => ({
+    motion: document.documentElement.classList.contains("motion"),
+    rideau: !!document.querySelector(".curtain"),
+    pin: document.querySelector(".hero-pin").getBoundingClientRect().height,
+    stage: document.querySelector(".hero-stage").getBoundingClientRect().height,
+    photo: getComputedStyle(document.querySelector(".hero-art img")).opacity,
+    caches: [...document.querySelectorAll("[data-reveal]")].filter((e) => getComputedStyle(e).opacity !== "1").length,
+    lettres: [...document.querySelectorAll(".hero-title .char")].filter((e) => getComputedStyle(e).transform !== "none").length,
+  }));
+  !etat.motion && !etat.rideau ? ok("mouvement réduit : ni classe `motion`, ni rideau") : bad(`réduit : motion=${etat.motion}, rideau=${etat.rideau}`);
+  Math.abs(etat.pin - etat.stage) < 1 && etat.photo === "1"
+    ? ok("mouvement réduit : héros non épinglé, mascotte affichée d'emblée")
+    : bad(`réduit : scène ${etat.pin}px pour ${etat.stage}px, photo ${etat.photo}`);
+  etat.caches === 0 && etat.lettres === 0
+    ? ok("mouvement réduit : aucun contenu caché en attente d'animation")
+    : bad(`réduit : ${etat.caches} bloc(s) et ${etat.lettres} lettre(s) masqués`);
   await ctx.close();
 }
 

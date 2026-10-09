@@ -15,6 +15,7 @@ dependencies = [
 name = "brocolis-site"
 version = "0.1.0"
 dependencies = [
+ "js-sys",
  "wasm-bindgen",
  "web-sys",
  "yew",

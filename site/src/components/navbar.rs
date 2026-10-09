@@ -36,7 +36,7 @@ pub fn Navbar() -> Html {
     // Le fragment d'URL appartient au routeur : un `href="#platforms"` qui
     // aboutirait changerait de route. On défile donc nous-mêmes, et la douceur
     // vient de la CSS.
-    let links = t.nav_items().into_iter().map(|item| {
+    let links = t.nav_items().into_iter().enumerate().map(|(i, item)| {
         let id = item.id;
         let onclick = {
             let open = open.clone();
@@ -47,7 +47,7 @@ pub fn Navbar() -> Html {
             })
         };
         html! {
-            <li>
+            <li style={format!("--i: {i}")}>
                 <a href={format!("#{id}")} {onclick}>{ item.label }</a>
             </li>
         }
@@ -92,7 +92,7 @@ pub fn Navbar() -> Html {
                 <div id="nav-drawer" class={classes!("nav-drawer", open.then_some("open"))}>
                     <ul class="nav-links">
                         { for links }
-                        <li>
+                        <li style="--i: 5">
                             <a
                                 class="nav-download"
                                 href={Route::Download.href()}
