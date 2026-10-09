@@ -27,6 +27,20 @@ et un test d'intégration équivalent à `scripts/test-macos.sh`.
 | **Paquet (`.deb` / `.rpm`)**     | Installation persistante avec service systemd. Idéal sur poste de travail.              |
 | **Scripts (`install.sh`)**       | Depuis les sources, ou contrôle fin sur chaque étape.                                   |
 
+## Application de bureau
+
+Les paquets installent aussi l'application **Brocolis** (menu des
+applications, ou `brocolis-app` dans un terminal) : un interrupteur pour
+activer ou couper la protection, la gestion des clés et l'appairage par code,
+le chiffrement d'un message.
+
+L'activation passe par `pkexec`, qui affiche la demande de mot de passe du
+bureau (paquet `pkexec` ou `policykit-1`, recommandé par le `.deb`). Le service
+systemd installé par le paquet écoute déjà sur `127.0.0.1:8080` :
+l'application le détecte et engage SA configuration (`/etc/brocolis`), donc
+son CA. Sans service, elle fait tourner le proxy elle-même tant qu'elle est
+ouverte. Ses propres données sont dans `~/.config/brocolis`.
+
 ## Usage : `brocolis auto`
 
 Strictement le même que sur macOS — la même CLI, la même UX :

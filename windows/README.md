@@ -40,6 +40,20 @@ tuerait le proxy sans laisser le temps à `revert()` de tourner.
 | **Admin → `brocolis auto`**           | Test rapide / utilisation ad hoc. Tout configuré, restauré à Ctrl-C. **Recommandé** pour démarrer. |
 | **`install.ps1 -SystemProxy`**        | Setup persistant avec proxy WinHTTP réglé. Pas de service Windows : on lance `brocolis run` à la main quand on veut. |
 | **`install.ps1` (sans flag)**         | Setup persistant côté magasin de confiance + Firefox uniquement. Proxy à configurer côté navigateur. |
+| **`brocolis-app.exe`**                | L'application de bureau : un interrupteur, les clés, les messages. **Le plus simple.**   |
+
+## Application de bureau
+
+L'archive contient `brocolis-app.exe` à côté de `brocolis.exe` : gardez-les
+dans le même dossier, l'application appelle la ligne de commande pour activer
+et couper la protection. Windows n'a pas de service Brocolis : c'est
+l'application qui fait tourner le proxy, tant qu'elle est ouverte, et qui
+remet la configuration d'origine en se fermant.
+
+L'activation affiche la demande du contrôle de compte d'utilisateur
+(`brocolis on`, exécuté avec les droits administrateur) ; l'état d'origine est
+mémorisé dans `%ProgramData%\Brocolis\etat-precedent.json`. Les données de
+l'application sont dans `%APPDATA%\Brocolis`.
 
 ## Usage : `brocolis auto`
 

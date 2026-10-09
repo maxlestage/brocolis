@@ -38,10 +38,10 @@
 //! Sur les autres OS (BSD, …), la configuration système automatique
 //! n'est pas prise en charge : seul le proxy démarre.
 
-#[cfg(target_os = "macos")]
-mod macos;
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
 #[cfg(target_os = "windows")]
 mod windows;
 
@@ -211,13 +211,40 @@ enum Backend {
     },
 }
 
+/// Répertoire système de Brocolis : configuration du service, CA, état
+/// mémorisé par `on`.
+///
+/// `/etc/brocolis` sur macOS et Linux (c'est là qu'écrivent `macos/install.sh`
+/// et les paquets `.deb`/`.rpm`) ; `%ProgramData%\Brocolis` sur Windows (là
+/// qu'écrit `windows/install.ps1`). Le chemin Unix servait auparavant aussi
+/// sous Windows, où il désignait `C:\etc\brocolis` — un dossier que rien
+/// d'autre n'utilise.
+pub fn system_dir() -> std::path::PathBuf {
+    #[cfg(windows)]
+    {
+        let base = std::env::var_os("ProgramData")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from(r"C:\ProgramData"));
+        base.join("Brocolis")
+    }
+    #[cfg(not(windows))]
+    {
+        std::path::PathBuf::from("/etc/brocolis")
+    }
+}
+
+/// Configuration du service système (celle que lit `brocolis on` par défaut).
+pub fn default_config_path() -> std::path::PathBuf {
+    system_dir().join("brocolis.toml")
+}
+
 /// Où l'état d'avant-activation est conservé entre deux invocations.
 ///
 /// `engage`/`revert` gardaient cet état EN MÉMOIRE : il disparaissait donc avec
 /// le processus, et un `off` lancé plus tard n'avait plus rien à restaurer.
 /// C'est ce qui empêchait un interrupteur en deux commandes.
 pub fn default_state_path() -> std::path::PathBuf {
-    std::path::PathBuf::from("/etc/brocolis/etat-precedent.json")
+    system_dir().join("etat-precedent.json")
 }
 
 impl SystemProxy {
@@ -269,11 +296,7 @@ impl SystemProxy {
         {
             return windows::engage(ca_cert, port);
         }
-        #[cfg(not(any(
-            target_os = "macos",
-            target_os = "linux",
-            target_os = "windows"
-        )))]
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         {
             tracing::warn!(
                 "Configuration système automatique prise en charge \

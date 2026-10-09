@@ -1,6 +1,6 @@
 [Unit]
 Description=Brocolis selective-encryption MITM proxy
-Documentation=https://maxlestage.github.io/brocolis/
+Documentation=https://brocolis-dafbe9beac75.herokuapp.com/
 After=network-online.target
 Wants=network-online.target
 

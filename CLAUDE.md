@@ -9,6 +9,19 @@
 - Après le push, vérifier la CI de `master` et corriger tout échec causé par
   le commit.
 
+## Avant de pousser une modification du proxy ou de l'application
+
+```sh
+cargo fmt --all --check
+cargo test --workspace --all-targets
+cargo clippy --workspace --all-targets -- -D warnings
+# Windows se vérifie aussi d'ici (chaîne mingw : apt-get install mingw-w64) :
+rustup target add x86_64-pc-windows-gnu
+cargo clippy --workspace --all-targets --target x86_64-pc-windows-gnu -- -D warnings
+```
+
+La CI (`Rust CI`) rejoue tests et clippy sur Linux, macOS et Windows.
+
 ## Avant de pousser une modification du site (`site/`)
 
 ```sh

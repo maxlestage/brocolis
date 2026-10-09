@@ -227,9 +227,7 @@ fn disable_firefox(policies: &[std::path::PathBuf], mobileconfig: Option<&Path>)
 
 pub(super) fn engage(ca_cert: &Path, port: u16) -> anyhow::Result<Option<SystemProxy>> {
     if !is_root() {
-        tracing::warn!(
-            "Droits administrateur requis : relancez `sudo brocolis auto`."
-        );
+        tracing::warn!("Droits administrateur requis : relancez `sudo brocolis auto`.");
         return Ok(None);
     }
     // Ne retirer le CA à l'arrêt que si nous l'avons réellement ajouté.
@@ -279,7 +277,6 @@ pub(super) fn revert(
     tracing::info!("Proxy système restauré");
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -298,7 +295,10 @@ mod tests {
                    *Ethernet\n\
                    *Wi-Fi\n\
                    Thunderbolt Bridge\n";
-        assert_eq!(parse_primary_service(out).as_deref(), Some("Thunderbolt Bridge"));
+        assert_eq!(
+            parse_primary_service(out).as_deref(),
+            Some("Thunderbolt Bridge")
+        );
     }
 
     #[test]

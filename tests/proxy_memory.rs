@@ -126,7 +126,9 @@ async fn gros_corps_binaire_nest_pas_bufferise_en_memoire() {
     watcher.abort();
     assert_eq!(received, SIZE, "le corps doit arriver entier");
 
-    let peak = peak.load(std::sync::atomic::Ordering::Relaxed).max(rss_bytes());
+    let peak = peak
+        .load(std::sync::atomic::Ordering::Relaxed)
+        .max(rss_bytes());
     let growth = peak.saturating_sub(before);
 
     eprintln!("--- transfert de {} Mio ---", SIZE / 1024 / 1024);

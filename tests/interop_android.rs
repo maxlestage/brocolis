@@ -51,7 +51,10 @@ fn android_standard_token_decrypts() {
     let token = format!("{PREFIX}{PAYLOAD_STD}{SUFFIX}");
     let (plain, n) = decrypt_tokens(&token, &key);
     assert_eq!(n, 1, "exactement un jeton déchiffré");
-    assert_eq!(plain, PLAINTEXT, "le clair doit correspondre au vecteur Android");
+    assert_eq!(
+        plain, PLAINTEXT,
+        "le clair doit correspondre au vecteur Android"
+    );
 }
 
 /// Jeton émis par un client Android utilisant `Base64.URL_SAFE` : la charge
@@ -63,7 +66,10 @@ fn android_url_safe_token_decrypts() {
 
     // Confirme que l'URL-safe diffère réellement du standard pour ce vecteur.
     let url = URL_SAFE.encode(&packed);
-    assert_ne!(url, PAYLOAD_STD, "le vecteur doit exercer l'alphabet URL-safe");
+    assert_ne!(
+        url, PAYLOAD_STD,
+        "le vecteur doit exercer l'alphabet URL-safe"
+    );
     assert!(url.contains('-') || url.contains('_'));
 
     let token = format!("{PREFIX}{url}{SUFFIX}");

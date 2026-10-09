@@ -37,7 +37,11 @@ fn keygen_ne_met_que_la_cle_sur_stdout() {
 
     let stdout = String::from_utf8(out.stdout).unwrap();
     let lignes: Vec<&str> = stdout.lines().collect();
-    assert_eq!(lignes.len(), 1, "stdout doit contenir la clé et rien d'autre : {stdout:?}");
+    assert_eq!(
+        lignes.len(),
+        1,
+        "stdout doit contenir la clé et rien d'autre : {stdout:?}"
+    );
 
     // La clé doit être directement exploitable.
     let cle = lignes[0];
@@ -86,7 +90,11 @@ fn la_cle_privee_du_ca_nest_pas_lisible_par_les_autres() {
     assert_eq!(mode(&key), 0o600, "la clé privée du CA doit être en 0600");
     // Le certificat, lui, est public : il doit rester lisible pour être
     // installé dans le magasin de confiance.
-    assert_ne!(mode(&cert), 0o600, "le certificat racine doit rester lisible");
+    assert_ne!(
+        mode(&cert),
+        0o600,
+        "le certificat racine doit rester lisible"
+    );
 
     let _ = std::fs::remove_dir_all(&d);
 }
@@ -120,7 +128,10 @@ fn une_cle_invalide_fait_echouer_la_commande() {
         .output()
         .unwrap();
 
-    assert!(!out.status.success(), "le code de retour doit signaler l'échec");
+    assert!(
+        !out.status.success(),
+        "le code de retour doit signaler l'échec"
+    );
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(
         err.contains("clé"),
@@ -162,15 +173,19 @@ fn base64_decode(s: &str) -> Option<Vec<u8>> {
 #[test]
 fn encrypt_puis_decrypt_restitue_le_texte() {
     let d = tmpdir("aller-retour");
-    let cle = String::from_utf8(
-        Command::new(bin()).arg("keygen").output().unwrap().stdout,
-    )
-    .unwrap()
-    .trim()
-    .to_string();
+    let cle = String::from_utf8(Command::new(bin()).arg("keygen").output().unwrap().stdout)
+        .unwrap()
+        .trim()
+        .to_string();
 
     let chiffre = Command::new(bin())
-        .args(["encrypt", "--text", "rendez-vous ((code 4291)) a 18h", "--key", &cle])
+        .args([
+            "encrypt",
+            "--text",
+            "rendez-vous ((code 4291)) a 18h",
+            "--key",
+            &cle,
+        ])
         .current_dir(&d)
         .output()
         .unwrap();
@@ -181,7 +196,10 @@ fn encrypt_puis_decrypt_restitue_le_texte() {
         !chiffre.contains("code 4291"),
         "le secret ne doit pas apparaître en clair : {chiffre}"
     );
-    assert!(chiffre.contains("[[BROCOLIS:v1:"), "un jeton doit être produit");
+    assert!(
+        chiffre.contains("[[BROCOLIS:v1:"),
+        "un jeton doit être produit"
+    );
     assert!(
         chiffre.contains("rendez-vous ") && chiffre.contains(" a 18h"),
         "le texte autour du marqueur est conservé : {chiffre}"
@@ -252,8 +270,15 @@ fn encrypt_ne_pollue_pas_stdout_avec_le_compte() {
         .unwrap();
 
     let stdout = String::from_utf8(out.stdout).unwrap();
-    assert_eq!(stdout.lines().count(), 1, "une seule ligne sur stdout : {stdout:?}");
-    assert!(!stdout.contains("segment"), "le compte ne doit pas être sur stdout");
+    assert_eq!(
+        stdout.lines().count(),
+        1,
+        "une seule ligne sur stdout : {stdout:?}"
+    );
+    assert!(
+        !stdout.contains("segment"),
+        "le compte ne doit pas être sur stdout"
+    );
     assert!(
         String::from_utf8(out.stderr).unwrap().contains("segment"),
         "le compte doit rester visible, sur stderr"
@@ -276,7 +301,10 @@ fn encrypt_sans_cle_refuse_au_lieu_dinventer() {
 
     assert!(!out.status.success(), "doit échouer");
     let err = String::from_utf8_lossy(&out.stderr);
-    assert!(err.contains("aucune clé"), "message explicite attendu : {err}");
+    assert!(
+        err.contains("aucune clé"),
+        "message explicite attendu : {err}"
+    );
     let _ = std::fs::remove_dir_all(&d);
 }
 
@@ -286,9 +314,13 @@ fn encrypt_sans_cle_refuse_au_lieu_dinventer() {
 fn decrypt_avec_une_mauvaise_cle_laisse_le_jeton_intact() {
     let d = tmpdir("mauvaise-cle");
     let cle_a = String::from_utf8(Command::new(bin()).arg("keygen").output().unwrap().stdout)
-        .unwrap().trim().to_string();
+        .unwrap()
+        .trim()
+        .to_string();
     let cle_b = String::from_utf8(Command::new(bin()).arg("keygen").output().unwrap().stdout)
-        .unwrap().trim().to_string();
+        .unwrap()
+        .trim()
+        .to_string();
 
     let chiffre = String::from_utf8(
         Command::new(bin())
@@ -307,7 +339,10 @@ fn decrypt_avec_une_mauvaise_cle_laisse_le_jeton_intact() {
         .unwrap();
 
     let sortie = String::from_utf8(out.stdout).unwrap();
-    assert!(out.status.success(), "ce n'est pas une erreur, juste illisible");
+    assert!(
+        out.status.success(),
+        "ce n'est pas une erreur, juste illisible"
+    );
     assert!(
         sortie.contains("[[BROCOLIS:"),
         "le jeton doit rester tel quel : {sortie}"
@@ -381,7 +416,13 @@ fn run_demarre_un_proxy_qui_chiffre_vraiment() {
         .to_string();
 
     let mut proxy = Command::new(bin())
-        .args(["run", "--listen", &format!("127.0.0.1:{port_proxy}"), "--key", &cle])
+        .args([
+            "run",
+            "--listen",
+            &format!("127.0.0.1:{port_proxy}"),
+            "--key",
+            &cle,
+        ])
         .current_dir(&d)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -414,7 +455,10 @@ fn run_demarre_un_proxy_qui_chiffre_vraiment() {
         s.write_all(req.as_bytes()).unwrap();
         let mut rep = String::new();
         let _ = s.read_to_string(&mut rep);
-        assert!(rep.contains("200"), "le proxy doit relayer la réponse : {rep}");
+        assert!(
+            rep.contains("200"),
+            "le proxy doit relayer la réponse : {rep}"
+        );
     }
 
     let _ = proxy.kill();
@@ -425,7 +469,10 @@ fn run_demarre_un_proxy_qui_chiffre_vraiment() {
         !vu.contains("code 4291"),
         "le secret ne doit pas sortir en clair : {vu}"
     );
-    assert!(vu.contains("[[BROCOLIS:v1:"), "un jeton doit remplacer le segment : {vu}");
+    assert!(
+        vu.contains("[[BROCOLIS:v1:"),
+        "un jeton doit remplacer le segment : {vu}"
+    );
     let _ = std::fs::remove_dir_all(&d);
 }
 
@@ -437,13 +484,20 @@ fn run_respecte_la_portee_encrypt_host() {
     let port_origine = origine(recu.clone());
     let port_proxy = port_libre();
     let cle = String::from_utf8(Command::new(bin()).arg("keygen").output().unwrap().stdout)
-        .unwrap().trim().to_string();
+        .unwrap()
+        .trim()
+        .to_string();
 
     let mut proxy = Command::new(bin())
         .args([
-            "run", "--listen", &format!("127.0.0.1:{port_proxy}"), "--key", &cle,
+            "run",
+            "--listen",
+            &format!("127.0.0.1:{port_proxy}"),
+            "--key",
+            &cle,
             // La portée ne couvre PAS 127.0.0.1.
-            "--encrypt-host", "exemple.invalide",
+            "--encrypt-host",
+            "exemple.invalide",
         ])
         .current_dir(&d)
         .stdout(std::process::Stdio::null())
@@ -472,7 +526,10 @@ fn run_respecte_la_portee_encrypt_host() {
         s.write_all(req.as_bytes()).unwrap();
         let mut rep = String::new();
         let _ = s.read_to_string(&mut rep);
-        assert!(rep.contains("200"), "le proxy doit relayer la réponse : {rep}");
+        assert!(
+            rep.contains("200"),
+            "le proxy doit relayer la réponse : {rep}"
+        );
     }
     let _ = proxy.kill();
     let _ = proxy.wait();
@@ -498,8 +555,10 @@ fn ca_relance_ne_regenere_pas_le_certificat() {
     let key = d.join("ca.key");
     let lancer = || {
         Command::new(bin())
-            .args(["ca", "--ca-cert"]).arg(&cert)
-            .arg("--ca-key").arg(&key)
+            .args(["ca", "--ca-cert"])
+            .arg(&cert)
+            .arg("--ca-key")
+            .arg(&key)
             .current_dir(&d)
             .output()
             .unwrap()
@@ -510,8 +569,16 @@ fn ca_relance_ne_regenere_pas_le_certificat() {
     let key1 = std::fs::read_to_string(&key).unwrap();
 
     assert!(lancer().status.success());
-    assert_eq!(cert1, std::fs::read_to_string(&cert).unwrap(), "le certificat doit être stable");
-    assert_eq!(key1, std::fs::read_to_string(&key).unwrap(), "la clé doit être stable");
+    assert_eq!(
+        cert1,
+        std::fs::read_to_string(&cert).unwrap(),
+        "le certificat doit être stable"
+    );
+    assert_eq!(
+        key1,
+        std::fs::read_to_string(&key).unwrap(),
+        "la clé doit être stable"
+    );
     let _ = std::fs::remove_dir_all(&d);
 }
 
@@ -523,9 +590,12 @@ fn ca_export_ecrit_le_meme_certificat() {
     let exporte = d.join("pour-le-navigateur.crt");
 
     let out = Command::new(bin())
-        .args(["ca", "--ca-cert"]).arg(&cert)
-        .arg("--ca-key").arg(d.join("ca.key"))
-        .arg("--export").arg(&exporte)
+        .args(["ca", "--ca-cert"])
+        .arg(&cert)
+        .arg("--ca-key")
+        .arg(d.join("ca.key"))
+        .arg("--export")
+        .arg(&exporte)
         .current_dir(&d)
         .output()
         .unwrap();
@@ -533,8 +603,14 @@ fn ca_export_ecrit_le_meme_certificat() {
 
     let a = std::fs::read_to_string(&cert).unwrap();
     let b = std::fs::read_to_string(&exporte).unwrap();
-    assert_eq!(a, b, "l'export doit être le certificat racine, à l'identique");
-    assert!(a.contains("BEGIN CERTIFICATE"), "et être un PEM exploitable");
+    assert_eq!(
+        a, b,
+        "l'export doit être le certificat racine, à l'identique"
+    );
+    assert!(
+        a.contains("BEGIN CERTIFICATE"),
+        "et être un PEM exploitable"
+    );
     let _ = std::fs::remove_dir_all(&d);
 }
 
@@ -548,11 +624,17 @@ fn ca_export_ecrit_le_meme_certificat() {
 /// sa logique interne est couverte côté `system::linux`.
 #[test]
 fn auto_expose_les_options_attendues() {
-    let out = Command::new(bin()).args(["auto", "--help"]).output().unwrap();
+    let out = Command::new(bin())
+        .args(["auto", "--help"])
+        .output()
+        .unwrap();
     assert!(out.status.success());
     let aide = String::from_utf8(out.stdout).unwrap();
     for option in ["--config", "--listen", "--key", "--ca-cert", "--ca-key"] {
-        assert!(aide.contains(option), "`auto` doit accepter {option} : {aide}");
+        assert!(
+            aide.contains(option),
+            "`auto` doit accepter {option} : {aide}"
+        );
     }
 }
 
@@ -560,7 +642,16 @@ fn auto_expose_les_options_attendues() {
 /// une commande listée mais cassée serait invisible autrement.
 #[test]
 fn toutes_les_sous_commandes_repondent() {
-    for cmd in ["run", "auto", "keygen", "encrypt", "decrypt", "pair", "pair-group", "ca"] {
+    for cmd in [
+        "run",
+        "auto",
+        "keygen",
+        "encrypt",
+        "decrypt",
+        "pair",
+        "pair-group",
+        "ca",
+    ] {
         let out = Command::new(bin()).args([cmd, "--help"]).output().unwrap();
         assert!(out.status.success(), "`{cmd} --help` doit répondre");
         assert!(
@@ -608,9 +699,14 @@ fn off_sans_etat_ne_fait_rien_et_reussit() {
         .output()
         .unwrap();
 
-    assert!(out.status.success(), "couper deux fois n'est pas une erreur");
     assert!(
-        String::from_utf8(out.stdout).unwrap().contains("Déjà inactif"),
+        out.status.success(),
+        "couper deux fois n'est pas une erreur"
+    );
+    assert!(
+        String::from_utf8(out.stdout)
+            .unwrap()
+            .contains("Déjà inactif"),
         "l'utilisateur doit comprendre qu'il n'y avait rien à faire"
     );
     assert!(!etat.exists(), "aucun fichier ne doit être créé au passage");
@@ -642,7 +738,9 @@ fn on_refuse_de_reengager_et_preserve_letat_memorise() {
 
     assert!(out.status.success());
     assert!(
-        String::from_utf8(out.stdout).unwrap().contains("Déjà actif"),
+        String::from_utf8(out.stdout)
+            .unwrap()
+            .contains("Déjà actif"),
         "un second `on` doit être annoncé comme sans effet"
     );
     assert_eq!(
@@ -661,7 +759,10 @@ fn status_signale_actif_et_ne_modifie_rien() {
     std::fs::write(&etat, "{\"Inactive\":null}").unwrap();
 
     let out = Command::new(bin())
-        .args(["status", "--state"]).arg(&etat).output().unwrap();
+        .args(["status", "--state"])
+        .arg(&etat)
+        .output()
+        .unwrap();
 
     assert!(out.status.success());
     let s = String::from_utf8(out.stdout).unwrap();
@@ -680,18 +781,25 @@ fn off_sur_un_etat_corrompu_explique_et_conserve_le_fichier() {
     std::fs::write(&etat, "ceci n'est pas du json").unwrap();
 
     let out = Command::new(bin())
-        .args(["off", "--state"]).arg(&etat)
+        .args(["off", "--state"])
+        .arg(&etat)
         .env_remove("RUST_BACKTRACE")
         .output()
         .unwrap();
 
     assert!(!out.status.success(), "un état illisible est une erreur");
     let err = String::from_utf8_lossy(&out.stderr);
-    assert!(err.contains("illisible"), "le message doit être explicite : {err}");
+    assert!(
+        err.contains("illisible"),
+        "le message doit être explicite : {err}"
+    );
     assert!(
         err.contains("Supprimez"),
         "et indiquer comment s'en sortir : {err}"
     );
-    assert!(etat.exists(), "le fichier ne doit pas être effacé sur erreur");
+    assert!(
+        etat.exists(),
+        "le fichier ne doit pas être effacé sur erreur"
+    );
     let _ = std::fs::remove_dir_all(&d);
 }

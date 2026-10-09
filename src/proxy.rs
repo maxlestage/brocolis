@@ -23,7 +23,9 @@ use tokio_rustls::TlsAcceptor;
 
 use crate::ca::Ca;
 use crate::config::Config;
-use crate::crypto::{decrypt_tokens_escaped, encrypt_marked_form, encrypt_marked_multi, PlainEscape};
+use crate::crypto::{
+    decrypt_tokens_escaped, encrypt_marked_form, encrypt_marked_multi, PlainEscape,
+};
 use crate::keys::KeyManager;
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -147,9 +149,8 @@ async fn collect_capped(resp: reqwest::Response, cap: usize) -> Capped {
                     let head = futures_util::stream::once(async move {
                         Ok::<_, BoxError>(Frame::data(prefix))
                     });
-                    let tail = stream.map(|c| {
-                        c.map(Frame::data).map_err(|e| -> BoxError { Box::new(e) })
-                    });
+                    let tail =
+                        stream.map(|c| c.map(Frame::data).map_err(|e| -> BoxError { Box::new(e) }));
                     return Capped::TooBig(StreamBody::new(head.chain(tail)).boxed_unsync());
                 }
             }

@@ -1,0 +1,34 @@
+[package]
+name = "brocolis-app"
+version = "0.1.0"
+edition = "2024"
+description = "Application de bureau Brocolis : interrupteur de protection, clés, messages"
+authors = ["Maxime Nathan Lestage <maxlestage@users.noreply.github.com>"]
+license = "LicenseRef-Proprietary"
+publish = false
+
+[[bin]]
+name = "brocolis-app"
+path = "src/main.rs"
+
+[dependencies]
+brocolis = { path = ".." }
+eframe = { version = "0.36", default-features = false, features = ["accesskit", "default_fonts", "glow", "wayland", "x11"] }
+egui_extras = { version = "0.36", default-features = false, features = ["image"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "macros"] }
+toml_edit = "0.25"
+anyhow = "1"
+sys-locale = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Mêmes fonctionnalités de fenêtrage qu'eframe par défaut (X11, Wayland,
+# macOS, Windows), sans le moteur de rendu wgpu : glow (OpenGL) suffit à une
+# petite fenêtre et allège nettement le binaire.
+winit = "0.30"
+
+[dev-dependencies]
+egui_kittest = "0.36"
+
+# Icône et métadonnées de l'exécutable Windows (explorateur, barre des tâches).
+[build-dependencies]
+winresource = "0.1"

@@ -19,6 +19,7 @@ on:
       - "src/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "app/**"
       - "windows/**"
       - ".github/workflows/windows-cli-release.yml"
   workflow_dispatch:
@@ -30,19 +31,21 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
           key: windows-cargo-${{ hashFiles('Cargo.lock') }}
-      - name: Run unit tests
-        run: cargo test --lib --no-fail-fast
+      - name: Tests (bibliothèque et application)
+        run: |
+          cargo test --lib --no-fail-fast
+          cargo test -p brocolis-app --no-fail-fast
       - name: Build
-        run: cargo build --release --bin brocolis
+        run: cargo build --release --workspace --bin brocolis --bin brocolis-app
       - name: CLI smoke test
         shell: pwsh
         run: |
@@ -61,17 +64,22 @@ jobs:
           $subj = (& certutil.exe -dump $caCrt | Out-String)
           if ($subj -notmatch 'Brocolis') { throw "subject CA ne contient pas 'Brocolis'" }
           Remove-Item -Recurse -Force $tmp
+          $app = Get-Item target/release/brocolis-app.exe
+          if ($app.Length -lt 1MB) { throw "brocolis-app.exe anormalement petit : $($app.Length)" }
           Write-Host '✓ CLI smoke test OK'
       - name: Stage release artifact
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path artifacts -Force | Out-Null
           Copy-Item target/release/brocolis.exe artifacts/
+          # L'application cherche brocolis.exe à côté d'elle : ils restent
+          # dans le même dossier de l'archive.
+          Copy-Item target/release/brocolis-app.exe artifacts/
           Copy-Item windows/install.ps1 artifacts/
           Copy-Item windows/uninstall.ps1 artifacts/
           Compress-Archive -Path artifacts/* -DestinationPath brocolis-windows-x86_64.zip -Force
           Get-Item brocolis-windows-x86_64.zip | Format-List FullName,Length
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: brocolis-windows-x86_64
           path: brocolis-windows-x86_64.zip
@@ -80,7 +88,7 @@ jobs:
     needs: [build-windows]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
       - name: Collect files
@@ -98,8 +106,8 @@ jobs:
           gh release create cli-latest-windows ${{ steps.collect.outputs.files }} \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${GITHUB_SHA}" \
-            --title "Brocolis CLI Windows (dernier ${GITHUB_REF_NAME})" \
-            --notes "Build automatique du dernier ${GITHUB_REF_NAME} (Windows x86_64). Inclut brocolis.exe + install.ps1 + uninstall.ps1." \
+            --title "Brocolis Windows (dernier ${GITHUB_REF_NAME})" \
+            --notes "Build automatique du dernier ${GITHUB_REF_NAME} (Windows x86_64). Inclut l'application brocolis-app.exe, la ligne de commande brocolis.exe, install.ps1 et uninstall.ps1." \
             --prerelease
 
       - name: Publish tagged release

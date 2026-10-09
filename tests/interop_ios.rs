@@ -30,7 +30,10 @@ fn ios_vector_decrypts_in_brocolis() {
     let key = SymKey::from_base64(KEY_B64).expect("clé valide");
     let (plain, n) = decrypt_tokens(TOKEN, &key);
     assert_eq!(n, 1, "exactement un jeton déchiffré");
-    assert_eq!(plain, PLAINTEXT, "le clair doit correspondre au vecteur iOS");
+    assert_eq!(
+        plain, PLAINTEXT,
+        "le clair doit correspondre au vecteur iOS"
+    );
 }
 
 /// L'empaquetage du vecteur est bien `nonce(12) || ciphertext || tag(16)`.

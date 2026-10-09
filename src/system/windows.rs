@@ -39,7 +39,12 @@ fn is_admin() -> bool {
 const CA_CN: &str = "Brocolis Root CA";
 
 /// État WinHTTP sauvegardé pour restauration à l'arrêt.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Sérialisable : `brocolis on` l'écrit sur disque pour qu'un `brocolis off`
+/// lancé plus tard, dans un autre processus, sache quoi restaurer. L'absence
+/// de ces dérivations cassait la compilation Windows depuis l'introduction
+/// de l'interrupteur.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(super) struct WinHttpState {
     /// `true` si `netsh winhttp show proxy` annonçait « Direct access (no proxy server) ».
     pub was_direct: bool,
@@ -96,7 +101,9 @@ pub(super) fn parse_winhttp_show(out: &str) -> WinHttpState {
 }
 
 fn winhttp_show() -> anyhow::Result<WinHttpState> {
-    let out = Command::new("netsh").args(["winhttp", "show", "proxy"]).output()?;
+    let out = Command::new("netsh")
+        .args(["winhttp", "show", "proxy"])
+        .output()?;
     if !out.status.success() {
         anyhow::bail!(
             "netsh winhttp show proxy: {}",
@@ -230,8 +237,7 @@ fn ca_present() -> bool {
         Ok(o) => {
             // certutil renvoie 0 et liste les certs correspondants quand trouvé,
             // exit code non-nul (souvent 0x80092004) sinon.
-            o.status.success()
-                && String::from_utf8_lossy(&o.stdout).contains(CA_CN)
+            o.status.success() && String::from_utf8_lossy(&o.stdout).contains(CA_CN)
         }
         Err(_) => false,
     }
@@ -297,11 +303,7 @@ pub(super) fn engage(ca_cert: &Path, port: u16) -> anyhow::Result<Option<SystemP
     }))
 }
 
-pub(super) fn revert(
-    saved_winhttp: &WinHttpState,
-    ca_added: bool,
-    firefox_policies: &[PathBuf],
-) {
+pub(super) fn revert(saved_winhttp: &WinHttpState, ca_added: bool, firefox_policies: &[PathBuf]) {
     winhttp_restore(saved_winhttp);
     if ca_added {
         untrust_ca();

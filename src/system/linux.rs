@@ -36,8 +36,7 @@ fn is_root() -> bool {
 
 /// Famille de distribution Linux gérée. Utilisée par le `Backend::Linux`
 /// pour rejouer la mise à jour du magasin de confiance à l'arrêt.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(super) enum Distro {
     Debian,
     Rhel,
@@ -82,10 +81,7 @@ impl Distro {
         };
         let out = Command::new(cmd).args(args).output()?;
         if !out.status.success() {
-            anyhow::bail!(
-                "{cmd}: {}",
-                String::from_utf8_lossy(&out.stderr).trim()
-            );
+            anyhow::bail!("{cmd}: {}", String::from_utf8_lossy(&out.stderr).trim());
         }
         Ok(())
     }
@@ -207,9 +203,7 @@ fn remove_env_proxy(path: Option<&Path>) {
 
 pub(super) fn engage(ca_cert: &Path, port: u16) -> anyhow::Result<Option<SystemProxy>> {
     if !is_root() {
-        tracing::warn!(
-            "Droits administrateur requis : relancez `sudo brocolis auto`."
-        );
+        tracing::warn!("Droits administrateur requis : relancez `sudo brocolis auto`.");
         return Ok(None);
     }
     let distro = Distro::detect()?;
@@ -281,7 +275,10 @@ mod tests {
 
         let revendique = write_if_absent(&f, firefox_policy_json(), "Politique Firefox");
 
-        assert!(revendique.is_none(), "un fichier existant ne doit pas être revendiqué");
+        assert!(
+            revendique.is_none(),
+            "un fichier existant ne doit pas être revendiqué"
+        );
         assert_eq!(
             std::fs::read_to_string(&f).unwrap(),
             "{\"politique\": \"de l'administrateur\"}",
@@ -302,7 +299,9 @@ mod tests {
         assert_eq!(revendique.as_deref(), Some(f.as_path()));
         assert!(f.exists(), "le fichier doit avoir été créé");
         assert!(
-            std::fs::read_to_string(&f).unwrap().contains("ImportEnterpriseRoots"),
+            std::fs::read_to_string(&f)
+                .unwrap()
+                .contains("ImportEnterpriseRoots"),
             "le contenu attendu doit avoir été écrit"
         );
         let _ = std::fs::remove_dir_all(&d);

@@ -2,14 +2,20 @@
 //!
 //! Sous-commandes :
 //! - `brocolis run`        : démarre le proxy.
+//! - `brocolis auto`       : tout-en-un — configure le système, démarre le
+//!   proxy, restaure tout à l'arrêt.
+//! - `brocolis on` / `off` / `status` : interrupteur, pour un proxy qui tourne
+//!   en service (l'état d'origine est mémorisé sur disque entre les deux).
 //! - `brocolis keygen`     : génère une clé symétrique AES-256 partageable.
+//! - `brocolis encrypt` / `decrypt` : la transformation du proxy, hors ligne.
 //! - `brocolis pair`       : appairage automatique X25519 à deux (rendez-vous).
 //! - `brocolis pair-group` : appairage de groupe (clé de groupe distribuée).
 //! - `brocolis ca`         : génère/exporte le certificat racine à installer
 //!   dans le navigateur.
 //!
-//! L'interface graphique équivalente est `brocolis-gui`
-//! (`cargo run --features gui --bin brocolis-gui`).
+//! L'application de bureau (`app/`, `cargo run -p brocolis-app`) offre les
+//! mêmes fonctions en quelques clics, et appelle cette ligne de commande pour
+//! `on` / `off`, qui exigent les droits administrateur.
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -164,9 +170,11 @@ enum Command {
     /// ouvert. Le proxy lui-même tourne en service (LaunchDaemon sur macOS,
     /// systemd sur Linux), installé une fois pour toutes.
     On {
-        /// Fichier de configuration TOML.
-        #[arg(long, default_value = "/etc/brocolis/brocolis.toml")]
-        config: PathBuf,
+        /// Fichier de configuration TOML. Par défaut, celle du service :
+        /// `/etc/brocolis/brocolis.toml` (macOS, Linux) ou
+        /// `%ProgramData%\Brocolis\brocolis.toml` (Windows).
+        #[arg(long)]
+        config: Option<PathBuf>,
         /// Où mémoriser l'état d'origine (relu par `off`).
         #[arg(long)]
         state: Option<PathBuf>,
@@ -240,7 +248,10 @@ fn main() -> anyhow::Result<()> {
             eprintln!("# {n} jeton(s) déchiffré(s)");
             Ok(())
         }
-        Command::On { config, state } => run_on(&config, state),
+        Command::On { config, state } => run_on(
+            &config.unwrap_or_else(brocolis::system::default_config_path),
+            state,
+        ),
         Command::Off { state } => run_off(state),
         Command::Status { state } => run_status(state),
         Command::Pair {
@@ -490,7 +501,10 @@ fn run_off(state: Option<PathBuf>) -> anyhow::Result<()> {
             println!("✅ Chiffrement coupé, état d'origine restauré.");
         }
         None => {
-            println!("Déjà inactif : aucun état mémorisé dans {}.", chemin.display());
+            println!(
+                "Déjà inactif : aucun état mémorisé dans {}.",
+                chemin.display()
+            );
         }
     }
     Ok(())
@@ -529,8 +543,9 @@ fn read_text(text: Option<String>) -> anyhow::Result<String> {
 /// et donnerait l'illusion d'avoir protégé quelque chose.
 fn keys_for_tool(config: &Path, key: Option<&str>) -> anyhow::Result<Vec<SymKey>> {
     if let Some(k) = key {
-        return Ok(vec![SymKey::from_base64(k)
-            .map_err(|e| anyhow::anyhow!("clé fournie invalide : {e}"))?]);
+        return Ok(vec![
+            SymKey::from_base64(k).map_err(|e| anyhow::anyhow!("clé fournie invalide : {e}"))?
+        ]);
     }
     let cfg = Config::load(config)?;
     let b64 = cfg.all_key_b64();
@@ -549,20 +564,7 @@ fn keys_for_tool(config: &Path, key: Option<&str>) -> anyhow::Result<Vec<SymKey>
 }
 
 fn load_or_create_identity(path: &Path) -> anyhow::Result<brocolis::agreement::PrivateKey> {
-    use brocolis::agreement::PrivateKey;
-
-    if path.exists() {
-        let raw = std::fs::read_to_string(path)?;
-        return PrivateKey::from_base64(raw.trim()).map_err(|e| {
-            anyhow::anyhow!("clé d'identité X25519 invalide ({}): {e}", path.display())
-        });
-    }
-    let key = PrivateKey::generate();
-    // Même écriture protégée que pour la clé du CA : droits restreints dès la
-    // création, sans fenêtre où le fichier serait lisible par tous.
-    brocolis::ca::write_private_key(path, &key.to_base64())?;
-    tracing::info!("Nouvelle identité X25519 créée: {}", path.display());
-    Ok(key)
+    brocolis::agreement::load_or_create_identity(path)
 }
 
 /// Ajoute une clé base64 au champ `keys` du fichier de configuration (créé si
@@ -585,34 +587,15 @@ async fn run_pair(
     identity: &Path,
     timeout_secs: u64,
 ) -> anyhow::Result<()> {
-    use brocolis::pairing::{random_peer_id, RendezvousClient};
-    use std::time::{Duration, Instant};
+    use brocolis::pairing::RendezvousClient;
+    use std::time::Duration;
 
     let priv_key = load_or_create_identity(identity)?;
-    let my_pub = priv_key.public_key_base64();
-    let peer_id = random_peer_id();
-
     let client = RendezvousClient::new(server)?;
-
-    tracing::info!("Publication de la clé publique (code « {code} ») sur {server}…");
-    let mut peers = client.publish(code, &peer_id, &my_pub).await?;
-
-    let deadline = Instant::now() + Duration::from_secs(timeout_secs);
-    while peers.is_empty() {
-        if Instant::now() >= deadline {
-            anyhow::bail!(
-                "aucun correspondant n'a rejoint le code « {code} » dans le délai imparti"
-            );
-        }
-        tokio::time::sleep(Duration::from_secs(2)).await;
-        peers = client.fetch(code, &peer_id).await?;
-    }
-
-    // Appairage à deux : on dérive avec le premier correspondant arrivé.
-    let peer = &peers[0];
-    let derived = priv_key
-        .derive(&peer.public_key)
-        .map_err(|e| anyhow::anyhow!("dérivation de la clé partagée: {e}"))?;
+    tracing::info!("Appairage sur {server}…");
+    let derived =
+        brocolis::pairing::pair_two(&client, code, &priv_key, Duration::from_secs(timeout_secs))
+            .await?;
 
     println!("✅ Appairé.");
     println!("   Empreinte : {}", derived.fingerprint);
