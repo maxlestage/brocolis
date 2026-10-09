@@ -347,11 +347,21 @@ async fn une_coupure_amont_ne_passe_pas_pour_un_succes() {
     });
 
     let (proxy, _stop) = start_proxy().await;
-    let resp = client(proxy)
+    let resp = match client(proxy)
         .get(format!("http://{origin_addr}/tronque.bin"))
         .send()
         .await
-        .expect("les en-têtes arrivent");
+    {
+        Ok(resp) => resp,
+        // La coupure peut aussi survenir avant que le proxy ait relayé les
+        // en-têtes : sous Windows, une fermeture brutale jette les données pas
+        // encore lues, et le corps échoue dès sa première lecture. Le client
+        // voit alors une erreur de connexion — pas un succès silencieux.
+        Err(e) => {
+            eprintln!("coupure amont : erreur avant les en-têtes ({e})");
+            return;
+        }
+    };
     let status = resp.status();
     let corps = resp.bytes().await;
     eprintln!(
