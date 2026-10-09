@@ -7,7 +7,10 @@
 //! - `brocolis on` / `off` / `status` : interrupteur, pour un proxy qui tourne
 //!   en service (l'état d'origine est mémorisé sur disque entre les deux).
 //! - `brocolis keygen`     : génère une clé symétrique AES-256 partageable.
-//! - `brocolis encrypt` / `decrypt` : la transformation du proxy, hors ligne.
+//! - `brocolis encrypt` / `decrypt` : chiffrer un message (les segments
+//!   `((…))`, ou tout le message s'il n'en a pas) pour un ou plusieurs
+//!   contacts, et lire ce qu'on reçoit — hors ligne.
+//! - `brocolis contacts`   : les correspondants et leurs clés.
 //! - `brocolis pair`       : appairage automatique X25519 à deux (rendez-vous).
 //! - `brocolis pair-group` : appairage de groupe (clé de groupe distribuée).
 //! - `brocolis ca`         : génère/exporte le certificat racine à installer
@@ -91,14 +94,19 @@ enum Command {
     },
     /// Génère une nouvelle clé symétrique AES-256 (base64) à partager.
     Keygen,
-    /// Chiffre les segments `((...))` d'un texte, comme le ferait le proxy.
+    /// Chiffre un message : les segments `((...))` s'il y en a, sinon le
+    /// message ENTIER (un seul jeton).
     ///
-    /// Sert à vérifier une configuration sans monter de navigateur, et à
-    /// préparer un message à coller ailleurs.
+    /// Pour qui : `--to` (un ou plusieurs contacts — un seul jeton que chacun
+    /// ouvre avec sa clé), sinon les destinataires `encrypt_to` de la
+    /// configuration, sinon la clé principale.
     Encrypt {
         /// Texte à traiter. Absent, le texte est lu sur l'entrée standard.
         #[arg(long)]
         text: Option<String>,
+        /// Destinataire : nom d'un contact (répétable).
+        #[arg(long = "to")]
+        to: Vec<String>,
         /// Fichier de configuration TOML (pour le trousseau).
         #[arg(long, default_value = "brocolis.toml")]
         config: PathBuf,
@@ -137,6 +145,9 @@ enum Command {
         /// Délai max d'attente du correspondant, en secondes.
         #[arg(long, default_value_t = 120)]
         timeout: u64,
+        /// Range la clé obtenue sous ce contact (sinon : clé sans nom).
+        #[arg(long)]
+        name: Option<String>,
     },
     /// Appairage de GROUPE (multi-membres) via le serveur de rendez-vous : un
     /// fondateur (`--found`) génère une clé de groupe et la distribue, emballée
@@ -192,6 +203,17 @@ enum Command {
         #[arg(long)]
         state: Option<PathBuf>,
     },
+    /// Les contacts : un nom et les clés partagées avec cette personne.
+    ///
+    /// Sans sous-commande : la liste. La première clé d'un contact chiffre ce
+    /// qu'on lui envoie ; toutes servent à lire ce qu'il nous envoie.
+    Contacts {
+        #[command(subcommand)]
+        action: Option<ContactAction>,
+        /// Fichier de configuration TOML.
+        #[arg(long, default_value = "brocolis.toml", global = true)]
+        config: PathBuf,
+    },
     /// Génère/charge le CA et l'exporte pour le navigateur.
     Ca {
         #[arg(long, default_value = "brocolis-ca.crt")]
@@ -204,12 +226,40 @@ enum Command {
     },
 }
 
+#[derive(Subcommand)]
+enum ContactAction {
+    /// Liste les contacts et l'empreinte de leurs clés.
+    List,
+    /// Ajoute un contact, ou une clé à un contact existant. Sans `--key`, une
+    /// clé neuve est générée et affichée : à transmettre au contact par un
+    /// canal sûr.
+    Add {
+        name: String,
+        /// Clé base64 reçue du contact.
+        #[arg(long)]
+        key: Option<String>,
+    },
+    /// Retire un contact, ou seulement l'une de ses clés avec `--key`.
+    Remove {
+        name: String,
+        #[arg(long)]
+        key: Option<String>,
+    },
+    /// Renomme un contact.
+    Rename { old: String, new: String },
+    /// Fait d'une clé la clé active du contact (celle qui chiffre).
+    Use { name: String, key: String },
+}
+
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
+        // Les journaux sur stderr : stdout ne porte que le résultat
+        // (`encrypt`, `decrypt`, `keygen` s'utilisent dans un tube).
+        .with_writer(std::io::stderr)
         .init();
 
     let cli = Cli::parse();
@@ -224,17 +274,28 @@ fn main() -> anyhow::Result<()> {
             eprintln!("# puis placez-la dans brocolis.toml (champ `key`).");
             Ok(())
         }
-        Command::Encrypt { text, config, key } => {
-            let keys = keys_for_tool(&config, key.as_deref())?;
+        Command::Encrypt {
+            text,
+            to,
+            config,
+            key,
+        } => {
+            let (keys, pour) = encryption_keys_for_tool(&config, key.as_deref(), &to)?;
             let entree = read_text(text)?;
-            let (sortie, n) = brocolis::crypto::encrypt_marked_multi(&entree, &keys);
+            let (sortie, quoi) = brocolis::crypto::encrypt_message(&entree, &keys)?;
             print!("{sortie}");
             if !sortie.ends_with('\n') {
                 println!();
             }
             // Le compte va sur stderr : stdout ne porte que le texte, pour
             // rester utilisable dans un tube.
-            eprintln!("# {n} segment(s) chiffré(s)");
+            use brocolis::crypto::Sealed;
+            let pour = pour.map(|p| format!(" pour {p}")).unwrap_or_default();
+            match quoi {
+                Sealed::Segments(n) => eprintln!("# {n} segment(s) chiffré(s){pour}"),
+                Sealed::Whole => eprintln!("# message entier chiffré{pour}"),
+                Sealed::Nothing => eprintln!("# message vide : rien à chiffrer"),
+            }
             Ok(())
         }
         Command::Decrypt { text, config, key } => {
@@ -245,9 +306,21 @@ fn main() -> anyhow::Result<()> {
             if !sortie.ends_with('\n') {
                 println!();
             }
-            eprintln!("# {n} jeton(s) déchiffré(s)");
+            // De qui : les contacts dont une clé ouvre au moins un jeton.
+            let de = match key {
+                None => Config::load(&config)
+                    .map(|cfg| brocolis::contacts::readers(&entree, &cfg))
+                    .unwrap_or_default(),
+                Some(_) => Vec::new(),
+            };
+            if de.is_empty() {
+                eprintln!("# {n} jeton(s) déchiffré(s)");
+            } else {
+                eprintln!("# {n} jeton(s) déchiffré(s) — de : {}", de.join(", "));
+            }
             Ok(())
         }
+        Command::Contacts { action, config } => run_contacts(&config, action),
         Command::On { config, state } => run_on(
             &config.unwrap_or_else(brocolis::system::default_config_path),
             state,
@@ -260,7 +333,8 @@ fn main() -> anyhow::Result<()> {
             config,
             identity,
             timeout,
-        } => run_pair(&code, &server, &config, &identity, timeout),
+            name,
+        } => run_pair(&code, &server, &config, &identity, timeout, name.as_deref()),
         Command::PairGroup {
             code,
             server,
@@ -567,6 +641,147 @@ fn load_or_create_identity(path: &Path) -> anyhow::Result<brocolis::agreement::P
     brocolis::agreement::load_or_create_identity(path)
 }
 
+/// Clés avec lesquelles `encrypt` chiffre, et pour qui (à afficher).
+///
+/// Par ordre de priorité : `--key` ; les contacts `--to` (la clé active de
+/// chacun) ; les destinataires `encrypt_to` de la configuration ; la clé
+/// principale. Comme pour [`keys_for_tool`], jamais de clé inventée.
+fn encryption_keys_for_tool(
+    config: &Path,
+    key: Option<&str>,
+    to: &[String],
+) -> anyhow::Result<(Vec<SymKey>, Option<String>)> {
+    let parse =
+        |b64: &str| SymKey::from_base64(b64).map_err(|e| anyhow::anyhow!("clé invalide : {e}"));
+    if let Some(k) = key {
+        return Ok((vec![parse(k)?], None));
+    }
+    let cfg = Config::load(config)?;
+    if !to.is_empty() {
+        let mut keys = Vec::new();
+        let mut names = Vec::new();
+        for n in to {
+            let c = cfg.contact(n).ok_or_else(|| {
+                anyhow::anyhow!("contact « {n} » inconnu (voir `brocolis contacts`)")
+            })?;
+            let k = c
+                .active_key()
+                .ok_or_else(|| anyhow::anyhow!("le contact « {} » n'a aucune clé", c.name))?;
+            keys.push(parse(k)?);
+            names.push(c.name.clone());
+        }
+        return Ok((keys, Some(names.join(", "))));
+    }
+    if let Some(targets) = cfg.encryption_targets()? {
+        let keys = targets.iter().map(|k| parse(k)).collect::<Result<_, _>>()?;
+        return Ok((keys, Some(cfg.encrypt_to.join(", "))));
+    }
+    // La règle du proxy : la clé principale, ou tout le trousseau si
+    // `encrypt_multi`.
+    let all = cfg.all_key_b64();
+    if all.is_empty() {
+        anyhow::bail!(
+            "aucune clé : renseignez `key` dans {}, ajoutez un contact ou passez --key",
+            config.display()
+        );
+    }
+    let chosen = if cfg.encrypt_multi {
+        &all[..]
+    } else {
+        &all[..1]
+    };
+    let keys = chosen.iter().map(|k| parse(k)).collect::<Result<_, _>>()?;
+    // Si la clé principale est celle d'un contact, on le dit.
+    let owner = (!cfg.encrypt_multi)
+        .then(|| {
+            cfg.contacts
+                .iter()
+                .find(|c| c.active_key() == Some(all[0].as_str()))
+        })
+        .flatten()
+        .map(|c| c.name.clone());
+    Ok((keys, owner))
+}
+
+/// Réécrit le fichier de configuration avec une fonction d'édition TOML
+/// (fichier créé s'il n'existe pas).
+fn edit_config(
+    path: &Path,
+    edit: impl FnOnce(&str) -> Result<String, String>,
+) -> anyhow::Result<()> {
+    let existing = std::fs::read_to_string(path).unwrap_or_default();
+    let updated = edit(&existing).map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
+    std::fs::write(path, updated)?;
+    Ok(())
+}
+
+/// `contacts` — lister, ajouter, retirer, renommer, choisir la clé active.
+fn run_contacts(config: &Path, action: Option<ContactAction>) -> anyhow::Result<()> {
+    use brocolis::agreement::group_fingerprint;
+    use brocolis::contacts as c;
+    match action.unwrap_or(ContactAction::List) {
+        ContactAction::List => {
+            let cfg = Config::load(config)?;
+            if cfg.contacts.is_empty() {
+                println!("Aucun contact. `brocolis contacts add <nom>` pour en créer un.");
+            }
+            for contact in &cfg.contacts {
+                let dest = cfg
+                    .encrypt_to
+                    .iter()
+                    .any(|n| brocolis::config::same_name(n, &contact.name));
+                println!(
+                    "{}{}",
+                    contact.name,
+                    if dest {
+                        "  (destinataire du proxy)"
+                    } else {
+                        ""
+                    }
+                );
+                for (i, k) in contact.keys.iter().enumerate() {
+                    let role = if i == 0 { "active " } else { "lecture" };
+                    println!("   {role}  {}", group_fingerprint(k));
+                }
+            }
+            Ok(())
+        }
+        ContactAction::Add { name, key } => {
+            let generated = key.is_none();
+            let key = key.unwrap_or_else(|| SymKey::generate().to_base64());
+            edit_config(config, |t| c::add_key(t, &name, &key))?;
+            if generated {
+                // La clé SEULE sur stdout, comme `keygen` : `cle=$(brocolis
+                // contacts add Alice)` fonctionne.
+                println!("{key}");
+                eprintln!("# Contact « {name} » : clé créée. Transmettez-la-lui par un canal sûr.");
+            } else {
+                eprintln!("# Clé ajoutée au contact « {name} ».");
+            }
+            eprintln!("# Empreinte : {}", group_fingerprint(&key));
+            Ok(())
+        }
+        ContactAction::Remove { name, key } => {
+            match key {
+                Some(k) => edit_config(config, |t| c::remove_key(t, &name, &k))?,
+                None => edit_config(config, |t| c::remove(t, &name))?,
+            }
+            eprintln!("# Fait.");
+            Ok(())
+        }
+        ContactAction::Rename { old, new } => {
+            edit_config(config, |t| c::rename(t, &old, &new))?;
+            eprintln!("# « {old} » s'appelle désormais « {new} ».");
+            Ok(())
+        }
+        ContactAction::Use { name, key } => {
+            edit_config(config, |t| c::set_active_key(t, &name, &key))?;
+            eprintln!("# Cette clé chiffre désormais pour « {name} ».");
+            Ok(())
+        }
+    }
+}
+
 /// Ajoute une clé base64 au champ `keys` du fichier de configuration (créé si
 /// absent), en préservant commentaires et mise en forme.
 fn add_key_to_config(path: &Path, key_b64: &str) -> anyhow::Result<()> {
@@ -586,6 +801,7 @@ async fn run_pair(
     config: &Path,
     identity: &Path,
     timeout_secs: u64,
+    name: Option<&str>,
 ) -> anyhow::Result<()> {
     use brocolis::pairing::RendezvousClient;
     use std::time::Duration;
@@ -605,11 +821,24 @@ async fn run_pair(
         derived.symmetric_key_base64
     );
 
-    add_key_to_config(config, &derived.symmetric_key_base64)?;
-    println!(
-        "   Clé ajoutée à {} (champ `keys`). Redémarrez brocolis pour l'activer.",
-        config.display()
-    );
+    match name {
+        Some(n) => {
+            edit_config(config, |t| {
+                brocolis::contacts::add_key(t, n, &derived.symmetric_key_base64)
+            })?;
+            println!(
+                "   Clé ajoutée au contact « {n} » dans {}. Redémarrez brocolis pour l'activer.",
+                config.display()
+            );
+        }
+        None => {
+            add_key_to_config(config, &derived.symmetric_key_base64)?;
+            println!(
+                "   Clé ajoutée à {} (champ `keys`). Redémarrez brocolis pour l'activer.",
+                config.display()
+            );
+        }
+    }
     Ok(())
 }
 

@@ -21,6 +21,9 @@ pub struct KeyManager {
     /// Si vrai, le chiffrement vise TOUTES les clés (jeton `v2`
     /// multi-destinataire) au lieu de la seule clé primaire.
     encrypt_multi: bool,
+    /// Destinataires choisis (`encrypt_to`) : s'ils sont donnés, ce sont
+    /// EUX qu'on chiffre, quelle que soit la clé primaire.
+    recipients: Option<Vec<SymKey>>,
 }
 
 impl KeyManager {
@@ -28,6 +31,7 @@ impl KeyManager {
         Self {
             keys: RwLock::new(vec![key]),
             encrypt_multi: false,
+            recipients: None,
         }
     }
 
@@ -43,7 +47,18 @@ impl KeyManager {
         Self {
             keys: RwLock::new(keys),
             encrypt_multi,
+            recipients: None,
         }
+    }
+
+    /// Chiffre désormais pour ces destinataires (non vide), au lieu de la
+    /// règle par défaut. Le déchiffrement, lui, essaie toujours tout le
+    /// trousseau.
+    pub fn with_recipients(mut self, recipients: Vec<SymKey>) -> Self {
+        if !recipients.is_empty() {
+            self.recipients = Some(recipients);
+        }
+        self
     }
 
     /// Charge une clé unique depuis une chaîne base64 (32 octets).
@@ -73,6 +88,9 @@ impl KeyManager {
     /// Clés visées au CHIFFREMENT : tout le trousseau si `encrypt_multi` (jeton
     /// `v2`), sinon la seule clé primaire (jeton `v1`, compatible proxy/iOS).
     pub fn encryption_keys(&self) -> Vec<SymKey> {
+        if let Some(r) = &self.recipients {
+            return r.clone();
+        }
         let keys = self.read();
         if self.encrypt_multi {
             keys.clone()

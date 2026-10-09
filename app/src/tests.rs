@@ -95,7 +95,9 @@ fn harness(app: BrocolisApp) -> Harness<'static, BrocolisApp> {
     // la première image du harnais ne fait donc que les installer.
     let mut ready = false;
     let mut h = Harness::builder()
-        .with_size(egui::vec2(460.0, 900.0))
+        // Haute : tout l'onglet tient sans défiler, chaque bouton reste
+        // cliquable.
+        .with_size(egui::vec2(460.0, 2400.0))
         .build_ui_state(
             move |ui, app: &mut BrocolisApp| {
                 if !ready {
@@ -218,7 +220,7 @@ fn chiffrer_puis_dechiffrer_un_message() {
         !chiffre.contains("demain"),
         "le secret ne doit plus apparaître"
     );
-    h.get_by_label("1 segment(s) chiffré(s).");
+    h.get_by_label("1 segment(s) chiffré(s) pour moi.");
 
     // Le message chiffré, recollé, se déchiffre.
     h.get_by_label(FR.msg_hint).focus();
@@ -234,7 +236,7 @@ fn chiffrer_puis_dechiffrer_un_message() {
 fn gerer_le_trousseau() {
     let bench = Bench::new("cles");
     let mut h = harness(bench.app(false));
-    h.state_mut().tab = Tab::Keys;
+    h.state_mut().tab = Tab::Contacts;
     h.run_steps(2);
     assert_eq!(
         h.query_all_by_label(FR.remove).count(),
@@ -285,4 +287,178 @@ fn la_protection_restee_active_relance_le_proxy() {
     std::fs::write(&bench.state, "{}").unwrap();
     let app = bench.app(false);
     assert!(app.snapshot.engaged && app.snapshot.listening);
+}
+
+/// La clé de ce contact (la première : l'active).
+fn cle_de(bench: &Bench, nom: &str) -> String {
+    let book = crate::keyring::load(&bench.files.config).unwrap();
+    book.person(nom).expect("contact présent").keys[0]
+        .b64
+        .clone()
+}
+
+fn taper(h: &mut Harness<'static, BrocolisApp>, champ: &str, texte: &str) {
+    h.get_by_label(champ).focus();
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.get_by_label(champ).type_text(texte);
+    h.run_steps(2);
+}
+
+#[test]
+fn des_contacts_a_plusieurs_cles() {
+    let bench = Bench::new("contacts");
+    let mut h = harness(bench.app(false));
+    h.state_mut().tab = Tab::Contacts;
+    h.run_steps(2);
+    h.get_by_label(FR.contacts_empty);
+
+    // Un contact sans clé fournie : l'application lui en crée une.
+    taper(&mut h, FR.name_hint, "Alice");
+    h.get_by_label(&format!("+  {}", FR.create_contact)).click();
+    h.run_steps(2);
+    h.get_by_label("Alice");
+    h.get_by_label_contains("Contact « Alice » créé");
+    let premiere = cle_de(&bench, "Alice");
+
+    // Une seconde clé, reçue d'elle : elle s'ajoute, la première reste active.
+    h.get_by_label(FR.add_key).click();
+    h.run_steps(2);
+    let recue = brocolis::SymKey::generate().to_base64();
+    taper(&mut h, FR.contact_key_hint, &recue);
+    h.get_by_label(FR.save).click();
+    h.run_steps(2);
+    let book = crate::keyring::load(&bench.files.config).unwrap();
+    assert_eq!(book.person("Alice").unwrap().keys.len(), 2);
+    assert_eq!(cle_de(&bench, "Alice"), premiere);
+    assert_eq!(h.query_all_by_label(FR.active).count(), 1);
+
+    // La rendre active.
+    h.get_by_label(FR.make_active).click();
+    h.run_steps(2);
+    assert_eq!(cle_de(&bench, "Alice"), recue);
+
+    // Renommer.
+    h.get_by_label(FR.rename).click();
+    h.run_steps(2);
+    taper(&mut h, FR.new_name_hint, "Alice Martin");
+    h.get_by_label(FR.save).click();
+    h.run_steps(2);
+    h.get_by_label("Alice Martin");
+
+    // Supprimer demande une confirmation.
+    h.get_by_label(FR.delete_contact).click();
+    h.run_steps(2);
+    h.get_by_label(FR.confirm_delete);
+    assert!(
+        crate::keyring::load(&bench.files.config)
+            .unwrap()
+            .person("Alice Martin")
+            .is_some()
+    );
+    h.get_by_label(FR.delete_contact).click();
+    h.run_steps(2);
+    assert!(
+        crate::keyring::load(&bench.files.config)
+            .unwrap()
+            .contacts
+            .is_empty()
+    );
+    h.get_by_label(FR.contacts_empty);
+}
+
+#[test]
+fn ranger_une_cle_sans_nom_sous_un_contact() {
+    let bench = Bench::new("ranger");
+    let mut h = harness(bench.app(false));
+    h.state_mut().tab = Tab::Contacts;
+    h.run_steps(2);
+    let cle = crate::keyring::load(&bench.files.config).unwrap().own[0]
+        .b64
+        .clone();
+    h.get_by_label(FR.assign).click();
+    h.run_steps(2);
+    taper(&mut h, FR.assign_hint, "Bob");
+    h.get_by_label(FR.save).click();
+    h.run_steps(2);
+    let book = crate::keyring::load(&bench.files.config).unwrap();
+    assert!(book.own.is_empty(), "la clé a quitté les clés sans nom");
+    assert_eq!(book.person("Bob").unwrap().keys[0].b64, cle);
+    h.get_by_label(FR.keys_empty);
+}
+
+/// Sans parenthèses, tout le message est chiffré — ici pour Alice seule.
+#[test]
+fn chiffrer_tout_le_message_pour_un_contact() {
+    let bench = Bench::new("pour-alice");
+    let alice = crate::keyring::contact_generate(&bench.files.config, "Alice").unwrap();
+    crate::keyring::contact_generate(&bench.files.config, "Bob").unwrap();
+    let mut h = harness(bench.app(false));
+    h.state_mut().tab = Tab::Message;
+    h.run_steps(2);
+
+    // Destinataires : pas moi, Alice.
+    h.get_by_label(FR.me).click();
+    h.get_by_label("Alice").click();
+    h.run_steps(2);
+    assert!(!h.state().send_me);
+    assert_eq!(h.state().send_to, ["Alice"]);
+
+    taper(&mut h, FR.msg_hint, "On se voit demain à 18h");
+    h.get_by_label(FR.encrypt).click();
+    h.run_steps(2);
+    let chiffre = resultat(&h);
+    assert!(
+        chiffre.starts_with("[[BROCOLIS:v1:") && chiffre.ends_with("]]"),
+        "un seul jeton, tout le message : {chiffre}"
+    );
+    h.get_by_label("Message entier chiffré pour Alice.");
+
+    // Seule la clé d'Alice l'ouvre.
+    let a = brocolis::SymKey::from_base64(&alice).unwrap();
+    let (clair, n) = brocolis::crypto::decrypt_tokens_multi(&chiffre, &[a]);
+    assert_eq!((clair.as_str(), n), ("On se voit demain à 18h", 1));
+    let bob = brocolis::SymKey::from_base64(&cle_de(&bench, "Bob")).unwrap();
+    assert_eq!(
+        brocolis::crypto::decrypt_tokens_multi(&chiffre, &[bob]).1,
+        0
+    );
+
+    // Recollé, il se déchiffre, et l'on sait de qui il vient.
+    taper(&mut h, FR.msg_hint, &chiffre);
+    h.get_by_label(FR.decrypt).click();
+    h.run_steps(2);
+    assert_eq!(resultat(&h), "On se voit demain à 18h");
+    h.get_by_label("1 jeton(s) déchiffré(s) — de : Alice.");
+
+    // Aucun destinataire : on le dit, rien n'est produit.
+    h.get_by_label("Alice").click();
+    h.run_steps(2);
+    h.get_by_label(FR.encrypt).click();
+    h.run_steps(2);
+    h.get_by_label(FR.no_recipient);
+}
+
+/// Le navigateur chiffre pour les contacts choisis dans l'onglet Protection.
+#[test]
+fn choisir_pour_qui_chiffre_le_navigateur() {
+    let bench = Bench::new("navigateur");
+    crate::keyring::contact_generate(&bench.files.config, "Alice").unwrap();
+    crate::keyring::contact_generate(&bench.files.config, "Bob").unwrap();
+    let mut h = harness(bench.app(false));
+    h.run_steps(2);
+    h.get_by_label(FR.browser_to);
+
+    h.get_by_label("Alice").click();
+    h.run_steps(2);
+    h.get_by_label("Bob").click();
+    h.run_steps(2);
+    let cfg = brocolis::Config::load(&bench.files.config).unwrap();
+    assert_eq!(cfg.encrypt_to, ["Alice", "Bob"]);
+    h.get_by_label(FR.browser_to_note);
+
+    // « Moi » : retour à la clé principale.
+    h.get_by_label(FR.me).click();
+    h.run_steps(2);
+    let cfg = brocolis::Config::load(&bench.files.config).unwrap();
+    assert!(cfg.encrypt_to.is_empty());
 }

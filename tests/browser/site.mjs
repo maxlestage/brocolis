@@ -489,6 +489,12 @@ for (const [locale, expected, marker] of [
 
   // Bandeau : il avance tout seul.
   await page.evaluate(() => document.querySelector(".marquee").scrollIntoView({ block: "center" }));
+  // Le défilement est doux : on attend que le bandeau soit réellement à
+  // l'écran (il ne s'anime qu'une fois visible) avant de mesurer.
+  await until(page, () => {
+    const r = document.querySelector(".marquee").getBoundingClientRect();
+    return r.top >= 0 && r.bottom <= innerHeight;
+  });
   const pos = () => page.$eval(".marquee .marquee-track", (e) => new DOMMatrix(getComputedStyle(e).transform).m41);
   const x0 = await pos();
   await page.waitForTimeout(400);

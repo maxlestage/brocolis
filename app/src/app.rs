@@ -1,4 +1,4 @@
-//! L'interface : trois onglets — Protection, Clés, Message.
+//! L'interface : trois onglets — Protection, Contacts, Message.
 //!
 //! Tout ce qui peut bloquer (demande d'autorisation, appairage réseau) part sur
 //! un fil d'exécution à part ; l'interface interroge le résultat à chaque image
@@ -20,7 +20,7 @@ use eframe::egui::{
 use crate::engine::{Engine, is_listening};
 use crate::files::Files;
 use crate::i18n::{LANGS, Lang, Strings};
-use crate::keyring::{self, Entry};
+use crate::keyring::{self, Book, Entry};
 
 // Palette du site (thème vert) : forêt profonde, crème, citron vert.
 pub const BG: Color32 = Color32::from_rgb(0x0f, 0x2a, 0x18);
@@ -50,8 +50,34 @@ pub struct Options {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Tab {
     Protection,
-    Keys,
+    Contacts,
     Message,
+}
+
+/// Le petit champ de saisie ouvert dans une carte.
+#[derive(Clone, Debug, PartialEq)]
+enum Edit {
+    /// Coller une clé reçue de ce contact.
+    AddKey(String),
+    Rename(String),
+    /// Ranger cette clé sans nom sous un contact.
+    Assign(String),
+}
+
+/// Ce qu'un clic demande, appliqué une fois l'image dessinée.
+enum Act {
+    Copy(String),
+    OwnPrimary(String),
+    OwnRemove(String),
+    Open(Edit),
+    Save,
+    CancelEdit,
+    Use(String, String),
+    RemoveKey(String, String),
+    Generate(String),
+    AskDelete(String),
+    Delete(String),
+    CancelDelete,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -95,7 +121,7 @@ pub struct BrocolisApp {
     opts: Options,
     pub tab: Tab,
     lang: Lang,
-    keys: Vec<Entry>,
+    pub book: Book,
     listen: SocketAddr,
     engine: Option<Engine>,
     pub snapshot: Snapshot,
@@ -103,8 +129,17 @@ pub struct BrocolisApp {
     job: Option<Job>,
     notice: Option<Notice>,
     add_input: String,
+    edit: Option<Edit>,
+    edit_input: String,
+    confirm_delete: Option<String>,
+    new_name: String,
+    new_key: String,
+    pair_name: String,
     pair_code: String,
     pair_fingerprint: Option<String>,
+    /// Destinataires du message : vous (clé principale) et des contacts.
+    pub send_me: bool,
+    pub send_to: Vec<String>,
     message: String,
     output: String,
     output_note: Option<String>,
@@ -123,7 +158,7 @@ impl BrocolisApp {
             lang: opts.lang,
             opts,
             tab: Tab::Protection,
-            keys: Vec::new(),
+            book: Book::default(),
             listen,
             engine: None,
             snapshot: Snapshot::default(),
@@ -131,8 +166,16 @@ impl BrocolisApp {
             job: None,
             notice: None,
             add_input: String::new(),
+            edit: None,
+            edit_input: String::new(),
+            confirm_delete: None,
+            new_name: String::new(),
+            new_key: String::new(),
+            pair_name: String::new(),
             pair_code: String::new(),
             pair_fingerprint: None,
+            send_me: true,
+            send_to: Vec::new(),
             message: String::new(),
             output: String::new(),
             output_note: None,
@@ -140,6 +183,11 @@ impl BrocolisApp {
             quit_confirmed: false,
         };
         app.reload_keys();
+        // Par défaut, un message va aux mêmes destinataires que le navigateur.
+        if !app.book.encrypt_to.is_empty() {
+            app.send_me = false;
+            app.send_to = app.book.encrypt_to.clone();
+        }
         app.probe();
         // Protection restée active alors que plus aucun proxy n'écoute (session
         // précédente interrompue) : sans proxy, la navigation est coupée. On
@@ -166,7 +214,16 @@ impl BrocolisApp {
     }
 
     fn reload_keys(&mut self) {
-        self.keys = keyring::load(&self.opts.files.config).unwrap_or_default();
+        self.book = keyring::load(&self.opts.files.config).unwrap_or_default();
+        // Un destinataire supprimé, renommé ou sans clé n'est plus choisi.
+        let book = &self.book;
+        self.send_to
+            .retain(|n| book.person(n).is_some_and(|p| !p.keys.is_empty()));
+        for n in &mut self.send_to {
+            if let Some(p) = book.person(n) {
+                n.clone_from(&p.name);
+            }
+        }
     }
 
     fn notify(&mut self, kind: Kind, text: impl Into<String>) {
@@ -297,6 +354,7 @@ impl BrocolisApp {
             (JobKind::Pair, Ok(JobDone::Paired { fingerprint })) => {
                 self.pair_fingerprint = Some(fingerprint);
                 self.pair_code.clear();
+                self.pair_name.clear();
                 self.keys_changed();
             }
             (JobKind::Pair, Ok(JobDone::Elevated)) => {}
@@ -325,6 +383,7 @@ impl BrocolisApp {
 
     fn start_pairing(&mut self) {
         let code = self.pair_code.trim().to_owned();
+        let name = self.pair_name.trim().to_owned();
         if code.is_empty() || self.busy() {
             return;
         }
@@ -347,7 +406,11 @@ impl BrocolisApp {
                     Duration::from_secs(120),
                 )
                 .await?;
-                keyring::add(&files.config, &derived.symmetric_key_base64)?;
+                if name.is_empty() {
+                    keyring::add(&files.config, &derived.symmetric_key_base64)?;
+                } else {
+                    keyring::contact_add(&files.config, &name, &derived.symmetric_key_base64)?;
+                }
                 anyhow::Ok(JobDone::Paired {
                     fingerprint: derived.fingerprint,
                 })
@@ -424,7 +487,7 @@ impl BrocolisApp {
                     .auto_shrink([false, false])
                     .show(ui, |ui| match self.tab {
                         Tab::Protection => self.protection(ui),
-                        Tab::Keys => self.keys_tab(ui),
+                        Tab::Contacts => self.contacts_tab(ui),
                         Tab::Message => self.message_tab(ui),
                     });
             });
@@ -503,7 +566,7 @@ impl BrocolisApp {
                 ui.columns(3, |cols| {
                     for (col, (tab, label)) in cols.iter_mut().zip([
                         (Tab::Protection, t.tab_protection),
-                        (Tab::Keys, t.tab_keys),
+                        (Tab::Contacts, t.tab_contacts),
                         (Tab::Message, t.tab_message),
                     ]) {
                         let on = self.tab == tab;
@@ -603,14 +666,51 @@ impl BrocolisApp {
                 engaged,
             );
         });
+        // Pour qui le navigateur chiffre (`encrypt_to`). Sans objet quand un
+        // service système tourne : il a sa propre configuration.
+        if !self.service_running() && !self.book.contacts.is_empty() {
+            ui.add_space(10.0);
+            card(ui, |ui| {
+                ui.label(RichText::new(t.browser_to).family(bold()).color(INK));
+                ui.add_space(4.0);
+                let mut targets = self.book.encrypt_to.clone();
+                let mut changed = false;
+                ui.horizontal_wrapped(|ui| {
+                    if chip(ui, t.me, targets.is_empty(), true).clicked() && !targets.is_empty() {
+                        targets.clear();
+                        changed = true;
+                    }
+                    for p in &self.book.contacts {
+                        let on = self.book.is_target(&p.name);
+                        if chip(ui, &p.name, on, !p.keys.is_empty()).clicked() {
+                            if on {
+                                targets.retain(|n| !brocolis::config::same_name(n, &p.name));
+                            } else {
+                                targets.push(p.name.clone());
+                            }
+                            changed = true;
+                        }
+                    }
+                });
+                if targets.len() > 1 || (!changed && self.book.encrypt_to.len() > 1) {
+                    ui.label(RichText::new(t.browser_to_note).size(12.0).color(MUTED));
+                }
+                if changed {
+                    match keyring::set_encrypt_to(&self.opts.files.config, &targets) {
+                        Ok(()) => self.keys_changed(),
+                        Err(e) => self.notify(Kind::Err, format!("{}{e}", t.failed)),
+                    }
+                }
+            });
+        }
         ui.add_space(10.0);
         ui.label(RichText::new(t.auth_note).size(12.0).color(MUTED));
     }
 
-    fn keys_tab(&mut self, ui: &mut egui::Ui) {
+    fn contacts_tab(&mut self, ui: &mut egui::Ui) {
         let t = self.t();
-        title(ui, t.keys_title);
-        ui.label(RichText::new(t.keys_intro).color(MUTED));
+        title(ui, t.contacts_title);
+        ui.label(RichText::new(t.contacts_intro).color(MUTED));
         if self.service_running() {
             ui.add_space(4.0);
             let note = t
@@ -620,64 +720,207 @@ impl BrocolisApp {
         }
         ui.add_space(10.0);
 
-        if self.keys.is_empty() {
+        // Le carnet est copié : les cartes le lisent pendant que les champs de
+        // saisie, eux, modifient l'application.
+        let book = self.book.clone();
+        let mut acts: Vec<Act> = Vec::new();
+
+        if book.contacts.is_empty() {
             card(ui, |ui| {
-                ui.label(RichText::new(t.keys_empty).color(INK));
-            });
-        }
-        let mut action: Option<(usize, u8)> = None;
-        for (i, key) in self.keys.iter().enumerate() {
-            card(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(
-                        RichText::new(&key.fingerprint)
-                            .monospace()
-                            .size(15.0)
-                            .color(INK),
-                    );
-                    if key.primary {
-                        badge(ui, t.primary);
-                    }
-                });
-                ui.label(
-                    RichText::new(mask(&key.b64))
-                        .monospace()
-                        .size(11.5)
-                        .color(MUTED),
-                );
-                ui.horizontal(|ui| {
-                    if small_button(ui, t.copy).clicked() {
-                        action = Some((i, 0));
-                    }
-                    if !key.primary && small_button(ui, t.make_primary).clicked() {
-                        action = Some((i, 1));
-                    }
-                    if small_button(ui, t.remove).clicked() {
-                        action = Some((i, 2));
-                    }
-                });
+                ui.label(RichText::new(t.contacts_empty).color(INK));
             });
             ui.add_space(8.0);
         }
-        if let Some((i, what)) = action {
-            let b64 = self.keys[i].b64.clone();
-            let config = self.opts.files.config.clone();
-            let result = match what {
-                0 => {
-                    ui.ctx().copy_text(b64);
-                    self.notify(Kind::Ok, t.copied);
-                    Ok(false)
+        for person in &book.contacts {
+            let name = &person.name;
+            card(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(name).family(bold()).size(17.0).color(INK));
+                    if book.is_target(name) {
+                        badge(ui, t.browser_badge);
+                    }
+                });
+                for key in &person.keys {
+                    ui.add_space(4.0);
+                    key_line(ui, key, t.active);
+                    ui.horizontal(|ui| {
+                        if small_button(ui, t.copy).clicked() {
+                            acts.push(Act::Copy(key.b64.clone()));
+                        }
+                        if !key.primary && small_button(ui, t.make_active).clicked() {
+                            acts.push(Act::Use(name.clone(), key.b64.clone()));
+                        }
+                        if small_button(ui, t.remove).clicked() {
+                            acts.push(Act::RemoveKey(name.clone(), key.b64.clone()));
+                        }
+                    });
                 }
-                1 => keyring::make_primary(&config, &b64).map(|()| true),
-                _ => keyring::remove(&config, &b64).map(|()| true),
-            };
-            match result {
-                Ok(true) => self.keys_changed(),
-                Ok(false) => {}
-                Err(e) => self.notify(Kind::Err, format!("{}{e}", t.failed)),
-            }
+                ui.add_space(8.0);
+                let editing = |e: &Edit| match e {
+                    Edit::AddKey(n) | Edit::Rename(n) => n == name,
+                    Edit::Assign(_) => false,
+                };
+                match self.edit.clone().filter(editing) {
+                    Some(Edit::AddKey(_)) => edit_row(
+                        ui,
+                        &mut self.edit_input,
+                        t.contact_key_hint,
+                        true,
+                        t,
+                        &mut acts,
+                    ),
+                    Some(_) => edit_row(
+                        ui,
+                        &mut self.edit_input,
+                        t.new_name_hint,
+                        false,
+                        t,
+                        &mut acts,
+                    ),
+                    None if self.confirm_delete.as_ref() == Some(name) => {
+                        ui.label(RichText::new(t.confirm_delete).color(DANGER));
+                        ui.horizontal(|ui| {
+                            if danger_button(ui, t.delete_contact).clicked() {
+                                acts.push(Act::Delete(name.clone()));
+                            }
+                            if small_button(ui, t.cancel).clicked() {
+                                acts.push(Act::CancelDelete);
+                            }
+                        });
+                    }
+                    None => {
+                        ui.horizontal_wrapped(|ui| {
+                            if small_button(ui, t.gen_key).clicked() {
+                                acts.push(Act::Generate(name.clone()));
+                            }
+                            if small_button(ui, t.add_key).clicked() {
+                                acts.push(Act::Open(Edit::AddKey(name.clone())));
+                            }
+                            if small_button(ui, t.rename).clicked() {
+                                acts.push(Act::Open(Edit::Rename(name.clone())));
+                            }
+                            if small_button(ui, t.delete_contact).clicked() {
+                                acts.push(Act::AskDelete(name.clone()));
+                            }
+                        });
+                    }
+                }
+            });
+            ui.add_space(8.0);
         }
 
+        // Nouveau contact : un nom, et sa clé (collée, ou créée ici).
+        ui.add_space(10.0);
+        subtitle(ui, t.new_contact_title);
+        let name_edit = egui::TextEdit::singleline(&mut self.new_name)
+            .hint_text(t.name_hint)
+            .margin(Margin::symmetric(10, 8))
+            .desired_width(f32::INFINITY);
+        ui.add(name_edit)
+            .widget_info(|| WidgetInfo::labeled(WidgetType::TextEdit, true, t.name_hint));
+        ui.add_space(4.0);
+        let key_edit = egui::TextEdit::singleline(&mut self.new_key)
+            .hint_text(t.new_contact_key_hint)
+            .font(egui::TextStyle::Monospace)
+            .margin(Margin::symmetric(10, 8))
+            .desired_width(f32::INFINITY);
+        ui.add(key_edit).widget_info(|| {
+            WidgetInfo::labeled(WidgetType::TextEdit, true, t.new_contact_key_hint)
+        });
+        ui.add_space(6.0);
+        let can_create = !self.new_name.trim().is_empty();
+        if ui
+            .add_enabled(can_create, accent(&format!("+  {}", t.create_contact)))
+            .clicked()
+        {
+            self.create_contact(ui.ctx());
+        }
+
+        // Appairage : la clé obtenue va au contact nommé (ou reste sans nom).
+        ui.add_space(18.0);
+        subtitle(ui, t.pair_title);
+        ui.label(RichText::new(t.pair_intro).size(12.5).color(MUTED));
+        ui.add_space(4.0);
+        let pairing = matches!(
+            self.job,
+            Some(Job {
+                kind: JobKind::Pair,
+                ..
+            })
+        );
+        let pair_name = egui::TextEdit::singleline(&mut self.pair_name)
+            .hint_text(t.pair_name_hint)
+            .margin(Margin::symmetric(10, 8))
+            .desired_width(f32::INFINITY);
+        ui.add_enabled(!pairing, pair_name)
+            .widget_info(|| WidgetInfo::labeled(WidgetType::TextEdit, true, t.pair_name_hint));
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            let edit = egui::TextEdit::singleline(&mut self.pair_code)
+                .hint_text(t.pair_hint)
+                .margin(Margin::symmetric(10, 8))
+                .desired_width(ui.available_width() - 110.0);
+            let resp = ui.add_enabled(!pairing, edit);
+            resp.widget_info(|| WidgetInfo::labeled(WidgetType::TextEdit, true, t.pair_hint));
+            if ui
+                .add_enabled(
+                    !pairing && !self.pair_code.trim().is_empty(),
+                    small(t.pair_btn),
+                )
+                .clicked()
+            {
+                self.start_pairing();
+            }
+        });
+        if pairing {
+            ui.horizontal(|ui| {
+                ui.add(egui::Spinner::new().color(ACCENT));
+                ui.label(RichText::new(t.pair_wait).color(INK));
+            });
+        }
+        if let Some(fp) = &self.pair_fingerprint {
+            ui.add_space(6.0);
+            card(ui, |ui| {
+                ui.label(RichText::new(t.pair_done).color(INK));
+                ui.label(RichText::new(fp).monospace().size(22.0).color(ACCENT));
+            });
+        }
+
+        // Vos clés sans nom : la principale chiffre par défaut.
+        ui.add_space(18.0);
+        subtitle(ui, t.own_title);
+        ui.label(RichText::new(t.own_intro).size(12.5).color(MUTED));
+        ui.add_space(6.0);
+        if book.own.is_empty() {
+            card(ui, |ui| {
+                ui.label(RichText::new(t.keys_empty).color(INK));
+            });
+            ui.add_space(8.0);
+        }
+        for key in &book.own {
+            card(ui, |ui| {
+                key_line(ui, key, t.primary);
+                ui.horizontal_wrapped(|ui| {
+                    if small_button(ui, t.copy).clicked() {
+                        acts.push(Act::Copy(key.b64.clone()));
+                    }
+                    if !key.primary && small_button(ui, t.make_primary).clicked() {
+                        acts.push(Act::OwnPrimary(key.b64.clone()));
+                    }
+                    if small_button(ui, t.assign).clicked() {
+                        acts.push(Act::Open(Edit::Assign(key.b64.clone())));
+                    }
+                    if small_button(ui, t.remove).clicked() {
+                        acts.push(Act::OwnRemove(key.b64.clone()));
+                    }
+                });
+                if self.edit == Some(Edit::Assign(key.b64.clone())) {
+                    ui.add_space(4.0);
+                    edit_row(ui, &mut self.edit_input, t.assign_hint, false, t, &mut acts);
+                }
+            });
+            ui.add_space(8.0);
+        }
         if accent_button(ui, &format!("+  {}", t.new_key)).clicked() {
             match keyring::generate(&self.opts.files.config) {
                 Ok(b64) => {
@@ -711,46 +954,107 @@ impl BrocolisApp {
             }
         });
 
-        ui.add_space(18.0);
-        subtitle(ui, t.pair_title);
-        ui.label(RichText::new(t.pair_intro).size(12.5).color(MUTED));
-        ui.add_space(4.0);
-        let pairing = matches!(
-            self.job,
-            Some(Job {
-                kind: JobKind::Pair,
-                ..
-            })
-        );
-        ui.horizontal(|ui| {
-            let edit = egui::TextEdit::singleline(&mut self.pair_code)
-                .hint_text(t.pair_hint)
-                .margin(Margin::symmetric(10, 8))
-                .desired_width(ui.available_width() - 110.0);
-            let resp = ui.add_enabled(!pairing, edit);
-            resp.widget_info(|| WidgetInfo::labeled(WidgetType::TextEdit, true, t.pair_hint));
-            if ui
-                .add_enabled(
-                    !pairing && !self.pair_code.trim().is_empty(),
-                    small(t.pair_btn),
-                )
-                .clicked()
-            {
-                self.start_pairing();
-            }
-        });
-        if pairing {
-            ui.horizontal(|ui| {
-                ui.add(egui::Spinner::new().color(ACCENT));
-                ui.label(RichText::new(t.pair_wait).color(INK));
-            });
+        for act in acts {
+            self.apply(act, ui.ctx());
         }
-        if let Some(fp) = &self.pair_fingerprint {
-            ui.add_space(6.0);
-            card(ui, |ui| {
-                ui.label(RichText::new(t.pair_done).color(INK));
-                ui.label(RichText::new(fp).monospace().size(22.0).color(ACCENT));
-            });
+    }
+
+    fn create_contact(&mut self, ctx: &egui::Context) {
+        let t = self.t();
+        let name = self.new_name.trim().to_owned();
+        let config = self.opts.files.config.clone();
+        let result = if self.new_key.trim().is_empty() {
+            keyring::contact_generate(&config, &name).map(|b64| {
+                ctx.copy_text(b64);
+                t.contact_created_key
+            })
+        } else {
+            keyring::contact_add(&config, &name, &self.new_key)
+                .map(|()| t.contact_created)
+                .map_err(|e| anyhow::anyhow!("{}{e}", t.invalid_key.trim_end_matches(": ")))
+        };
+        match result {
+            Ok(msg) => {
+                self.new_name.clear();
+                self.new_key.clear();
+                self.keys_changed();
+                self.notify(Kind::Ok, msg.replace("{name}", &name));
+            }
+            Err(e) => self.notify(Kind::Err, format!("{}{e}", t.failed)),
+        }
+    }
+
+    /// Applique un clic de l'onglet Contacts.
+    fn apply(&mut self, act: Act, ctx: &egui::Context) {
+        let t = self.t();
+        let config = self.opts.files.config.clone();
+        let result: anyhow::Result<Option<String>> = match act {
+            Act::Copy(b64) => {
+                ctx.copy_text(b64);
+                self.notify(Kind::Ok, t.copied);
+                return;
+            }
+            Act::Open(edit) => {
+                self.edit_input.clear();
+                self.edit = Some(edit);
+                self.confirm_delete = None;
+                return;
+            }
+            Act::CancelEdit => {
+                self.edit = None;
+                return;
+            }
+            Act::AskDelete(name) => {
+                self.edit = None;
+                self.confirm_delete = Some(name);
+                return;
+            }
+            Act::CancelDelete => {
+                self.confirm_delete = None;
+                return;
+            }
+            Act::Save => {
+                let input = self.edit_input.trim().to_owned();
+                let done = match self.edit.clone() {
+                    Some(Edit::AddKey(name)) => keyring::contact_add(&config, &name, &input)
+                        .map(|()| Some(t.add_done.to_owned())),
+                    Some(Edit::Rename(old)) => {
+                        keyring::contact_rename(&config, &old, &input).map(|()| None)
+                    }
+                    Some(Edit::Assign(b64)) => {
+                        keyring::assign(&config, &b64, &input).map(|()| None)
+                    }
+                    None => Ok(None),
+                };
+                if done.is_ok() {
+                    self.edit = None;
+                    self.edit_input.clear();
+                }
+                done
+            }
+            Act::OwnPrimary(b64) => keyring::make_primary(&config, &b64).map(|()| None),
+            Act::OwnRemove(b64) => keyring::remove(&config, &b64).map(|()| None),
+            Act::Use(name, b64) => keyring::contact_use(&config, &name, &b64).map(|()| None),
+            Act::RemoveKey(name, b64) => {
+                keyring::contact_remove_key(&config, &name, &b64).map(|()| None)
+            }
+            Act::Generate(name) => keyring::contact_generate(&config, &name).map(|b64| {
+                ctx.copy_text(b64);
+                Some(t.gen_key_done.replace("{name}", &name))
+            }),
+            Act::Delete(name) => {
+                self.confirm_delete = None;
+                keyring::contact_delete(&config, &name).map(|()| None)
+            }
+        };
+        match result {
+            Ok(note) => {
+                self.keys_changed();
+                if let Some(note) = note {
+                    self.notify(Kind::Ok, note);
+                }
+            }
+            Err(e) => self.notify(Kind::Err, format!("{}{e}", t.failed)),
         }
     }
 
@@ -769,37 +1073,42 @@ impl BrocolisApp {
         resp.widget_info(|| WidgetInfo::labeled(WidgetType::TextEdit, true, t.msg_hint));
         ui.add_space(8.0);
 
-        ui.horizontal(|ui| {
-            let enc = accent_button(ui, t.encrypt).clicked();
-            let dec = small_button(ui, t.decrypt).clicked();
-            if !(enc || dec) {
-                return;
+        // Pour qui : vous, et/ou un ou plusieurs contacts.
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new(t.to_label).family(bold()).color(INK));
+            if self.book.primary().is_some() && chip(ui, t.me, self.send_me, true).clicked() {
+                self.send_me = !self.send_me;
             }
-            let km = match keyring::manager(&self.opts.files.config) {
-                Ok(Some(km)) => km,
-                Ok(None) => {
-                    self.output_note = Some(t.no_keys.to_owned());
-                    return;
+            for p in &self.book.contacts {
+                let on = self
+                    .send_to
+                    .iter()
+                    .any(|n| brocolis::config::same_name(n, &p.name));
+                if chip(ui, &p.name, on, !p.keys.is_empty()).clicked() {
+                    if on {
+                        self.send_to
+                            .retain(|n| !brocolis::config::same_name(n, &p.name));
+                    } else {
+                        self.send_to.push(p.name.clone());
+                    }
                 }
-                Err(e) => {
-                    self.output_note = Some(format!("{}{e}", t.failed));
-                    return;
-                }
-            };
-            let (out, n, note, none) = if enc {
-                let (o, n) =
-                    brocolis::crypto::encrypt_marked_multi(&self.message, &km.encryption_keys());
-                (o, n, t.encrypted_n, t.nothing_marked)
-            } else {
-                let (o, n) = brocolis::crypto::decrypt_tokens_multi(&self.message, &km.all_keys());
-                (o, n, t.decrypted_n, t.nothing_readable)
-            };
-            self.output = out;
-            self.output_note = Some(if n == 0 {
-                none.to_owned()
-            } else {
-                note.replace("{n}", &n.to_string())
-            });
+            }
+        });
+        ui.add_space(8.0);
+
+        ui.horizontal(|ui| {
+            if accent_button(ui, t.encrypt).clicked() {
+                self.output_note = Some(match self.encrypt() {
+                    Ok(note) => note,
+                    Err(e) => format!("{}{e}", t.failed),
+                });
+            }
+            if small_button(ui, t.decrypt).clicked() {
+                self.output_note = Some(match self.decrypt() {
+                    Ok(note) => note,
+                    Err(e) => format!("{}{e}", t.failed),
+                });
+            }
         });
 
         if let Some(note) = &self.output_note {
@@ -822,6 +1131,58 @@ impl BrocolisApp {
                 self.notify(Kind::Ok, t.copied);
             }
         }
+    }
+
+    /// Chiffre le message pour les destinataires choisis : les segments
+    /// `((…))` s'il y en a, sinon le message entier. Renvoie la note à
+    /// afficher.
+    fn encrypt(&mut self) -> anyhow::Result<String> {
+        use brocolis::crypto::Sealed;
+        let t = self.t();
+        let me = self.send_me && self.book.primary().is_some();
+        let keys = keyring::recipients(&self.opts.files.config, me, &self.send_to)?;
+        if keys.is_empty() {
+            let empty = self.book.own.is_empty() && self.book.contacts.is_empty();
+            return Ok(if empty { t.no_keys } else { t.no_recipient }.to_owned());
+        }
+        let (out, sealed) = brocolis::crypto::encrypt_message(&self.message, &keys)?;
+        let who = me
+            .then_some(t.me_short.to_owned())
+            .into_iter()
+            .chain(self.send_to.iter().cloned())
+            .collect::<Vec<_>>()
+            .join(", ");
+        Ok(match sealed {
+            Sealed::Segments(n) => {
+                self.output = out;
+                t.encrypted_n
+                    .replace("{n}", &n.to_string())
+                    .replace("{who}", &who)
+            }
+            Sealed::Whole => {
+                self.output = out;
+                t.encrypted_whole.replace("{who}", &who)
+            }
+            Sealed::Nothing => t.empty_message.to_owned(),
+        })
+    }
+
+    /// Déchiffre avec toutes les clés et dit de qui vient le message.
+    fn decrypt(&mut self) -> anyhow::Result<String> {
+        let t = self.t();
+        let Some((out, n, from)) = keyring::read(&self.opts.files.config, &self.message)? else {
+            return Ok(t.no_keys.to_owned());
+        };
+        self.output = out;
+        Ok(if n == 0 {
+            t.nothing_readable.to_owned()
+        } else if from.is_empty() {
+            t.decrypted_n.replace("{n}", &n.to_string())
+        } else {
+            t.decrypted_from
+                .replace("{n}", &n.to_string())
+                .replace("{who}", &from.join(", "))
+        })
     }
 
     fn notice_bar(&mut self, ui: &mut egui::Ui) {
@@ -934,19 +1295,107 @@ fn small_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
     ui.add(small(text))
 }
 
-fn accent_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
-    ui.add(
-        egui::Button::new(
-            RichText::new(text)
-                .family(bold())
-                .size(14.0)
-                .color(ACCENT_INK),
-        )
-        .fill(ACCENT)
-        .stroke(Stroke::NONE)
-        .corner_radius(CornerRadius::same(18))
-        .min_size(vec2(0.0, 36.0)),
+fn accent(text: &str) -> egui::Button<'static> {
+    egui::Button::new(
+        RichText::new(text.to_owned())
+            .family(bold())
+            .size(14.0)
+            .color(ACCENT_INK),
     )
+    .fill(ACCENT)
+    .stroke(Stroke::NONE)
+    .corner_radius(CornerRadius::same(18))
+    .min_size(vec2(0.0, 36.0))
+}
+
+fn accent_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
+    ui.add(accent(text))
+}
+
+fn danger_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
+    ui.add(
+        egui::Button::new(RichText::new(text).size(13.0).color(ACCENT_INK))
+            .fill(DANGER)
+            .stroke(Stroke::NONE)
+            .corner_radius(CornerRadius::same(16))
+            .min_size(vec2(0.0, 30.0)),
+    )
+}
+
+/// Une clé : son empreinte (à comparer de vive voix), un badge si c'est elle
+/// qui chiffre, et la clé masquée.
+fn key_line(ui: &mut egui::Ui, key: &Entry, badge_text: &str) {
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new(&key.fingerprint)
+                .monospace()
+                .size(15.0)
+                .color(INK),
+        );
+        if key.primary {
+            badge(ui, badge_text);
+        }
+    });
+    ui.label(
+        RichText::new(mask(&key.b64))
+            .monospace()
+            .size(11.5)
+            .color(MUTED),
+    );
+}
+
+/// Un champ ouvert dans une carte, avec Valider (ou Entrée) et Annuler.
+fn edit_row(
+    ui: &mut egui::Ui,
+    input: &mut String,
+    hint: &str,
+    monospace: bool,
+    t: &Strings,
+    acts: &mut Vec<Act>,
+) {
+    let mut edit = egui::TextEdit::singleline(input)
+        .hint_text(hint)
+        .margin(Margin::symmetric(10, 8))
+        .desired_width(f32::INFINITY);
+    if monospace {
+        edit = edit.font(egui::TextStyle::Monospace);
+    }
+    let resp = ui.add(edit);
+    resp.widget_info(|| WidgetInfo::labeled(WidgetType::TextEdit, true, hint));
+    let entered = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+    ui.horizontal(|ui| {
+        if small_button(ui, t.save).clicked() || entered {
+            acts.push(Act::Save);
+        }
+        if small_button(ui, t.cancel).clicked() {
+            acts.push(Act::CancelEdit);
+        }
+    });
+}
+
+/// Une pastille à cocher (destinataire choisi ou non).
+fn chip(ui: &mut egui::Ui, text: &str, on: bool, enabled: bool) -> egui::Response {
+    let b = egui::Button::new(
+        RichText::new(if on {
+            format!("✔ {text}")
+        } else {
+            text.to_owned()
+        })
+        .size(13.0)
+        .color(if on { ACCENT_INK } else { INK }),
+    )
+    .fill(if on { ACCENT } else { Color32::TRANSPARENT })
+    .stroke(if on {
+        Stroke::NONE
+    } else {
+        Stroke::new(1.0, INK.gamma_multiply(0.35))
+    })
+    .corner_radius(CornerRadius::same(14))
+    .min_size(vec2(0.0, 28.0));
+    let resp = ui.add_enabled(enabled, b);
+    // Pour les lecteurs d'écran : le nom seul, et l'état « coché ».
+    resp.widget_info(|| WidgetInfo::selected(WidgetType::Checkbox, enabled, on, text));
+    resp
 }
 
 fn status_row(ui: &mut egui::Ui, name: &str, value: &str, on: bool) {

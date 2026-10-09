@@ -351,6 +351,179 @@ fn decrypt_avec_une_mauvaise_cle_laisse_le_jeton_intact() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
+/// Lance la CLI dans `d` et renvoie (succès, stdout, stderr).
+fn brocolis(d: &std::path::Path, args: &[&str]) -> (bool, String, String) {
+    let out = Command::new(bin())
+        .args(args)
+        .current_dir(d)
+        .env_remove("RUST_BACKTRACE")
+        .output()
+        .unwrap();
+    (
+        out.status.success(),
+        String::from_utf8(out.stdout).unwrap(),
+        String::from_utf8(out.stderr).unwrap(),
+    )
+}
+
+/// Sans parenthèses, c'est TOUT le message qui est chiffré : un seul jeton,
+/// rien du texte ne reste lisible.
+#[test]
+fn sans_parentheses_tout_le_message_est_chiffre() {
+    let d = tmpdir("message-entier");
+    let (_, cle, _) = brocolis(&d, &["keygen"]);
+    let cle = cle.trim();
+
+    let (ok, chiffre, err) = brocolis(
+        &d,
+        &[
+            "encrypt",
+            "--text",
+            "Rendez-vous demain 18h au café",
+            "--key",
+            cle,
+        ],
+    );
+    assert!(ok, "{err}");
+    let chiffre = chiffre.trim();
+    assert!(
+        chiffre.starts_with("[[BROCOLIS:v1:") && chiffre.ends_with("]]"),
+        "un seul jeton, rien autour : {chiffre}"
+    );
+    assert!(!chiffre.contains("demain") && !chiffre.contains("café"));
+    assert!(err.contains("message entier"), "{err}");
+
+    let (ok, clair, _) = brocolis(&d, &["decrypt", "--text", chiffre, "--key", cle]);
+    assert!(ok);
+    assert_eq!(clair.trim(), "Rendez-vous demain 18h au café");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// Des contacts, chacun ses clés : `--to` chiffre pour l'un (ou plusieurs),
+/// et seul le destinataire peut lire.
+#[test]
+fn chiffrer_pour_ses_contacts() {
+    let d = tmpdir("contacts");
+    // Ma clé, et deux contacts créés par la CLI (clé générée, imprimée seule).
+    let (_, moi, _) = brocolis(&d, &["keygen"]);
+    std::fs::write(
+        d.join("brocolis.toml"),
+        format!("key = \"{}\"\n", moi.trim()),
+    )
+    .unwrap();
+    let (ok, alice, err) = brocolis(&d, &["contacts", "add", "Alice"]);
+    assert!(ok, "{err}");
+    let alice = alice.trim().to_string();
+    assert_eq!(alice.lines().count(), 1, "la clé seule sur stdout");
+    let (_, bob, _) = brocolis(&d, &["contacts", "add", "Bob"]);
+    let bob = bob.trim().to_string();
+    // Une seconde clé pour Alice : elle devient… une clé de plus, la première
+    // reste active.
+    let (_, alice_old, _) = brocolis(&d, &["keygen"]);
+    let (ok, _, err) = brocolis(&d, &["contacts", "add", "alice", "--key", alice_old.trim()]);
+    assert!(ok, "même contact malgré la casse : {err}");
+
+    let (ok, liste, _) = brocolis(&d, &["contacts"]);
+    assert!(ok);
+    assert!(liste.contains("Alice") && liste.contains("Bob"), "{liste}");
+    assert_eq!(liste.matches("active").count(), 2, "{liste}");
+    assert_eq!(liste.matches("lecture").count(), 1, "{liste}");
+
+    // Pour Alice seule : sa clé ouvre, celle de Bob non.
+    let (ok, pour_alice, err) = brocolis(&d, &["encrypt", "--text", "à Alice", "--to", "alice"]);
+    assert!(ok, "{err}");
+    assert!(err.contains("pour Alice"), "{err}");
+    let pour_alice = pour_alice.trim();
+    let (_, lu, _) = brocolis(&d, &["decrypt", "--text", pour_alice, "--key", &alice]);
+    assert_eq!(lu.trim(), "à Alice");
+    let (_, lu, _) = brocolis(&d, &["decrypt", "--text", pour_alice, "--key", &bob]);
+    assert!(lu.contains("[[BROCOLIS:"), "Bob ne lit pas : {lu}");
+    // Avec le trousseau, on sait de qui (pour qui) est le jeton.
+    let (_, lu, err) = brocolis(&d, &["decrypt", "--text", pour_alice]);
+    assert_eq!(lu.trim(), "à Alice");
+    assert!(err.contains("de : Alice"), "{err}");
+
+    // Pour les deux : un seul jeton v2 (segment entre parenthèses), chacun le lit.
+    let (ok, pour_deux, err) = brocolis(
+        &d,
+        &[
+            "encrypt",
+            "--text",
+            "rdv ((ce soir))",
+            "--to",
+            "Alice",
+            "--to",
+            "Bob",
+        ],
+    );
+    assert!(ok, "{err}");
+    assert!(pour_deux.starts_with("rdv [[BROCOLIS:v2:"), "{pour_deux}");
+    assert!(
+        err.contains("1 segment") && err.contains("Alice, Bob"),
+        "{err}"
+    );
+    for k in [&alice, &bob] {
+        let (_, lu, _) = brocolis(&d, &["decrypt", "--text", pour_deux.trim(), "--key", k]);
+        assert_eq!(lu.trim(), "rdv ce soir");
+    }
+    let (_, lu, _) = brocolis(
+        &d,
+        &["decrypt", "--text", pour_deux.trim(), "--key", moi.trim()],
+    );
+    assert!(lu.contains("[[BROCOLIS:"), "pas pour moi : {lu}");
+
+    // Un inconnu : refus, rien n'est produit.
+    let (ok, sortie, err) = brocolis(&d, &["encrypt", "--text", "x", "--to", "Zoé"]);
+    assert!(!ok && sortie.is_empty(), "{sortie}");
+    assert!(err.contains("inconnu"), "{err}");
+
+    // Renommer, retirer une clé, retirer le contact.
+    assert!(brocolis(&d, &["contacts", "rename", "Bob", "Robert"]).0);
+    assert!(brocolis(&d, &["encrypt", "--text", "x", "--to", "Robert"]).0);
+    assert!(
+        !brocolis(&d, &["contacts", "rename", "Robert", "ALICE"]).0,
+        "doublon"
+    );
+    assert!(brocolis(&d, &["contacts", "remove", "Alice", "--key", &alice]).0);
+    let (_, liste, _) = brocolis(&d, &["contacts", "list"]);
+    assert_eq!(
+        liste.matches("active").count(),
+        2,
+        "l'ancienne clé d'Alice devient active : {liste}"
+    );
+    assert!(brocolis(&d, &["contacts", "remove", "Robert"]).0);
+    let (_, liste, _) = brocolis(&d, &["contacts"]);
+    assert!(!liste.contains("Robert"), "{liste}");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// `encrypt_to` dans la configuration : `encrypt` sans `--to` chiffre pour
+/// ces contacts-là, comme le proxy.
+#[test]
+fn les_destinataires_de_la_configuration_servent_par_defaut() {
+    let d = tmpdir("encrypt-to");
+    let (_, moi, _) = brocolis(&d, &["keygen"]);
+    let (_, alice, _) = brocolis(&d, &["keygen"]);
+    std::fs::write(
+        d.join("brocolis.toml"),
+        format!(
+            "key = \"{}\"\nencrypt_to = [\"Alice\"]\n\n[[contacts]]\nname = \"Alice\"\nkeys = [\"{}\"]\n",
+            moi.trim(),
+            alice.trim()
+        ),
+    )
+    .unwrap();
+    let (ok, chiffre, err) = brocolis(&d, &["encrypt", "--text", "salut"]);
+    assert!(ok, "{err}");
+    assert!(err.contains("pour Alice"), "{err}");
+    let (_, lu, _) = brocolis(
+        &d,
+        &["decrypt", "--text", chiffre.trim(), "--key", alice.trim()],
+    );
+    assert_eq!(lu.trim(), "salut");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
 // ---------------------------------------------------------------------------
 // `run` : le proxy lancé par la CLI chiffre-t-il réellement ?
 // ---------------------------------------------------------------------------
@@ -473,6 +646,87 @@ fn run_demarre_un_proxy_qui_chiffre_vraiment() {
         vu.contains("[[BROCOLIS:v1:"),
         "un jeton doit remplacer le segment : {vu}"
     );
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// `encrypt_to` : le proxy chiffre pour les contacts nommés — un seul jeton v2
+/// que chacun ouvre avec SA clé, et que personne d'autre n'ouvre.
+#[test]
+fn run_chiffre_pour_les_contacts_de_encrypt_to() {
+    let d = tmpdir("run-encrypt-to");
+    let recu = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let port_origine = origine(recu.clone());
+    let port_proxy = port_libre();
+    let (_, moi, _) = brocolis(&d, &["keygen"]);
+    let (_, alice, _) = brocolis(&d, &["keygen"]);
+    let (_, bob, _) = brocolis(&d, &["keygen"]);
+    let (_, intrus, _) = brocolis(&d, &["keygen"]);
+    std::fs::write(
+        d.join("brocolis.toml"),
+        format!(
+            "listen = \"127.0.0.1:{port_proxy}\"\nkey = \"{}\"\nencrypt_to = [\"Alice\", \"Bob\"]\n\n\
+             [[contacts]]\nname = \"Alice\"\nkeys = [\"{}\"]\n\n\
+             [[contacts]]\nname = \"Bob\"\nkeys = [\"{}\"]\n",
+            moi.trim(),
+            alice.trim(),
+            bob.trim()
+        ),
+    )
+    .unwrap();
+
+    let mut proxy = Command::new(bin())
+        .arg("run")
+        .current_dir(&d)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut pret = false;
+    for _ in 0..50 {
+        if std::net::TcpStream::connect(("127.0.0.1", port_proxy)).is_ok() {
+            pret = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    assert!(pret, "le proxy doit finir par écouter");
+    {
+        use std::io::{Read, Write};
+        let mut s = std::net::TcpStream::connect(("127.0.0.1", port_proxy)).unwrap();
+        let corps = "rendez-vous ((code 4291)) a 18h";
+        let req = format!(
+            "POST http://127.0.0.1:{port_origine}/envoi HTTP/1.1\r\nHost: 127.0.0.1:{port_origine}\r\n\
+             Content-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{corps}",
+            corps.len()
+        );
+        s.write_all(req.as_bytes()).unwrap();
+        let mut rep = String::new();
+        let _ = s.read_to_string(&mut rep);
+        assert!(rep.contains("200"), "le proxy doit relayer : {rep}");
+    }
+    let _ = proxy.kill();
+    let _ = proxy.wait();
+    let vu = recu.lock().unwrap().first().cloned().unwrap_or_default();
+    assert!(!vu.contains("code 4291"), "pas de clair : {vu}");
+    assert!(
+        vu.contains("[[BROCOLIS:v2:"),
+        "jeton multi-destinataire : {vu}"
+    );
+
+    for (qui, cle) in [("Alice", &alice), ("Bob", &bob)] {
+        let (_, lu, _) = brocolis(&d, &["decrypt", "--text", &vu, "--key", cle.trim()]);
+        assert!(
+            lu.contains("rendez-vous code 4291 a 18h"),
+            "{qui} lit : {lu}"
+        );
+    }
+    for cle in [&intrus, &moi] {
+        let (_, lu, _) = brocolis(&d, &["decrypt", "--text", &vu, "--key", cle.trim()]);
+        assert!(
+            !lu.contains("code 4291"),
+            "ni l'intrus ni la clé principale : {lu}"
+        );
+    }
     let _ = std::fs::remove_dir_all(&d);
 }
 
@@ -650,6 +904,7 @@ fn toutes_les_sous_commandes_repondent() {
         "decrypt",
         "pair",
         "pair-group",
+        "contacts",
         "ca",
     ] {
         let out = Command::new(bin()).args([cmd, "--help"]).output().unwrap();

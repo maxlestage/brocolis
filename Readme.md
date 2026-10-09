@@ -78,9 +78,11 @@ Cette architecture permet de séparer clairement les responsabilités :
 | Certificats SSL       | Génération de certificats auto-signés           |
 | Chiffrement AES-256   | Chiffrement du contenu textuel ciblé            |
 | Gestion des clés      | Partage sécurisé des clés symétriques           |
+| Contacts              | Plusieurs clés par correspondant, chiffrer pour l'un ou plusieurs |
+| Message entier        | Sans `((…))`, tout le message est chiffré (hors navigateur) |
 | Régénération des clés | Rotation automatique en cas de compromission    |
 | CLI                   | Interface en ligne de commande                  |
-| Application de bureau | Interrupteur, clés, messages — macOS, Linux, Windows |
+| Application de bureau | Interrupteur, contacts, messages — macOS, Linux, Windows |
 
 ## Architecture globale
 
@@ -158,7 +160,7 @@ L'architecture interne comprend :
 ## Architecture du code
 
 Le cœur est une **bibliothèque** Rust (`src/lib.rs` : modules `agreement`,
-`ca`, `config`, `crypto`, `keys`, `pairing`, `proxy`, `system`) exposée via deux
+`ca`, `config`, `contacts`, `crypto`, `keys`, `pairing`, `proxy`, `system`) exposée via deux
 frontends : la **ligne de commande** `brocolis` (`src/main.rs`) et
 l'**application de bureau** (`app/`, paquet `brocolis-app`). Les deux forment
 un espace de travail Cargo et partagent le même `target/`. La configuration système automatique
@@ -184,13 +186,22 @@ commandes. Trois onglets :
 - **Protection** — un interrupteur. Il démarre le proxy dans l'application
   (ou utilise le service système s'il tourne déjà), puis branche le système
   dessus ; recliqué, il remet la configuration d'origine. L'état est relu en
-  continu : un `brocolis on`/`off` lancé dans un terminal s'y reflète.
-- **Clés** — le trousseau : créer une clé (copiée aussitôt, pour la
-  partager), ajouter une clé reçue, choisir la clé principale, en retirer une,
-  et **appairer par un code** convenu de vive voix (même protocole et même
-  empreinte que `brocolis pair` et l'app iOS).
-- **Message** — chiffrer les `((segments marqués))` d'un texte, ou déchiffrer
-  un message reçu, sans navigateur.
+  continu : un `brocolis on`/`off` lancé dans un terminal s'y reflète. On y
+  choisit aussi **pour qui le navigateur chiffre** : vous (clé principale) ou
+  un ou plusieurs contacts.
+- **Contacts** — un nom, et **une ou plusieurs clés** par contact : la clé
+  active chiffre ce qu'on lui envoie, les autres (anciennes, clé de groupe…)
+  servent encore à lire. Créer un contact (sa clé est générée et copiée, ou
+  collée), ajouter une clé, choisir l'active, renommer, supprimer (avec
+  confirmation), **appairer par un code** convenu de vive voix et ranger la
+  clé obtenue sous un nom (même protocole et même empreinte que
+  `brocolis pair` et l'app iOS). Les clés sans nom restent gérées comme avant,
+  et peuvent être rangées sous un contact.
+- **Message** — choisir les destinataires (vous, un ou plusieurs contacts),
+  puis chiffrer : les `((segments marqués))` s'il y en a, **sinon tout le
+  message**. Plusieurs destinataires : un seul jeton que chacun ouvre avec sa
+  clé. Un message reçu se déchiffre avec toutes les clés, et l'application dit
+  de quel contact il vient.
 
 Brancher le système (magasin de confiance, proxy système) exige les droits
 administrateur, que l'application ne garde jamais : elle les demande au clic,
@@ -225,8 +236,8 @@ cargo test -p brocolis-app     # tests, dont l'interface pilotée par egui_kitte
 L'interface est écrite avec [egui](https://github.com/emilk/egui) (rendu
 OpenGL via glow), aux couleurs et dans la police du site. Ses tests la
 pilotent comme un utilisateur, par l'arbre d'accessibilité : activer puis
-couper la protection, refuser l'autorisation, gérer le trousseau, chiffrer
-puis déchiffrer un message.
+couper la protection, refuser l'autorisation, gérer le trousseau et les
+contacts, choisir les destinataires, chiffrer puis déchiffrer un message.
 
 ## Utilisation (CLI)
 
@@ -371,11 +382,12 @@ Pour une installation persistante, voir le dossier
 > qu'il faut pointer le client sur `127.0.0.1:<port>` manuellement.
 > `--no-system` lance le proxy sans aucune modification système.
 
-### Vérifier sa clé sans navigateur : `encrypt` / `decrypt`
+### Chiffrer un message sans navigateur : `encrypt` / `decrypt`
 
-Les deux commandes appliquent exactement la transformation du proxy, hors
-ligne. C'est le moyen le plus rapide de s'assurer qu'une clé est la bonne, ou
-de lire un jeton reçu par un autre canal.
+Hors ligne, pour vérifier une clé, préparer un message à coller ailleurs ou
+lire un jeton reçu par un autre canal. Avec des `((parenthèses))`, seuls ces
+segments sont chiffrés — exactement comme le proxy ; **sans parenthèses, c'est
+tout le message** qui devient un seul jeton.
 
 ```sh
 $ cle=$(brocolis keygen)                 # la clé seule sur stdout
@@ -386,11 +398,43 @@ $ echo '<jeton collé ici>' | brocolis decrypt --key "$cle"
 rdv code 4291 a 18h
 ```
 
-Sans `--key`, le trousseau de `brocolis.toml` est utilisé. Le texte peut venir
-de `--text` ou de l'entrée standard. Seul le texte transformé va sur stdout (le
-compte de segments part sur stderr), donc les commandes s'enchaînent dans un
-tube. Un jeton qu'aucune clé n'ouvre est laissé tel quel, sans erreur : c'est un
-message destiné à quelqu'un d'autre.
+Sans `--key`, `encrypt` chiffre pour les contacts `--to` (répétable), sinon
+pour les destinataires `encrypt_to` de `brocolis.toml`, sinon avec la clé
+principale ; `decrypt` essaie tout le trousseau, contacts compris, et dit de
+qui vient le message. Le texte peut venir de `--text` ou de l'entrée standard.
+Seul le texte transformé va sur stdout (le compte de segments et les journaux
+partent sur stderr), donc les commandes s'enchaînent dans un tube. Un jeton
+qu'aucune clé n'ouvre est laissé tel quel, sans erreur : c'est un message
+destiné à quelqu'un d'autre.
+
+### Contacts : plusieurs clés par correspondant
+
+```sh
+$ brocolis contacts add Alice              # crée Alice ; sa clé seule sur stdout,
+<clé base64, à transmettre à Alice>        # à lui transmettre par un canal sûr
+$ brocolis contacts add Alice --key "$k"   # une clé de plus pour Alice
+$ brocolis pair --code 4291 --name Bob     # appairage, clé rangée sous Bob
+$ brocolis contacts
+Alice
+   active   617E-6FC9-ABFF-B902
+   lecture  4D03-935B-179B-219C
+Bob
+   active   D6FA-8246-03F6-0ED4
+
+$ brocolis encrypt --to Alice --text 'On se voit demain'
+[[BROCOLIS:v1:…]]                          # tout le message, pour Alice
+$ brocolis encrypt --to Alice --to Bob --text 'rdv ((18h))'
+rdv [[BROCOLIS:v2:…]]                      # un seul jeton, lisible par les deux
+$ brocolis decrypt --text '[[BROCOLIS:v1:…]]'
+On se voit demain
+# 1 jeton(s) déchiffré(s) — de : Alice
+```
+
+La première clé d'un contact est sa clé **active** (elle chiffre) ;
+`contacts use NOM CLÉ` en change, `contacts remove NOM [--key CLÉ]` retire un
+contact ou l'une de ses clés, `contacts rename ANCIEN NOUVEAU` le renomme. Pour
+que le proxy chiffre pour des contacts, listez-les dans `encrypt_to` (voir
+`brocolis.example.toml`).
 
 ### Commandes de base
 
@@ -593,6 +637,12 @@ Seul le contenu **explicitement marqué** est chiffré : tout segment
 `[[BROCOLIS:v1:…]]` (AES-256-GCM) ; les jetons reçus dans les réponses sont
 déchiffrés à la volée. Le service distant ne stocke donc que du chiffré, alors
 que les utilisateurs partageant la clé voient le texte en clair.
+
+Dans le trafic web, seul ce qui est marqué est chiffré (chiffrer une requête
+entière la rendrait illisible pour le service). Le message entier, lui, se
+chiffre hors navigateur : `brocolis encrypt` ou l'onglet Message de
+l'application. Les destinataires du proxy se choisissent avec `encrypt_to` :
+la clé active de chaque contact nommé, un jeton `v2` s'ils sont plusieurs.
 
 ### Format de jeton (contrat d'interopérabilité)
 

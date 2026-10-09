@@ -32,6 +32,7 @@ cargo clippy --target wasm32-unknown-unknown --all-targets -- -D warnings
 trunk build --release          # site/dist est versionné : le committer
 cd .. && node scripts/check-dist.mjs
 cd tests/browser && npm test   # harnais navigateur
+# (Chromium préinstallé du conteneur : CHROMIUM_PATH=/opt/pw-browsers/chromium npm test)
 ```
 
 `site/dist` est déployé tel quel (Heroku n'a pas de chaîne Rust) : un `dist`

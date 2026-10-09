@@ -57,6 +57,8 @@ pub enum CryptoError {
     Aead,
     #[error("jeton chiffré corrompu")]
     BadToken,
+    #[error("aucune clé pour chiffrer")]
+    NoKey,
 }
 
 /// Clé symétrique AES-256 (32 octets) conservée en mémoire.
@@ -297,6 +299,58 @@ pub fn encrypt_marked_multi(input: &str, keys: &[SymKey]) -> (String, usize) {
     }
     out.push_str(rest);
     (out, count)
+}
+
+/// Le texte contient-il au moins un segment `((…))` complet ?
+pub fn has_marked_segment(input: &str) -> bool {
+    input
+        .find(PLAIN_OPEN)
+        .is_some_and(|open| input[open + PLAIN_OPEN.len()..].contains(PLAIN_CLOSE))
+}
+
+/// Ce que [`encrypt_message`] a chiffré.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sealed {
+    /// Les `n` segments `((marqués))`, le reste du message intact.
+    Segments(usize),
+    /// Le message entier, en un seul jeton.
+    Whole,
+    /// Rien : message vide.
+    Nothing,
+}
+
+/// Chiffre un message pour `keys` (une clé : jeton `v1` ; plusieurs : un seul
+/// jeton `v2` que chaque destinataire ouvre avec la sienne).
+///
+/// - S'il contient des segments `((…))`, seuls ceux-là sont chiffrés : on peut
+///   laisser le début de la phrase lisible et protéger un détail.
+/// - Sinon, c'est le message ENTIER qui est chiffré, en un seul jeton. Les
+///   espaces et sauts de ligne qui l'entourent restent en dehors, pour qu'il
+///   se colle proprement.
+///
+/// C'est la règle des outils (CLI `encrypt`, application). Le proxy, lui, ne
+/// chiffre QUE les segments marqués : chiffrer tout ce qu'un navigateur
+/// envoie casserait les sites.
+pub fn encrypt_message(input: &str, keys: &[SymKey]) -> Result<(String, Sealed), CryptoError> {
+    if keys.is_empty() {
+        return Err(CryptoError::NoKey);
+    }
+    if has_marked_segment(input) {
+        let (out, n) = encrypt_marked_multi(input, keys);
+        return Ok((out, Sealed::Segments(n)));
+    }
+    let body = input.trim();
+    if body.is_empty() {
+        return Ok((input.to_string(), Sealed::Nothing));
+    }
+    let start = input.len() - input.trim_start().len();
+    let end = start + body.len();
+    // Échec fermé, comme pour les segments : jamais de repli vers le clair.
+    let token = seal_token(body.as_bytes(), keys).ok_or(CryptoError::Aead)?;
+    Ok((
+        format!("{}{token}{}", &input[..start], &input[end..]),
+        Sealed::Whole,
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -759,5 +813,67 @@ mod tests {
             assert_eq!(m, 1);
             assert_eq!(dec, "salut secret fin");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_message {
+    use super::*;
+
+    #[test]
+    fn sans_parentheses_tout_le_message_est_chiffre() {
+        let k = SymKey::generate();
+        let (out, what) =
+            encrypt_message("\n  Rendez-vous demain à 18h  \n", std::slice::from_ref(&k)).unwrap();
+        assert_eq!(what, Sealed::Whole);
+        assert!(
+            out.starts_with("\n  [[BROCOLIS:v1:") && out.ends_with("]]  \n"),
+            "{out:?}"
+        );
+        assert!(!out.contains("Rendez-vous"));
+        let (clair, n) = decrypt_tokens(&out, &k);
+        assert_eq!((clair.as_str(), n), ("\n  Rendez-vous demain à 18h  \n", 1));
+    }
+
+    #[test]
+    fn avec_parentheses_seuls_les_segments_sont_chiffres() {
+        let k = SymKey::generate();
+        let (out, what) =
+            encrypt_message("rdv ((18h)) au ((café))", std::slice::from_ref(&k)).unwrap();
+        assert_eq!(what, Sealed::Segments(2));
+        assert!(out.starts_with("rdv [[BROCOLIS:v1:") && out.contains("]] au [[BROCOLIS:v1:"));
+        assert_eq!(decrypt_tokens(&out, &k).0, "rdv 18h au café");
+    }
+
+    #[test]
+    fn plusieurs_destinataires_un_seul_jeton_lisible_par_chacun() {
+        let (alice, bob, eve) = (SymKey::generate(), SymKey::generate(), SymKey::generate());
+        let (out, _) = encrypt_message("on se voit à 18h", &[alice.clone(), bob.clone()]).unwrap();
+        assert!(
+            out.starts_with("[[BROCOLIS:v2:"),
+            "un seul jeton multi-destinataire"
+        );
+        assert_eq!(decrypt_tokens(&out, &alice).0, "on se voit à 18h");
+        assert_eq!(decrypt_tokens(&out, &bob).0, "on se voit à 18h");
+        assert_eq!(decrypt_tokens(&out, &eve).1, 0, "les autres ne lisent rien");
+    }
+
+    #[test]
+    fn marqueur_incomplet_et_message_vide() {
+        let k = SymKey::generate();
+        // Une parenthèse ouvrante sans fermeture n'est pas un segment : tout
+        // le message est chiffré, rien ne part en clair par erreur.
+        assert!(!has_marked_segment("prix ((à confirmer"));
+        assert_eq!(
+            encrypt_message("prix ((à confirmer", std::slice::from_ref(&k))
+                .unwrap()
+                .1,
+            Sealed::Whole
+        );
+        assert_eq!(
+            encrypt_message("   ", std::slice::from_ref(&k)).unwrap().1,
+            Sealed::Nothing
+        );
+        assert!(matches!(encrypt_message("x", &[]), Err(CryptoError::NoKey)));
     }
 }

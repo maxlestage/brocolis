@@ -7,6 +7,7 @@
 pub mod agreement;
 pub mod ca;
 pub mod config;
+pub mod contacts;
 pub mod crypto;
 pub mod keys;
 pub mod pairing;
@@ -50,6 +51,19 @@ pub fn build_app_state(cfg: Config) -> anyhow::Result<(Arc<AppState>, Arc<KeyMan
         }
         let n = parsed.len();
         let km = KeyManager::from_keys(parsed, cfg.encrypt_multi);
+        // Destinataires choisis (`encrypt_to`) : la clé active de chacun.
+        let km = match cfg.encryption_targets()? {
+            Some(targets) => {
+                let keys = targets
+                    .iter()
+                    .map(|b64| SymKey::from_base64(b64))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|e| anyhow::anyhow!("clé de destinataire invalide: {e}"))?;
+                tracing::info!("Chiffrement pour : {}", cfg.encrypt_to.join(", "));
+                km.with_recipients(keys)
+            }
+            None => km,
+        };
         if n > 1 {
             tracing::info!(
                 "Trousseau: {n} clés — déchiffrement multi-clés{}.",

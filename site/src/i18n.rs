@@ -282,7 +282,7 @@ pub static FR: Strings = Strings {
     theme_dark: "Sombre",
 
     platforms_h: "Plateformes supportées",
-    platforms_intro: "Chaque téléchargement contient l'<strong>application Brocolis</strong> — un interrupteur, vos clés, vos messages — et la ligne de commande. <code>brocolis auto</code> détecte l'OS et fait le bon setup système. Téléchargez la build pour votre plateforme :",
+    platforms_intro: "Chaque téléchargement contient l'<strong>application Brocolis</strong> — un interrupteur, vos contacts, vos messages — et la ligne de commande. <code>brocolis auto</code> détecte l'OS et fait le bon setup système. Téléchargez la build pour votre plateforme :",
     platforms_macos_t: "macOS",
     platforms_macos_d: "Trousseau Système (Safari, Chrome, Edge) + politique entreprise Firefox + profil <code>.mobileconfig</code> alternatif + proxies web/HTTPS via <code>networksetup</code>. Binaire universel Intel + Apple Silicon.",
     platforms_macos_cta: "Télécharger pour macOS",
@@ -327,15 +327,15 @@ pub static FR: Strings = Strings {
     s2_cards: [
         Card {
             title: "Chiffrement sélectif",
-            body: "Seuls les segments <code>((entre doubles parenthèses))</code> sont chiffrés, en AES-256-GCM, sous la forme d'un jeton <code>[[BROCOLIS:v1:…]]</code>. Le serveur distant ne stocke que du chiffré.",
+            body: "Seuls les segments <code>((entre doubles parenthèses))</code> sont chiffrés, en AES-256-GCM, sous la forme d'un jeton <code>[[BROCOLIS:v1:…]]</code>. Le serveur distant ne stocke que du chiffré. Hors navigateur, sans parenthèses, c'est <strong>tout le message</strong> qui est chiffré.",
         },
         Card {
             title: "MITM transparent",
             body: "Interception HTTPS via <code>CONNECT</code>, certificats feuilles forgés à la volée par une autorité interne (<em>rcgen</em>), TLS terminé côté client avec <em>rustls</em>.",
         },
         Card {
-            title: "Clés partagées",
-            body: "Une clé symétrique 256 bits, partagée par canal sûr. Rotation immédiate via <code>SIGHUP</code>, rechargement via <code>SIGUSR1</code> (Unix).",
+            title: "Contacts et clés",
+            body: "Un contact, <strong>une ou plusieurs clés</strong> AES-256 : l'active chiffre, les autres lisent encore. Chiffrez pour un contact ou pour plusieurs à la fois — un seul jeton, que chacun ouvre avec sa clé — et sachez de qui vient un message.",
         },
         Card {
             title: "Multi-navigateurs",
@@ -431,7 +431,7 @@ pub static EN: Strings = Strings {
     theme_dark: "Dark",
 
     platforms_h: "Supported platforms",
-    platforms_intro: "Every download includes the <strong>Brocolis app</strong> — one switch, your keys, your messages — and the command-line tool. <code>brocolis auto</code> detects the OS and runs the right system setup. Download the build for your platform:",
+    platforms_intro: "Every download includes the <strong>Brocolis app</strong> — one switch, your contacts, your messages — and the command-line tool. <code>brocolis auto</code> detects the OS and runs the right system setup. Download the build for your platform:",
     platforms_macos_t: "macOS",
     platforms_macos_d: "System keychain (Safari, Chrome, Edge) + Firefox enterprise policy + alternative <code>.mobileconfig</code> profile + web/HTTPS proxies via <code>networksetup</code>. Universal binary Intel + Apple Silicon.",
     platforms_macos_cta: "Download for macOS",
@@ -476,15 +476,15 @@ pub static EN: Strings = Strings {
     s2_cards: [
         Card {
             title: "Selective encryption",
-            body: "Only segments wrapped in <code>((double parentheses))</code> are encrypted, with AES-256-GCM, as a <code>[[BROCOLIS:v1:…]]</code> token. The remote server only ever stores ciphertext.",
+            body: "Only segments wrapped in <code>((double parentheses))</code> are encrypted, with AES-256-GCM, as a <code>[[BROCOLIS:v1:…]]</code> token. The remote server only ever stores ciphertext. Outside the browser, without parentheses, the <strong>whole message</strong> is encrypted.",
         },
         Card {
             title: "Transparent MITM",
             body: "HTTPS interception via <code>CONNECT</code>, leaf certificates forged on the fly by an internal authority (<em>rcgen</em>), client-side TLS terminated with <em>rustls</em>.",
         },
         Card {
-            title: "Shared keys",
-            body: "A 256-bit symmetric key, shared over a secure channel. Immediate rotation via <code>SIGHUP</code>, reload via <code>SIGUSR1</code> (Unix).",
+            title: "Contacts and keys",
+            body: "One contact, <strong>one or more</strong> AES-256 keys: the active one encrypts, the others still read. Encrypt for one contact or several at once — a single token each opens with their own key — and know who a message comes from.",
         },
         Card {
             title: "Multi-browser",
@@ -580,7 +580,7 @@ pub static ES: Strings = Strings {
     theme_dark: "Oscuro",
 
     platforms_h: "Plataformas soportadas",
-    platforms_intro: "Cada descarga incluye la <strong>aplicación Brocolis</strong> — un interruptor, tus claves, tus mensajes — y la línea de comandos. <code>brocolis auto</code> detecta el SO y hace la configuración correcta. Descarga la build para tu plataforma:",
+    platforms_intro: "Cada descarga incluye la <strong>aplicación Brocolis</strong> — un interruptor, tus contactos, tus mensajes — y la línea de comandos. <code>brocolis auto</code> detecta el SO y hace la configuración correcta. Descarga la build para tu plataforma:",
     platforms_macos_t: "macOS",
     platforms_macos_d: "Llavero del Sistema (Safari, Chrome, Edge) + política empresarial Firefox + perfil <code>.mobileconfig</code> alternativo + proxies web/HTTPS vía <code>networksetup</code>. Binario universal Intel + Apple Silicon.",
     platforms_macos_cta: "Descargar para macOS",
@@ -625,15 +625,15 @@ pub static ES: Strings = Strings {
     s2_cards: [
         Card {
             title: "Cifrado selectivo",
-            body: "Solo los segmentos <code>((entre dobles paréntesis))</code> se cifran, con AES-256-GCM, como un token <code>[[BROCOLIS:v1:…]]</code>. El servidor remoto solo almacena texto cifrado.",
+            body: "Solo los segmentos <code>((entre dobles paréntesis))</code> se cifran, con AES-256-GCM, como un token <code>[[BROCOLIS:v1:…]]</code>. El servidor remoto solo almacena texto cifrado. Fuera del navegador, sin paréntesis, se cifra <strong>todo el mensaje</strong>.",
         },
         Card {
             title: "MITM transparente",
             body: "Interceptación HTTPS vía <code>CONNECT</code>, certificados hoja forjados al vuelo por una autoridad interna (<em>rcgen</em>), TLS terminado del lado cliente con <em>rustls</em>.",
         },
         Card {
-            title: "Claves compartidas",
-            body: "Una clave simétrica de 256 bits, compartida por un canal seguro. Rotación inmediata con <code>SIGHUP</code>, recarga con <code>SIGUSR1</code> (Unix).",
+            title: "Contactos y claves",
+            body: "Un contacto, <strong>una o varias</strong> claves AES-256: la activa cifra, las demás siguen leyendo. Cifra para un contacto o para varios a la vez — un solo token, que cada uno abre con su clave — y sabe de quién viene un mensaje.",
         },
         Card {
             title: "Multi-navegador",
