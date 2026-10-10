@@ -1,10 +1,10 @@
 //! Texte qui se « déchiffre » : les caractères défilent en glyphes aléatoires
 //! puis se fixent un à un, de gauche à droite — le thème même du site.
 //!
-//! Le texte appartient à Yew. On ne remplace donc jamais le nœud texte (Yew
-//! garde une référence dessus et ne mettrait plus à jour qu'un nœud détaché) :
-//! on réécrit seulement son contenu, et on le rend intact à la fin. Si Yew
-//! change le texte en cours de route — changement de langue —, le contenu lu
+//! Le texte appartient aux vues `active`. On ne remplace donc jamais le nœud
+//! texte (sa liaison garde une référence dessus et ne mettrait plus à jour
+//! qu'un nœud détaché) : on réécrit seulement son contenu, et on le rend
+//! intact à la fin. Si la liaison change le texte en cours de route — changement de langue —, le contenu lu
 //! ne correspond plus à ce qu'on a écrit : on adopte alors le nouveau texte
 //! comme cible.
 
@@ -25,7 +25,7 @@ pub struct Job {
     el: Element,
     node: Text,
     target: String,
-    /// Dernière valeur écrite : sert à détecter une réécriture par Yew.
+    /// Dernière valeur écrite : sert à détecter une réécriture par la vue.
     last: String,
     start: Option<f64>,
     delay: f64,

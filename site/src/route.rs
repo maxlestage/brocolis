@@ -3,15 +3,19 @@
 //! Le fragment est choisi plutôt que l'historique `pushState` pour la même
 //! raison qu'avant la réécriture : le site doit fonctionner à l'identique à la
 //! racine d'un domaine, sous un sous-chemin, ou ouvert depuis un fichier local,
-//! sans réécriture d'URL côté serveur ni page 404 de repli.
+//! sans réécriture d'URL côté serveur ni page 404 de repli. C'est aussi
+//! pourquoi le routeur d'`active` (`active::location`), qui suit le chemin et
+//! intercepte les clics sur les liens, n'est pas utilisé.
 //!
 //! Les liens restent donc de vraies ancres `<a href="#/...">` : le navigateur
 //! met le fragment à jour lui-même, l'historique et le clic-milieu
 //! fonctionnent, et on se contente d'écouter `hashchange`.
 
-use yew::prelude::*;
+use std::cell::Cell;
 
-use crate::dom::{Listener, window};
+use active::{State, use_state};
+
+use crate::dom::{Listener, scroll_to_top, window};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Route {
@@ -41,27 +45,55 @@ impl Route {
         }
     }
 
-    pub fn current() -> Self {
+    fn current() -> Self {
         Self::parse(&window().location().hash().unwrap_or_default())
     }
 }
 
-/// Route courante, réévaluée à chaque `hashchange`.
-#[hook]
-pub fn use_route() -> Route {
-    let route = use_state(Route::current);
+thread_local! {
+    static ROUTER: Cell<Option<Router>> = const { Cell::new(None) };
+}
 
-    {
-        let route = route.clone();
-        use_effect_with((), move |()| {
-            let listener = Listener::on_window("hashchange", move |_| {
-                route.set(Route::current());
-            });
-            move || drop(listener)
-        });
-    }
+/// La route courante, et le nombre de changements de page depuis le
+/// chargement : il sert à rejouer le volet de transition à chaque navigation
+/// (et pas au chargement, que le rideau d'ouverture couvre déjà).
+#[derive(Clone, Copy)]
+pub struct Router {
+    pub route: State<Route>,
+    pub navigations: State<u32>,
+}
 
-    *route
+/// Démarre le routeur. À appeler une fois, avant tout rendu.
+pub fn init() {
+    let router = Router {
+        route: use_state(Route::current()),
+        navigations: use_state(0),
+    };
+    ROUTER.with(|r| r.set(Some(router)));
+    let listener = Listener::on_window("hashchange", move |_| {
+        let next = Route::current();
+        if router.route.with(|r| *r == next) {
+            return;
+        }
+        // La nouvelle page est rendue pendant `set` : elle est en place
+        // quand on remonte.
+        router.route.set(next);
+        router.navigations.update(|n| *n += 1);
+        // Un lien vers `#/telecharger` ne désigne aucune ancre : le
+        // navigateur laisse donc la page où elle était, parfois au milieu de
+        // l'accueil.
+        if next == Route::Download {
+            scroll_to_top();
+        }
+    });
+    // Le routeur vit aussi longtemps que la page.
+    std::mem::forget(listener);
+}
+
+pub fn router() -> Router {
+    ROUTER
+        .with(Cell::get)
+        .expect("`route::init` est appelé au démarrage")
 }
 
 #[cfg(test)]

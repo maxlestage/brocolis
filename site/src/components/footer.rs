@@ -1,49 +1,69 @@
-use yew::prelude::*;
+use active::Node;
+use active::html::*;
 
-use crate::components::marquee::Marquee;
+use crate::components::marquee::marquee;
 use crate::dom::scroll_to_top;
-use crate::markup::{letters, raw, rolling};
+use crate::markup::{Translated, letters, rolling};
 use crate::route::Route;
-use crate::settings::use_t;
-
-#[derive(Properties, PartialEq)]
-pub struct FooterProps {
-    /// Appel final à télécharger. Absent de la page de téléchargement, où il
-    /// renverrait vers elle-même.
-    #[prop_or(true)]
-    pub cta: bool,
-}
 
 /// Pied de page en affiche : bandeau évidé à contresens, appel final, mot-marque
 /// géant dont les lettres se rassemblent en arrivant (`data-progress="enter"`)
 /// et sautent au survol, bouton de retour en haut.
-#[function_component]
-pub fn Footer(props: &FooterProps) -> Html {
-    let t = use_t();
-    let to_top = Callback::from(|_: MouseEvent| scroll_to_top());
+///
+/// `cta` : l'appel final à télécharger. Absent de la page de téléchargement,
+/// où il renverrait vers elle-même.
+pub fn site_footer(cta: bool) -> Node {
+    let call = cta.then(|| {
+        div()
+            .class("container footer-cta")
+            .child(
+                p().class("footer-h")
+                    .attr("data-reveal", "mask")
+                    .raw(|t| t.footer_h),
+            )
+            .child(
+                a().class("btn primary")
+                    .attr("data-magnetic", "")
+                    .href(Route::Download.href())
+                    .child(rolling(|t| t.nav_download))
+                    .child(
+                        span()
+                            .class("btn-arrow")
+                            .attr("aria-hidden", "true")
+                            .text("→"),
+                    ),
+            )
+    });
 
-    html! {
-        <footer class="footer">
-            <Marquee reverse={true} outline={true} />
-            if props.cta {
-                <div class="container footer-cta">
-                    <p class="footer-h" data-reveal="mask">{ raw(t.footer_h) }</p>
-                    <a class="btn primary" data-magnetic="" href={Route::Download.href()}>
-                        { rolling(t.nav_download) }
-                        <span class="btn-arrow" aria-hidden="true">{ "→" }</span>
-                    </a>
-                </div>
-            }
-            <div class="footer-word" aria-hidden="true" data-progress="enter">
-                { letters("Brocolis") }
-            </div>
-            <div class="container footer-meta">
-                <p>{ t.footer }</p>
-                <button type="button" class="to-top" data-magnetic="" onclick={to_top}>
-                    <span class="to-top-arrow" aria-hidden="true">{ "↑" }</span>
-                    { rolling(t.footer_top) }
-                </button>
-            </div>
-        </footer>
-    }
+    footer()
+        .class("footer")
+        .child(marquee(true, true, None))
+        .child(call)
+        .child(
+            div()
+                .class("footer-word")
+                .attr("aria-hidden", "true")
+                .attr("data-progress", "enter")
+                .children(letters("Brocolis")),
+        )
+        .child(
+            div()
+                .class("container footer-meta")
+                .child(p().tr(|t| t.footer))
+                .child(
+                    button()
+                        .attr("type", "button")
+                        .class("to-top")
+                        .attr("data-magnetic", "")
+                        .on_click(|_| scroll_to_top())
+                        .child(
+                            span()
+                                .class("to-top-arrow")
+                                .attr("aria-hidden", "true")
+                                .text("↑"),
+                        )
+                        .child(rolling(|t| t.footer_top)),
+                ),
+        )
+        .into()
 }

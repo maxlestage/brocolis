@@ -1,4 +1,4 @@
-//! Les quelques accès au DOM qui ne passent pas par le rendu de Yew : titre de
+//! Les quelques accès au DOM qui ne passent pas par les vues : titre de
 //! l'onglet, balises `<meta>`, attributs de `<html>`, stockage local,
 //! défilement, écouteurs d'événements globaux.
 //!
@@ -125,8 +125,8 @@ pub fn focus_id(id: &str) {
 }
 
 /// Écouteur d'événement global dont la durée de vie est celle de la valeur :
-/// il se retire du DOM à la destruction. C'est ce qui permet de le rendre
-/// depuis un effet de Yew sans fuite ni écouteur fantôme.
+/// il se retire du DOM à la destruction. Confié à une vue (`markup::keep`),
+/// il disparaît avec elle, sans fuite ni écouteur fantôme.
 pub struct Listener {
     target: EventTarget,
     kind: &'static str,

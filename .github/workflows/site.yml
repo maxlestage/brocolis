@@ -1,6 +1,6 @@
 name: Site (WebAssembly)
 
-# Le site vitrine est une application Yew compilée en WebAssembly (crate
+# Le site vitrine est une application `active` compilée en WebAssembly (crate
 # `site/`, indépendante du proxy). Ce workflow vérifie qu'elle compile, qu'elle
 # est propre au sens de clippy, et que le `site/dist` versionné est complet.
 #

@@ -15,13 +15,15 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use active::html::*;
+use active::{Element, Node, State, fragment_dyn, text_dyn, use_state};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 use web_sys::{IntersectionObserver, IntersectionObserverEntry};
-use yew::prelude::*;
 
+use crate::markup::{Translated, keep, tr};
 use crate::motion::{FrameLoop, glyph, reduced};
-use crate::settings::use_t;
+use crate::settings::t;
 
 /// Durée d'un cycle complet, et jalons (ms).
 const CYCLE: f64 = 10_500.0;
@@ -72,156 +74,256 @@ fn phase(t: f64, (start, end): (f64, f64)) -> f64 {
     ((t - start) / (end - start)).clamp(0.0, 1.0)
 }
 
-#[function_component]
-pub fn Demo() -> Html {
-    let t = use_t();
-    let clock = use_state(|| (STILL, 0u32));
-    let host = use_node_ref();
+/// Le temps de la scène : instant dans le cycle (ms) et numéro du tour.
+#[derive(Clone, Copy)]
+struct Clock(State<(f64, u32)>);
 
-    {
-        let (clock, host) = (clock.clone(), host.clone());
-        use_effect_with((), move |()| {
-            let mut keep = None;
-            if !reduced()
-                && let Some(el) = host.cast::<web_sys::Element>()
-            {
-                let visible = Rc::new(Cell::new(false));
-                let started = Rc::new(Cell::new(None::<f64>));
-                let frame = Rc::new(FrameLoop::new({
-                    let (visible, started) = (visible.clone(), started.clone());
-                    move |now| {
-                        if !visible.get() {
-                            return false;
-                        }
-                        let t0 = started.get().unwrap_or(now);
-                        started.set(Some(t0));
-                        let elapsed = now - t0;
-                        clock.set((elapsed % CYCLE, (elapsed / CYCLE) as u32));
-                        true
-                    }
-                }));
-                let on_view = Closure::<dyn FnMut(js_sys::Array)>::new({
-                    let frame = frame.clone();
-                    move |entries: js_sys::Array| {
-                        for entry in entries.iter() {
-                            let entry: IntersectionObserverEntry = entry.unchecked_into();
-                            visible.set(entry.is_intersecting());
-                        }
-                        if visible.get() {
-                            frame.wake();
-                        }
-                    }
-                });
-                if let Ok(io) = IntersectionObserver::new(on_view.as_ref().unchecked_ref()) {
-                    io.observe(&el);
-                    keep = Some((io, on_view, frame));
-                }
-            }
-            move || {
-                if let Some((io, _, _)) = &keep {
-                    io.disconnect();
-                }
-                drop(keep);
-            }
-        });
+impl Clock {
+    fn time(self) -> f64 {
+        self.0.with(|c| c.0)
     }
 
-    let (time, round) = *clock;
-    let plain = format!("(({}))", t.demo_secret);
-    let sealed = token(round);
+    fn round(self) -> u32 {
+        self.0.with(|c| c.1)
+    }
 
-    // Ligne 1 : le message se tape, caractère par caractère.
-    let typed_len = {
-        let total =
-            t.demo_before.chars().count() + plain.chars().count() + t.demo_after.chars().count();
-        ((time / TYPE_END).min(1.0) * total as f64).round() as usize
-    };
-    let mut left = typed_len;
-    let mut take = |s: &str| {
-        let n = s.chars().count().min(left);
-        left -= n;
-        s.chars().take(n).collect::<String>()
-    };
-    let (w_before, w_secret, w_after) = (take(t.demo_before), take(&plain), take(t.demo_after));
-    let typing = time < TYPE_END;
+    /// Le secret, tel que tapé : `((…))`.
+    fn plain() -> String {
+        format!("(({}))", t().demo_secret)
+    }
 
-    // Ligne 2 : le secret se scelle en jeton. Ligne 3 : il se rouvre.
-    let seal = phase(time, SEAL);
-    let open = phase(time, OPEN);
-    let server = morph(&plain, &sealed, seal);
-    let friend = if open > 0.0 {
-        morph(&sealed, t.demo_secret, open)
-    } else {
-        server.clone()
-    };
+    /// Ligne 1 : le message se tape, caractère par caractère. Renvoie les
+    /// trois morceaux déjà tapés (avant, secret, après).
+    fn typed(self) -> [String; 3] {
+        let t = t();
+        let plain = Self::plain();
+        let parts = [t.demo_before, plain.as_str(), t.demo_after];
+        let total: usize = parts.iter().map(|s| s.chars().count()).sum();
+        let mut left = ((self.time() / TYPE_END).min(1.0) * total as f64).round() as usize;
+        parts.map(|s| {
+            let n = s.chars().count().min(left);
+            left -= n;
+            s.chars().take(n).collect()
+        })
+    }
 
-    let row = |n: usize, on: bool, state: Option<(&str, bool)>, body: Html| {
-        let chip = state.map(|(label, open)| {
-            html! {
-                <span class={classes!("demo-chip", open.then_some("open"))}>
-                    <span class="demo-chip-icon">{ if open { "🔓" } else { "🔒" } }</span>
-                    { label }
-                </span>
-            }
-        });
-        html! {
-            <div class={classes!("demo-row", on.then_some("on"))}>
-                <span class="demo-label">
-                    <span class="demo-n">{ format!("{:02}", n + 1) }</span>
-                    { t.demo_rows[n] }
-                </span>
-                <p class="demo-line">{ body }</p>
-                { for chip }
-            </div>
+    /// Ligne 2 : le secret se scelle en jeton.
+    fn server(self) -> String {
+        morph(
+            &Self::plain(),
+            &token(self.round()),
+            phase(self.time(), SEAL),
+        )
+    }
+
+    /// Ligne 3 : chez les proches, le jeton se rouvre.
+    fn friend(self) -> String {
+        let open = phase(self.time(), OPEN);
+        if open > 0.0 {
+            morph(&token(self.round()), t().demo_secret, open)
+        } else {
+            self.server()
         }
-    };
+    }
 
-    let fading = time >= FADE;
+    fn opened(self) -> bool {
+        phase(self.time(), OPEN) >= 1.0
+    }
+}
 
-    html! {
-        <section class="demo" aria-labelledby="demo-h">
-            <p class="kicker" data-reveal="" data-scramble="">{ t.demo_kicker }</p>
-            <h2 id="demo-h" class="demo-h" data-reveal="mask">{ t.demo_h }</h2>
-            <p class="sr-only">{ t.demo_sr }</p>
-            <div
-                ref={host}
-                class={classes!("demo-board", fading.then_some("fading"))}
-                aria-hidden="true"
-                data-reveal="card"
-                data-tilt=""
-                data-spot=""
-            >
-                { row(0, true, None, html! {
-                    <>
-                        { w_before }
-                        <mark class="demo-secret">{ w_secret }</mark>
-                        { w_after }
-                        if typing { <span class="demo-caret" /> }
-                    </>
-                }) }
-                { row(1, time >= SEAL.0, Some((t.demo_locked, false)), html! {
-                    <>
-                        { t.demo_before }
-                        <span class={classes!("demo-token", (seal >= 1.0).then_some("sealed"))}>{ server }</span>
-                        { t.demo_after }
-                    </>
-                }) }
-                { row(2, time >= OPEN.0, Some(if open >= 1.0 { (t.demo_unlocked, true) } else { (t.demo_locked, false) }), html! {
-                    <>
-                        { t.demo_before }
-                        <span class={classes!("demo-token", (open >= 1.0).then_some("clear"))}>{ friend }</span>
-                        { t.demo_after }
-                    </>
-                }) }
-                { row(3, time >= OPEN.0, Some((t.demo_locked, false)), html! {
-                    <>
-                        { t.demo_before }
-                        <span class="demo-token sealed">{ sealed.clone() }</span>
-                        { t.demo_after }
-                    </>
-                }) }
-            </div>
-        </section>
+/// Une ligne de la scène : numéro, lecteur, message et, sauf pour l'auteur,
+/// l'état du message chez ce lecteur — verrouillé, ou ouvert quand `open`
+/// devient vrai.
+fn row(
+    n: usize,
+    on: impl Fn() -> bool + 'static,
+    open: Option<fn(Clock) -> bool>,
+    clock: Clock,
+    line: Element,
+) -> Element {
+    let chip = open.map(|open| {
+        let open = move || open(clock);
+        span()
+            .class("demo-chip")
+            .class_if("open", open)
+            .child(
+                span()
+                    .class("demo-chip-icon")
+                    .text_dyn(move || if open() { "🔓" } else { "🔒" }.to_owned()),
+            )
+            .child(tr(move |t| {
+                if open() {
+                    t.demo_unlocked
+                } else {
+                    t.demo_locked
+                }
+            }))
+    });
+    div()
+        .class("demo-row")
+        .class_if("on", on)
+        .child(
+            span()
+                .class("demo-label")
+                .child(span().class("demo-n").text(format!("{:02}", n + 1)))
+                .tr(move |t| t.demo_rows[n]),
+        )
+        .child(line.class("demo-line"))
+        .child(chip)
+}
+
+/// Message dont le secret est remplacé par `token` (lignes 2 à 4).
+fn token_line(token: Element) -> Element {
+    p().tr(|t| t.demo_before).child(token).tr(|t| t.demo_after)
+}
+
+pub fn demo() -> Node {
+    let clock = Clock(use_state((STILL, 0u32)));
+    // Le curseur n'existe que pendant la frappe. Un état à part, écrit
+    // seulement quand il change : la région qui l'ajoute ou le retire n'est
+    // pas reconstruite à chaque image.
+    let typing = use_state(STILL < TYPE_END);
+
+    let typed = move |i: usize| text_dyn(move || clock.typed()[i].clone());
+    let line0 = p()
+        .child(typed(0))
+        .child(mark().class("demo-secret").child(typed(1)))
+        .child(typed(2))
+        .child(fragment_dyn(move || {
+            if typing.get() {
+                vec![span().class("demo-caret").into()]
+            } else {
+                Vec::new()
+            }
+        }));
+    let line1 = token_line(
+        span()
+            .class("demo-token")
+            .class_if("sealed", move || phase(clock.time(), SEAL) >= 1.0)
+            .text_dyn(move || clock.server()),
+    );
+    let line2 = token_line(
+        span()
+            .class("demo-token")
+            .class_if("clear", move || clock.opened())
+            .text_dyn(move || clock.friend()),
+    );
+    let line3 = token_line(
+        span()
+            .class("demo-token sealed")
+            .text_dyn(move || token(clock.round())),
+    );
+
+    let sealed: fn(Clock) -> bool = |_| false;
+    let board = div()
+        .class("demo-board")
+        .class_if("fading", move || clock.time() >= FADE)
+        .attr("aria-hidden", "true")
+        .attr("data-reveal", "card")
+        .attr("data-tilt", "")
+        .attr("data-spot", "")
+        .on_mount(move |el| start(el, clock, typing))
+        .child(row(0, || true, None, clock, line0))
+        .child(row(
+            1,
+            move || clock.time() >= SEAL.0,
+            Some(sealed),
+            clock,
+            line1,
+        ))
+        .child(row(
+            2,
+            move || clock.time() >= OPEN.0,
+            Some(Clock::opened),
+            clock,
+            line2,
+        ))
+        .child(row(
+            3,
+            move || clock.time() >= OPEN.0,
+            Some(sealed),
+            clock,
+            line3,
+        ));
+
+    section()
+        .class("demo")
+        .attr("aria-labelledby", "demo-h")
+        .child(
+            p().class("kicker")
+                .attr("data-reveal", "")
+                .attr("data-scramble", "")
+                .tr(|t| t.demo_kicker),
+        )
+        .child(
+            h2().id("demo-h")
+                .class("demo-h")
+                .attr("data-reveal", "mask")
+                .tr(|t| t.demo_h),
+        )
+        .child(p().class("sr-only").tr(|t| t.demo_sr))
+        .child(board)
+        .into()
+}
+
+/// La scène boucle tant qu'elle est à l'écran et s'arrête dès qu'elle en
+/// sort. Sans mouvement, elle reste figée sur son état final.
+fn start(el: &web_sys::Element, clock: Clock, typing: State<bool>) {
+    if reduced() {
+        return;
+    }
+    let visible = Rc::new(Cell::new(false));
+    let started = Rc::new(Cell::new(None::<f64>));
+    let frame = Rc::new(FrameLoop::new({
+        let (visible, started) = (visible.clone(), started.clone());
+        move |now| {
+            if !visible.get() {
+                return false;
+            }
+            let t0 = started.get().unwrap_or(now);
+            started.set(Some(t0));
+            let elapsed = now - t0;
+            let time = elapsed % CYCLE;
+            clock.0.set((time, (elapsed / CYCLE) as u32));
+            if typing.with(|on| *on != (time < TYPE_END)) {
+                typing.set(time < TYPE_END);
+            }
+            true
+        }
+    }));
+    let on_view = Closure::<dyn FnMut(js_sys::Array)>::new({
+        let frame = frame.clone();
+        move |entries: js_sys::Array| {
+            for entry in entries.iter() {
+                let entry: IntersectionObserverEntry = entry.unchecked_into();
+                visible.set(entry.is_intersecting());
+            }
+            if visible.get() {
+                frame.wake();
+            }
+        }
+    });
+    if let Ok(observer) = IntersectionObserver::new(on_view.as_ref().unchecked_ref()) {
+        observer.observe(el);
+        // Libéré avec la page : l'observateur est déconnecté, l'image en
+        // attente annulée.
+        keep(Watch {
+            observer,
+            _on_view: on_view,
+            _frame: frame,
+        });
+    }
+}
+
+struct Watch {
+    observer: IntersectionObserver,
+    _on_view: Closure<dyn FnMut(js_sys::Array)>,
+    _frame: Rc<FrameLoop>,
+}
+
+impl Drop for Watch {
+    fn drop(&mut self) {
+        self.observer.disconnect();
     }
 }
 

@@ -1,58 +1,62 @@
-use yew::prelude::*;
+use active::Node;
+use active::html::*;
 
-use crate::components::app_mock::SectionApp;
-use crate::components::demo::Demo;
-use crate::components::footer::Footer;
-use crate::components::hero::Hero;
-use crate::components::manifesto::Manifesto;
-use crate::components::marquee::Marquee;
-use crate::components::navbar::Navbar;
+use crate::components::app_mock::section_app;
+use crate::components::demo::demo;
+use crate::components::footer::site_footer;
+use crate::components::hero::hero;
+use crate::components::manifesto::manifesto;
+use crate::components::marquee::marquee;
+use crate::components::navbar::navbar;
 use crate::components::sections::{
-    SectionFeatures, SectionHowItWorks, SectionPlatforms, SectionPrivacy, SectionQuickstart,
-    SectionSwitch,
+    section_features, section_how_it_works, section_platforms, section_privacy, section_quickstart,
+    section_switch,
 };
-use crate::components::skip_link::SkipLink;
+use crate::components::skip_link::skip_link;
 
 /// Page d'accueil : l'assemblage des sections.
-#[function_component]
-pub fn Landing() -> Html {
-    html! {
-        <>
-            <SkipLink />
-            <Navbar />
-            <Hero />
-            <Marquee />
-            // `tabindex="-1"` : non atteignable par tabulation, mais
-            // focalisable par programme — c'est ce qui permet au lien d'évitement
-            // de déplacer réellement le focus clavier ici.
-            <main id="contenu" class="container" tabindex="-1">
-                <Manifesto />
-                <Demo />
-                <SectionPlatforms />
-                <SectionSwitch />
-                <SectionFeatures />
-                <SectionQuickstart />
-                <SectionApp />
-                <SectionHowItWorks />
-                <SectionPrivacy />
-            </main>
-            <Footer />
-            <Spy />
-        </>
-    }
+pub fn landing() -> Node {
+    Node::from([
+        skip_link(),
+        navbar(),
+        hero(),
+        marquee(false, false, None),
+        // `tabindex="-1"` : non atteignable par tabulation, mais
+        // focalisable par programme — c'est ce qui permet au lien d'évitement
+        // de déplacer réellement le focus clavier ici.
+        main()
+            .id("contenu")
+            .class("container")
+            .attr("tabindex", "-1")
+            .child(manifesto())
+            .child(demo())
+            .child(section_platforms())
+            .child(section_switch())
+            .child(section_features())
+            .child(section_quickstart())
+            .child(section_app())
+            .child(section_how_it_works())
+            .child(section_privacy())
+            .into(),
+        site_footer(true),
+        spy(),
+    ])
 }
 
 /// Repère de section, en bas à gauche sur grand écran : le numéro de la
 /// section courante défile comme un compteur mécanique (`--spy`, écrit par
 /// `motion`). Décoratif — la barre de navigation porte la même information
 /// (`data-current`) de façon accessible.
-#[function_component]
-fn Spy() -> Html {
-    let digits = (1..=7).map(|n| html! { <span>{ format!("{n:02}") }</span> });
-    html! {
-        <div class="spy" aria-hidden="true">
-            <span class="spy-window"><span class="spy-strip">{ for digits }</span></span>
-            <span class="spy-total">{ "/ 07" }</span>
-        </div>
-    }
+fn spy() -> Node {
+    let digits = (1..=7).map(|n| span().text(format!("{n:02}")));
+    div()
+        .class("spy")
+        .attr("aria-hidden", "true")
+        .child(
+            span()
+                .class("spy-window")
+                .child(span().class("spy-strip").children(digits)),
+        )
+        .child(span().class("spy-total").text("/ 07"))
+        .into()
 }

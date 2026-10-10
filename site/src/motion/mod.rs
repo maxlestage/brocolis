@@ -1,6 +1,6 @@
 //! Le mouvement du site, inspiré de zamocorp.com.
 //!
-//! Un seul contrôleur, une seule boucle d'animation. Les composants Yew ne
+//! Un seul contrôleur, une seule boucle d'animation. Les composants ne
 //! savent rien de tout ça : ils posent des attributs, et ce module les découvre
 //! dans le DOM. Le DOM est surveillé (`MutationObserver`) : un changement de
 //! page ou de langue est pris en compte sans que les composants aient à
@@ -25,10 +25,10 @@
 //! pointeur, -1 → 1), `--spy` (rang de la section courante), et les classes
 //! `scrolled`, `nav-hidden`, `spy-on`.
 //!
-//! Rien ne passe par l'état de Yew : les valeurs qui changent à chaque image
-//! sont écrites en variables CSS, et c'est la feuille de style qui en fait du
-//! mouvement. Yew ne réconcilie que les attributs qu'il a lui-même posés, il
-//! ne touche donc jamais à ceux-là.
+//! Rien ne passe par les états des vues : les valeurs qui changent à chaque
+//! image sont écrites en variables CSS, et c'est la feuille de style qui en
+//! fait du mouvement. `active` ne met à jour que les attributs qu'une vue a
+//! liés, il ne touche donc jamais à ceux-là.
 //!
 //! Le défilement reste celui du navigateur — pas de défilement « lissé » qui
 //! détourne la molette : c'est ce qui casse le plus souvent l'accessibilité et
