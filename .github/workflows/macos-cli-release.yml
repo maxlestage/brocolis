@@ -133,5 +133,5 @@ jobs:
         run: |
           gh release create "${GITHUB_REF_NAME}" ${{ steps.collect.outputs.files }} \
             --repo "${GITHUB_REPOSITORY}" \
-            --title "Brocolis ${GITHUB_REF_NAME}" \
-            --notes "Release ${GITHUB_REF_NAME} (macOS universel Intel + Apple Silicon)."
+            --title "Brocolis ${GITHUB_REF_NAME} macOS" \
+            --notes "Release ${GITHUB_REF_NAME} pour macOS : application Brocolis.app et ligne de commande (universel Intel + Apple Silicon)."

@@ -135,5 +135,6 @@ jobs:
         run: |
           gh release create "${GITHUB_REF_NAME}-linux" ${{ steps.collect.outputs.files }} \
             --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
             --title "Brocolis ${GITHUB_REF_NAME} Linux" \
             --notes "Release ${GITHUB_REF_NAME} pour Linux (.deb pour Debian/Ubuntu, .rpm pour Fedora/RHEL ; x86_64)."

@@ -1,6 +1,6 @@
 [package]
 name = "brocolis"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 # Adresse de non-réponse GitHub, comme dans les métadonnées de paquet
 # plus bas : le dépôt n'expose volontairement pas d'adresse personnelle.
