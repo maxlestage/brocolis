@@ -1,3 +1,8 @@
+//! Les composants du site : des fonctions qui renvoient une vue `active`.
+//!
+//! Leurs noms évitent ceux des balises (`footer`, `header`, `nav`…), que les
+//! modules importent toutes depuis `active::html`.
+
 pub mod ambient;
 pub mod app_mock;
 pub mod curtain;
@@ -13,7 +18,7 @@ pub mod sections;
 pub mod skip_link;
 pub mod switchers;
 
-pub use ambient::Ambient;
-pub use curtain::Curtain;
-pub use download::DownloadPage;
-pub use landing::Landing;
+pub use ambient::ambient;
+pub use curtain::curtain;
+pub use download::download_page;
+pub use landing::landing;

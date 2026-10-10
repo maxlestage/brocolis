@@ -80,7 +80,7 @@ async function newPage(viewport, locale = "fr-FR") {
  * vient pas : l'assertion qui suit doit pouvoir rapporter la valeur réelle.
  *
  * Toutes les attentes du harnais passent par là plutôt que par un délai fixe.
- * Yew rend de façon asynchrone et plusieurs propriétés sont animées : un
+ * Plusieurs rendus suivent un événement ou une image, et des propriétés sont animées : un
  * `waitForTimeout` calibré sur cette machine devient une source d'échecs
  * intermittents sur une machine plus lente — c'est exactement ce qui est
  * arrivé à l'assertion sur le fond sombre.

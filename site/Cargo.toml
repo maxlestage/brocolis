@@ -3,7 +3,7 @@ name = "brocolis-site"
 version = "0.1.0"
 edition = "2024"
 publish = false
-description = "Site vitrine Brocolis — application WebAssembly (Yew)"
+description = "Site vitrine Brocolis — application WebAssembly (active)"
 authors = ["Maxime Nathan Lestage <maxlestage@users.noreply.github.com>"]
 license = "LicenseRef-Proprietary"
 
@@ -15,8 +15,13 @@ license = "LicenseRef-Proprietary"
 [workspace]
 
 [dependencies]
-# Rendu côté client uniquement : pas de SSR, le site est servi en statique.
-yew = { version = "0.23", features = ["csr"] }
+# Bibliothèque front-end du même auteur (https://github.com/maxlestage/Active),
+# épinglée sur une révision : le `dist` versionné doit pouvoir être reconstruit
+# à l'identique. Rendu côté client uniquement (`client`) : le site est servi en
+# statique, sans serveur Rust. La fonctionnalité est activée sur toutes les
+# cibles — `cargo test` compile aussi pour l'hôte, où ce code n'est jamais
+# exécuté.
+active = { git = "https://github.com/maxlestage/Active", rev = "3b5c7468a37a644731f1d83e6c52b8c213a8481b", features = ["client"] }
 wasm-bindgen = "0.2"
 web-sys = { version = "0.3", features = [
     "CanvasRenderingContext2d",

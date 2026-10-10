@@ -1,6 +1,8 @@
-use yew::prelude::*;
+use active::html::*;
+use active::{Node, fragment_dyn};
 
-use crate::settings::use_t;
+use crate::markup::Translated;
+use crate::settings::t;
 
 /// Manifeste : une phrase dont les mots s'allument au fil du défilement.
 ///
@@ -8,24 +10,39 @@ use crate::settings::use_t;
 /// (`--p`, `data-progress="read"`) sur le bloc, et la CSS en déduit l'opacité,
 /// la hauteur et le flou de chaque mot. Sans mouvement, la phrase est
 /// simplement affichée en entier.
-#[function_component]
-pub fn Manifesto() -> Html {
-    let t = use_t();
-    let words: Vec<&str> = t.manifesto.split_whitespace().collect();
-    let n = words.len();
-    let spans = words.into_iter().enumerate().map(|(i, w)| {
-        html! {
-            <>
-                <span class="word" style={format!("--i: {i}")}>{ w }</span>
-                { " " }
-            </>
-        }
+pub fn manifesto() -> Node {
+    let words = fragment_dyn(|| {
+        t().manifesto
+            .split_whitespace()
+            .enumerate()
+            .flat_map(|(i, w)| {
+                [
+                    span()
+                        .class("word")
+                        .style(format!("--i: {i}"))
+                        .text(w)
+                        .into(),
+                    " ".into(),
+                ]
+            })
+            .collect()
     });
 
-    html! {
-        <div class="manifesto" data-progress="read">
-            <p class="kicker" data-reveal="" data-scramble="">{ t.manifesto_label }</p>
-            <p class="manifesto-text" style={format!("--n: {n}")}>{ for spans }</p>
-        </div>
-    }
+    div()
+        .class("manifesto")
+        .attr("data-progress", "read")
+        .child(
+            p().class("kicker")
+                .attr("data-reveal", "")
+                .attr("data-scramble", "")
+                .tr(|t| t.manifesto_label),
+        )
+        .child(
+            p().class("manifesto-text")
+                .attr_dyn("style", || {
+                    format!("--n: {}", t().manifesto.split_whitespace().count())
+                })
+                .child(words),
+        )
+        .into()
 }

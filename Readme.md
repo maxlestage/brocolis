@@ -452,8 +452,12 @@ Il suffit de télécharger l'artefact correspondant à votre OS depuis l'onglet
 
 ### Site vitrine : application WebAssembly
 
-Le site (`site/`) est une application **Yew compilée en WebAssembly** — même
-langage que le proxy, donc une seule chaîne d'outils pour tout le dépôt.
+Le site (`site/`) est écrit avec **[active](https://github.com/maxlestage/Active)**
+et compilé en WebAssembly — même langage que le proxy, donc une seule chaîne
+d'outils pour tout le dépôt. Les composants sont des fonctions Rust qui
+renvoient une vue ; chaque texte, attribut ou classe qui dépend d'un état est
+lié directement au DOM, sans DOM virtuel : changer de langue réécrit les
+textes en place.
 Trois langues (fr/en/es), trois thèmes, routage par fragment d'URL, aucun
 appel réseau en dehors des téléchargements.
 
@@ -500,7 +504,7 @@ composants posent des attributs (`data-reveal`, `data-scramble`,
 `data-progress`, `data-marquee`, `data-tilt`, `data-magnetic`…, liste
 complète en tête de `motion/mod.rs`), le contrôleur les découvre dans le DOM
 et écrit des variables CSS ; la feuille de style en fait du mouvement. Le
-texte « déchiffré » réécrit le nœud texte de Yew sans le remplacer, et suit
+texte « déchiffré » réécrit le nœud texte lié par la vue sans le remplacer, et suit
 un changement de langue survenu en cours d'animation. Le défilement reste
 natif (pas de défilement « lissé »). Sous `prefers-reduced-motion: reduce`,
 rien n'est épinglé ni caché, et la démonstration est figée sur son état final.

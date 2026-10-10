@@ -4,44 +4,50 @@
 //! la même fenêtre, les mêmes couleurs (fixes, quel que soit le thème du
 //! site — c'est une image de l'application) et les mêmes mots.
 //!
-//! - [`app_bar`] et [`power`] : la barre de titre et le grand interrupteur,
-//!   repris par la section « Un clic ».
-//! - [`SectionApp`] : la visite des trois onglets. Les onglets sont de vrais
+//! - [`app_bar`] et [`power_disc`] : la barre de titre et le grand
+//!   interrupteur, repris par la section « Un clic ».
+//! - [`section_app`] : la visite des trois onglets. Les onglets sont de vrais
 //!   onglets (motif WAI-ARIA : flèches, Origine, Fin) ; l'interrupteur de
 //!   l'onglet Protection se manipule. Le reste est un décor : des libellés,
 //!   pas des boutons qui ne feraient rien.
 
+use active::html::*;
+use active::{Element, Node, State, fragment_dyn, use_state};
+use wasm_bindgen::JsCast;
 use web_sys::HtmlElement;
-use yew::prelude::*;
 
 use crate::components::demo::token;
-use crate::markup::{raw, words};
-use crate::settings::use_t;
+use crate::components::sections::head;
+use crate::dom::document;
+use crate::markup::{Translated, tr, words};
+use crate::settings::t;
 
 /// Barre de titre de la fenêtre : les trois pastilles et le nom.
-pub fn app_bar() -> Html {
-    html! {
-        <div class="app-bar" aria-hidden="true">
-            <span class="app-dots" />
-            <span class="app-name">{ "Brocolis" }</span>
-        </div>
-    }
+pub fn app_bar() -> Node {
+    div()
+        .class("app-bar")
+        .attr("aria-hidden", "true")
+        .child(span().class("app-dots"))
+        .child(span().class("app-name").text("Brocolis"))
+        .into()
 }
 
 /// Le disque « marche/arrêt » et ses deux ondes, sans le bouton qui l'entoure.
-pub fn power_disc() -> Html {
-    html! {
-        <>
-            <span class="power-wave" aria-hidden="true" />
-            <span class="power-wave" aria-hidden="true" />
-            <span class="power-disc" aria-hidden="true">
-                <svg class="power-glyph" viewBox="0 0 48 48">
-                    <path d="M15.6 16 A13 13 0 1 0 32.4 16" />
-                    <path d="M24 8 V24" />
-                </svg>
-            </span>
-        </>
-    }
+pub fn power_disc() -> Node {
+    Node::from([
+        span().class("power-wave").attr("aria-hidden", "true"),
+        span().class("power-wave").attr("aria-hidden", "true"),
+        span()
+            .class("power-disc")
+            .attr("aria-hidden", "true")
+            .child(
+                svg()
+                    .class("power-glyph")
+                    .attr("viewBox", "0 0 48 48")
+                    .child(path().attr("d", "M15.6 16 A13 13 0 1 0 32.4 16"))
+                    .child(path().attr("d", "M24 8 V24")),
+            ),
+    ])
 }
 
 /// Les contacts de la maquette : nom, empreinte, clé masquée, destinataire
@@ -62,45 +68,44 @@ const CONTACTS: [(&str, &str, &str, bool); 2] = [
 ];
 
 /// Pastilles de destinataires : vous, Alice (choisie), Bob.
-fn chips(me: &str) -> Html {
-    html! {
-        <div class="mock-chips">
-            <span class="mock-chip">{ me.to_owned() }</span>
-            <span class="mock-chip on">{ "✔ Alice" }</span>
-            <span class="mock-chip">{ "Bob" }</span>
-        </div>
+fn chips() -> Element {
+    div()
+        .class("mock-chips")
+        .child(span().class("mock-chip").tr(|t| t.mock.me))
+        .child(span().class("mock-chip on").text("✔ Alice"))
+        .child(span().class("mock-chip").text("Bob"))
+}
+
+/// Choisit un onglet et lui donne le focus, comme une vraie barre d'onglets.
+fn select(tab: State<usize>, i: usize) {
+    tab.set(i);
+    if let Some(el) = document()
+        .get_element_by_id(&format!("app-tab-{i}"))
+        .and_then(|e| e.dyn_into::<HtmlElement>().ok())
+    {
+        let _ = el.focus();
     }
 }
 
-#[function_component]
-pub fn SectionApp() -> Html {
-    let t = use_t();
-    let m = &t.mock;
-    let tab = use_state(|| 0usize);
-    let on = use_state(|| true);
-    let refs = [use_node_ref(), use_node_ref(), use_node_ref()];
+pub fn section_app() -> Node {
+    let tab = use_state(0usize);
+    // Hors du panneau : l'interrupteur garde sa position d'un onglet à l'autre.
+    let on = use_state(true);
 
     // Onglets au clavier : flèches gauche/droite (en boucle), Origine, Fin.
-    // Le focus suit l'onglet choisi, comme dans une vraie barre d'onglets.
-    let select = {
-        let tab = tab.clone();
-        let refs = refs.clone();
-        move |i: usize| {
-            tab.set(i);
-            if let Some(el) = refs[i].cast::<HtmlElement>() {
-                let _ = el.focus();
-            }
-        }
-    };
-    let tabs = t.app_tabs.iter().enumerate().map(|(i, &label)| {
-        let current = *tab == i;
-        let onclick = {
-            let select = select.clone();
-            Callback::from(move |_: MouseEvent| select(i))
-        };
-        let onkeydown = {
-            let select = select.clone();
-            Callback::from(move |e: KeyboardEvent| {
+    let tabs = (0..3).map(|i| {
+        let current = move || tab.get() == i;
+        button()
+            .attr("type", "button")
+            .attr("role", "tab")
+            .id(format!("app-tab-{i}"))
+            .attr_dyn("aria-selected", move || current().to_string())
+            .attr("aria-controls", "app-panel")
+            .attr_dyn("tabindex", move || {
+                if current() { "0" } else { "-1" }.to_owned()
+            })
+            .on_click(move |_| select(tab, i))
+            .on("keydown", move |e| {
                 let next = match e.key().as_str() {
                     "ArrowRight" => (i + 1) % 3,
                     "ArrowLeft" => (i + 2) % 3,
@@ -109,131 +114,168 @@ pub fn SectionApp() -> Html {
                     _ => return,
                 };
                 e.prevent_default();
-                select(next);
+                select(tab, next);
             })
-        };
-        html! {
-            <button
-                type="button"
-                role="tab"
-                id={format!("app-tab-{i}")}
-                aria-selected={current.to_string()}
-                aria-controls="app-panel"
-                tabindex={if current { "0" } else { "-1" }}
-                ref={refs[i].clone()}
-                {onclick}
-                {onkeydown}
-            >
-                { label }
-            </button>
-        }
+            .tr(move |t| t.app_tabs[i])
     });
 
-    let toggle = {
-        let on = on.clone();
-        Callback::from(move |_: MouseEvent| on.set(!*on))
-    };
+    // Le panneau et la légende sont recréés à chaque changement d'onglet :
+    // leurs animations d'entrée rejouent. Seules ces deux régions lisent
+    // l'onglet courant.
+    let panel = fragment_dyn(move || {
+        let i = tab.get();
+        vec![
+            div()
+                .class("app-panel")
+                .id("app-panel")
+                .attr("role", "tabpanel")
+                .attr("aria-labelledby", format!("app-tab-{i}"))
+                .child(panel_body(i, on))
+                .into(),
+        ]
+    });
+    let caption = fragment_dyn(move || {
+        let i = tab.get();
+        vec![
+            p().class("app-caption")
+                .attr("aria-live", "polite")
+                .html_dyn(move || {
+                    format!(
+                        r#"<span class="app-caption-n" aria-hidden="true">{:02}</span>{}"#,
+                        i + 1,
+                        t().app_captions[i]
+                    )
+                })
+                .into(),
+        ]
+    });
 
-    let panel = match *tab {
-        0 => html! {
-            <div class="mock-protect">
-                <button
-                    type="button"
-                    class="power"
-                    data-on={(*on).then_some("")}
-                    aria-pressed={on.to_string()}
-                    onclick={toggle}
-                >
-                    { power_disc() }
-                    <span class="power-label">{ if *on { m.deactivate } else { m.activate } }</span>
-                </button>
-                <p class={classes!("mock-title", (*on).then_some("on"))}>
-                    { if *on { m.on_title } else { m.off_title } }
-                </p>
-                <div class="mock-card">
-                    <p class="mock-label">{ m.browser_to }</p>
-                    { chips(m.me) }
-                </div>
-            </div>
-        },
+    section()
+        .id("app")
+        .attr("aria-labelledby", "app-h")
+        .attr("data-progress", "")
+        .child(head(5, "app-h", words(|t| t.app_h), "words"))
+        .child(
+            p().class("sec-intro")
+                .attr("data-reveal", "blur")
+                .tr(|t| t.app_intro),
+        )
+        .child(
+            div()
+                .class("app-tour")
+                .child(
+                    div()
+                        .class("app-window")
+                        .attr("data-reveal", "")
+                        .child(app_bar())
+                        .child(
+                            div()
+                                .class("app-body")
+                                .child(
+                                    div()
+                                        .class("app-tabs")
+                                        .attr("role", "tablist")
+                                        .attr_tr("aria-label", |t| t.app_h)
+                                        .children(tabs),
+                                )
+                                .child(panel),
+                        ),
+                )
+                .child(caption),
+        )
+        .into()
+}
+
+/// Le contenu d'un onglet.
+fn panel_body(tab: usize, on: State<bool>) -> Node {
+    match tab {
+        0 => div()
+            .class("mock-protect")
+            .child(
+                button()
+                    .attr("type", "button")
+                    .class("power")
+                    .bool_attr("data-on", move || on.get())
+                    .attr_dyn("aria-pressed", move || on.get().to_string())
+                    .on_click(move |_| on.update(|o| *o = !*o))
+                    .child(power_disc())
+                    .child(span().class("power-label").child(tr(move |t| {
+                        if on.get() {
+                            t.mock.deactivate
+                        } else {
+                            t.mock.activate
+                        }
+                    }))),
+            )
+            .child(
+                p().class("mock-title")
+                    .class_if("on", move || on.get())
+                    .child(tr(move |t| {
+                        if on.get() {
+                            t.mock.on_title
+                        } else {
+                            t.mock.off_title
+                        }
+                    })),
+            )
+            .child(
+                div()
+                    .class("mock-card")
+                    .child(p().class("mock-label").tr(|t| t.mock.browser_to))
+                    .child(chips()),
+            )
+            .into(),
         1 => {
-            let cards = CONTACTS.iter().map(|&(name, fp, key, browser)| {
-                html! {
-                    <div class="mock-card">
-                        <p class="mock-name">
-                            { name }
-                            if browser { <span class="mock-badge">{ m.badge }</span> }
-                        </p>
-                        <p class="mock-fp">{ fp }</p>
-                        <p class="mock-key">{ key }</p>
-                        <p class="mock-btns">
-                            <span>{ m.copy }</span>
-                            <span>{ m.change_key }</span>
-                            <span>{ m.rename }</span>
-                            <span>{ m.delete }</span>
-                        </p>
-                    </div>
-                }
-            });
-            html! {
-                <div class="mock-contacts">
-                    <p class="mock-h">{ m.contacts_title }</p>
-                    { for cards }
-                    <span class="mock-accent">{ m.new_contact }</span>
-                </div>
-            }
+            let cards =
+                CONTACTS.map(|(name, fp, key, browser)| {
+                    div()
+                        .class("mock-card")
+                        .child(p().class("mock-name").text(name).child(
+                            browser.then(|| span().class("mock-badge").tr(|t| t.mock.badge)),
+                        ))
+                        .child(p().class("mock-fp").text(fp))
+                        .child(p().class("mock-key").text(key))
+                        .child(
+                            p().class("mock-btns")
+                                .child(span().tr(|t| t.mock.copy))
+                                .child(span().tr(|t| t.mock.change_key))
+                                .child(span().tr(|t| t.mock.rename))
+                                .child(span().tr(|t| t.mock.delete)),
+                        )
+                });
+            div()
+                .class("mock-contacts")
+                .child(p().class("mock-h").tr(|t| t.mock.contacts_title))
+                .children(cards)
+                .child(span().class("mock-accent").tr(|t| t.mock.new_contact))
+                .into()
         }
-        _ => html! {
-            <div class="mock-message">
-                <p class="mock-h">{ m.msg_title }</p>
-                <p class="mock-input">
-                    <span class="mock-typed" style={format!("--n: {}", m.message.chars().count())}>
-                        { m.message }
-                    </span>
-                </p>
-                <div class="mock-to">
-                    <span class="mock-label">{ m.to }</span>
-                    { chips(m.me) }
-                </div>
-                <p class="mock-btns">
-                    <span class="mock-accent">{ m.encrypt }</span>
-                    <span>{ m.decrypt }</span>
-                </p>
-                <p class="mock-note">{ m.result_note }</p>
-                <p class="mock-result">{ token(7) }</p>
-            </div>
-        },
-    };
-
-    html! {
-        <section id="app" aria-labelledby="app-h" data-progress="">
-            { crate::components::sections::head(5, "app-h", words(t.app_h), "words") }
-            <p class="sec-intro" data-reveal="blur">{ t.app_intro }</p>
-            <div class="app-tour">
-                <div class="app-window" data-reveal="">
-                    { app_bar() }
-                    <div class="app-body">
-                        <div class="app-tabs" role="tablist" aria-label={t.app_h}>
-                            { for tabs }
-                        </div>
-                        // Une clé par onglet : le panneau est recréé, et ses
-                        // animations d'entrée rejouent à chaque changement.
-                        <div
-                            class="app-panel"
-                            id="app-panel"
-                            role="tabpanel"
-                            aria-labelledby={format!("app-tab-{}", *tab)}
-                            key={tab.to_string()}
-                        >
-                            { panel }
-                        </div>
-                    </div>
-                </div>
-                <p class="app-caption" aria-live="polite" key={format!("legende-{}", *tab)}>
-                    <span class="app-caption-n" aria-hidden="true">{ format!("{:02}", *tab + 1) }</span>
-                    { raw(t.app_captions[*tab]) }
-                </p>
-            </div>
-        </section>
+        _ => div()
+            .class("mock-message")
+            .child(p().class("mock-h").tr(|t| t.mock.msg_title))
+            .child(
+                p().class("mock-input").child(
+                    span()
+                        .class("mock-typed")
+                        .attr_dyn("style", || {
+                            format!("--n: {}", t().mock.message.chars().count())
+                        })
+                        .tr(|t| t.mock.message),
+                ),
+            )
+            .child(
+                div()
+                    .class("mock-to")
+                    .child(span().class("mock-label").tr(|t| t.mock.to))
+                    .child(chips()),
+            )
+            .child(
+                p().class("mock-btns")
+                    .child(span().class("mock-accent").tr(|t| t.mock.encrypt))
+                    .child(span().tr(|t| t.mock.decrypt)),
+            )
+            .child(p().class("mock-note").tr(|t| t.mock.result_note))
+            .child(p().class("mock-result").text(token(7)))
+            .into(),
     }
 }
