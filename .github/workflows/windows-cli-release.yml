@@ -120,5 +120,6 @@ jobs:
         run: |
           gh release create "${GITHUB_REF_NAME}-windows" ${{ steps.collect.outputs.files }} \
             --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
             --title "Brocolis ${GITHUB_REF_NAME} Windows" \
             --notes "Release ${GITHUB_REF_NAME} pour Windows (x86_64)."
