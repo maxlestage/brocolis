@@ -1,4 +1,5 @@
 pub mod ambient;
+pub mod app_mock;
 pub mod curtain;
 pub mod demo;
 pub mod download;

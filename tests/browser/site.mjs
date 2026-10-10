@@ -104,7 +104,7 @@ async function load(page, url) {
   h1.includes("Brocolis") ? ok(`accueil : h1 « ${h1.trim()} »`) : bad(`h1 inattendu : ${h1}`);
 
   const sections = await page.$$eval("main section[id]", (els) => els.map((e) => e.id));
-  const expected = ["platforms", "auto", "features", "quickstart", "cli", "how", "privacy"];
+  const expected = ["platforms", "switch", "features", "quickstart", "app", "how", "privacy"];
   JSON.stringify(sections) === JSON.stringify(expected)
     ? ok(`7 sections dans l'ordre : ${sections.join(", ")}`)
     : bad(`sections : attendu ${expected.join(",")} — obtenu ${sections.join(",")}`);
@@ -157,11 +157,11 @@ async function load(page, url) {
   await until(page, () => document.documentElement.lang === "en");
   const lang = await page.getAttribute("html", "lang");
   const title = await page.title();
-  lang === "en" && title.includes("Rust MITM proxy")
+  lang === "en" && title.includes("Encrypt what you mark")
     ? ok(`langue → en (titre : « ${title} »)`)
     : bad(`langue : html[lang]=${lang}, titre=${title}`);
   const desc = await page.getAttribute('meta[name="description"]', "content");
-  desc?.startsWith("A Rust MITM proxy") ? ok("meta description traduite") : bad(`meta description : ${desc?.slice(0, 40)}`);
+  desc?.startsWith("Brocolis is an app") ? ok("meta description traduite") : bad(`meta description : ${desc?.slice(0, 40)}`);
 
   // Changement de thème. `body` porte une transition de 0,2s sur
   // `background-color` : lire la couleur après un délai fixe attrape une
@@ -459,19 +459,19 @@ for (const [locale, expected, marker] of [
 
   // Texte « déchiffré » : il défile puis revient exactement à l'original.
   const eyebrow = "[data-scramble]";
-  await until(page, (s) => document.querySelector(".hero-eyebrow " + s).textContent === "Proxy MITM · Rust · AES-256-GCM", eyebrow);
+  await until(page, (s) => document.querySelector(".hero-eyebrow " + s).textContent === "Application · AES-256-GCM · Rust", eyebrow);
   const net = await page.$eval(".hero-eyebrow [data-scramble]", (e) => e.textContent);
-  net === "Proxy MITM · Rust · AES-256-GCM" ? ok("le texte déchiffré revient intact") : bad(`surtitre : ${net}`);
+  net === "Application · AES-256-GCM · Rust" ? ok("le texte déchiffré revient intact") : bad(`surtitre : ${net}`);
 
   // Pendant un déchiffrage, la langue change : c'est la nouvelle qui gagne.
   const box = await page.$eval(".hero-eyebrow [data-scramble]", (e) => { const r = e.getBoundingClientRect(); return [r.x + 20, r.y + r.height / 2]; });
   await page.mouse.move(box[0], box[1]);
-  await until(page, () => document.querySelector(".hero-eyebrow [data-scramble]").textContent !== "Proxy MITM · Rust · AES-256-GCM");
+  await until(page, () => document.querySelector(".hero-eyebrow [data-scramble]").textContent !== "Application · AES-256-GCM · Rust");
   const pendant = await page.$eval(".hero-eyebrow [data-scramble]", (e) => e.textContent);
   await page.click('.switcher button:has-text("EN")');
-  await until(page, () => document.querySelector(".hero-eyebrow [data-scramble]").textContent === "MITM proxy · Rust · AES-256-GCM");
+  await until(page, () => document.querySelector(".hero-eyebrow [data-scramble]").textContent === "App · AES-256-GCM · Rust");
   const apres = await page.$eval(".hero-eyebrow [data-scramble]", (e) => e.textContent);
-  apres === "MITM proxy · Rust · AES-256-GCM" && pendant !== "Proxy MITM · Rust · AES-256-GCM"
+  apres === "App · AES-256-GCM · Rust" && pendant !== "Application · AES-256-GCM · Rust"
     ? ok(`changement de langue en plein déchiffrage : texte final anglais (pendant : « ${pendant} »)`)
     : bad(`après changement de langue : « ${apres} » (pendant : « ${pendant} »)`);
   await page.click('.switcher button:has-text("FR")');
@@ -529,16 +529,47 @@ for (const [locale, expected, marker] of [
     ? ok("section courante suivie (--spy=2, lien « Fonctionnalités » marqué)")
     : bad(`section courante : ${JSON.stringify(spy)}`);
 
-  // Terminal : la commande se tape jusqu'au bout.
-  await page.evaluate(() => document.querySelector("#auto .terminal").scrollIntoView({ block: "center" }));
-  await until(page, () => {
-    const t = document.querySelector("#auto .typed");
-    return t.getBoundingClientRect().width >= t.scrollWidth - 1 && t.scrollWidth > 0;
-  });
-  const frappe = await page.$eval("#auto .typed", (e) => [Math.round(e.getBoundingClientRect().width), e.scrollWidth, e.textContent]);
-  frappe[0] >= frappe[1] - 1 && frappe[2] === "sudo brocolis auto"
-    ? ok(`commande tapée en entier (« ${frappe[2]} », ${frappe[0]}px)`)
-    : bad(`frappe : ${JSON.stringify(frappe)}`);
+  // « Un clic » : l'interrupteur de la maquette s'allume en entrant dans la vue.
+  await page.evaluate(() => document.querySelector("#switch .switch-mock").scrollIntoView({ block: "center" }));
+  await until(page, () => getComputedStyle(document.querySelector("#switch .when-on")).opacity === "1");
+  const allume = await page.evaluate(() => ({
+    on: getComputedStyle(document.querySelector("#switch .when-on")).opacity,
+    off: getComputedStyle(document.querySelector("#switch .when-off")).opacity,
+    disque: getComputedStyle(document.querySelector("#switch .power-disc")).backgroundColor,
+  }));
+  allume.on === "1" && allume.off === "0" && allume.disque === "rgb(200, 242, 92)"
+    ? ok("l'interrupteur de la maquette s'allume (« Protection active », disque citron vert)")
+    : bad(`interrupteur : ${JSON.stringify(allume)}`);
+
+  // Visite de l'application : de vrais onglets, à la souris et au clavier.
+  await page.evaluate(() => document.querySelector("#app .app-tour").scrollIntoView({ block: "center" }));
+  const onglet = () =>
+    page.evaluate(() => ({
+      choisi: document.querySelector('#app [role="tab"][aria-selected="true"]')?.id,
+      focus: document.activeElement?.id,
+      panneau: document.querySelector("#app-panel")?.getAttribute("aria-labelledby"),
+      texte: document.querySelector("#app-panel")?.textContent ?? "",
+      legende: document.querySelector(".app-caption")?.textContent ?? "",
+    }));
+  await page.click("#app-tab-1");
+  const contacts = await onglet();
+  contacts.choisi === "app-tab-1" && contacts.panneau === "app-tab-1" && contacts.texte.includes("Alice") && contacts.texte.includes("Changer de clé") && contacts.legende.startsWith("02")
+    ? ok("visite : l'onglet Contacts montre Alice et « Changer de clé »")
+    : bad(`onglet Contacts : ${JSON.stringify(contacts)}`);
+  await page.keyboard.press("ArrowRight");
+  const message = await onglet();
+  message.choisi === "app-tab-2" && message.focus === "app-tab-2" && message.texte.includes("Message entier chiffré pour Alice")
+    ? ok("visite : flèche droite → onglet Message, focus compris")
+    : bad(`onglet Message au clavier : ${JSON.stringify(message)}`);
+  await page.keyboard.press("Home");
+  await page.click("#app-panel .power");
+  const coupe = await page.evaluate(() => [
+    document.querySelector("#app-panel .power").getAttribute("aria-pressed"),
+    document.querySelector("#app-panel .mock-title").textContent,
+  ]);
+  coupe[0] === "false" && coupe[1] === "Protection coupée"
+    ? ok("visite : l'interrupteur de l'onglet Protection se coupe au clic")
+    : bad(`interrupteur de la visite : ${JSON.stringify(coupe)}`);
 
   errors.length === 0 ? ok("aucune erreur console (deuxième passe)") : bad(`console : ${errors.join(" | ")}`);
   await ctx.close();
@@ -558,6 +589,11 @@ for (const [locale, expected, marker] of [
     caches: [...document.querySelectorAll("[data-reveal]")].filter((e) => getComputedStyle(e).opacity !== "1").length,
     lettres: [...document.querySelectorAll(".hero-title .char")].filter((e) => getComputedStyle(e).transform !== "none").length,
     demo: document.querySelector(".demo-row:nth-child(3) .demo-token")?.textContent,
+    interrupteur: [
+      getComputedStyle(document.querySelector("#switch .when-on")).opacity,
+      getComputedStyle(document.querySelector("#switch .when-off")).visibility,
+    ],
+    message: getComputedStyle(document.querySelector("#app .app-panel")).opacity,
   }));
   !etat.motion && !etat.rideau ? ok("mouvement réduit : ni classe `motion`, ni rideau") : bad(`réduit : motion=${etat.motion}, rideau=${etat.rideau}`);
   Math.abs(etat.pin - etat.stage) < 1 && etat.photo === "1"
@@ -569,6 +605,9 @@ for (const [locale, expected, marker] of [
   etat.demo === "demain à 18h"
     ? ok("mouvement réduit : démonstration figée sur son état final, lisible")
     : bad(`réduit : démonstration « ${etat.demo} »`);
+  etat.interrupteur[0] === "1" && etat.interrupteur[1] === "hidden" && etat.message === "1"
+    ? ok("mouvement réduit : maquettes affichées allumées, sans attendre d'animation")
+    : bad(`réduit : maquettes ${JSON.stringify(etat)}`);
   await ctx.close();
 }
 

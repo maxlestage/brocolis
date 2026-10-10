@@ -1,5 +1,6 @@
 use yew::prelude::*;
 
+use crate::components::app_mock::SectionApp;
 use crate::components::demo::Demo;
 use crate::components::footer::Footer;
 use crate::components::hero::Hero;
@@ -7,8 +8,8 @@ use crate::components::manifesto::Manifesto;
 use crate::components::marquee::Marquee;
 use crate::components::navbar::Navbar;
 use crate::components::sections::{
-    SectionAuto, SectionCli, SectionFeatures, SectionHowItWorks, SectionPlatforms, SectionPrivacy,
-    SectionQuickstart,
+    SectionFeatures, SectionHowItWorks, SectionPlatforms, SectionPrivacy, SectionQuickstart,
+    SectionSwitch,
 };
 use crate::components::skip_link::SkipLink;
 
@@ -28,10 +29,10 @@ pub fn Landing() -> Html {
                 <Manifesto />
                 <Demo />
                 <SectionPlatforms />
-                <SectionAuto />
+                <SectionSwitch />
                 <SectionFeatures />
                 <SectionQuickstart />
-                <SectionCli />
+                <SectionApp />
                 <SectionHowItWorks />
                 <SectionPrivacy />
             </main>

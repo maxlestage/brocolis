@@ -1108,11 +1108,6 @@ pre {
   overflow-wrap: normal;
   white-space: pre;
 }
-/* Invite de commande devant la commande unique de « brocolis auto ». */
-#auto .terminal code::before {
-  content: "$ ";
-  color: var(--code-accent);
-}
 
 /* Listes. */
 .checklist,
@@ -1705,8 +1700,7 @@ button:hover .roll > span {
   color: var(--code-accent);
   border-color: var(--code-accent);
 }
-.demo-caret,
-.caret {
+.demo-caret {
   display: inline-block;
   width: 0.55em;
   height: 1.1em;
@@ -1714,8 +1708,7 @@ button:hover .roll > span {
   vertical-align: text-bottom;
   background: var(--code-accent);
 }
-.motion .demo-caret,
-.motion .caret {
+.motion .demo-caret {
   animation: blink 1s steps(1) infinite;
 }
 @keyframes blink {
@@ -1778,25 +1771,8 @@ button:hover .roll > span {
   color: var(--accent);
 }
 
-/* Terminal : commande tapée, lignes qui défilent, reflet qui balaie ---------- */
+/* Terminal : lignes qui défilent, reflet qui balaie ------------------------- */
 
-.typed {
-  display: inline-block;
-  vertical-align: bottom;
-  white-space: pre;
-  overflow: hidden;
-}
-.motion .terminal .typed {
-  width: 0;
-}
-.motion .terminal[data-in] .typed {
-  animation: type 1.1s steps(var(--n)) 0.4s forwards;
-}
-@keyframes type {
-  to {
-    width: calc(var(--n) * 1ch);
-  }
-}
 .terminal.lines .line {
   display: inline-block;
 }
@@ -2205,6 +2181,456 @@ button:hover .roll > span {
     flex-direction: column;
     transform: translateY(calc(var(--spy, 0) * -1.2em));
     transition: transform 0.7s var(--ease-out);
+  }
+}
+
+/* Maquettes de l'application -------------------------------------------- */
+
+/* Une image de l'application : ses couleurs à elle, quel que soit le thème du
+   site (vert forêt, crème, citron vert). */
+.app-window {
+  --a-bg: #0f2a18;
+  --a-card: #15361f;
+  --a-sunk: #0a1d10;
+  --a-ink: #f2eedf;
+  --a-muted: #b8c6b4;
+  --a-accent: #c8f25c;
+  --a-accent-ink: #0f2a18;
+  --a-line: rgba(242, 238, 223, 0.16);
+  position: relative;
+  width: 100%;
+  max-width: 460px;
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: var(--a-bg);
+  color: var(--a-ink);
+  font-size: 14px;
+  line-height: 1.45;
+  box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.6);
+}
+.app-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--a-line);
+}
+.app-dots {
+  width: 10px;
+  height: 10px;
+  margin-right: 34px;
+  border-radius: 50%;
+  background: #ff5f57;
+  box-shadow:
+    16px 0 0 #febc2e,
+    32px 0 0 #28c840;
+}
+.app-name {
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.app-name::before {
+  content: "🥦 ";
+}
+.app-body {
+  padding: 18px;
+}
+.app-window p {
+  margin: 0;
+}
+
+/* Le grand interrupteur. */
+.power {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  margin: 4px auto 0;
+  padding: 18px 0 0;
+  border: 0;
+  background: none;
+  color: var(--a-ink);
+  font: inherit;
+}
+button.power {
+  cursor: pointer;
+}
+button.power:focus-visible {
+  outline: 3px solid var(--a-accent);
+  outline-offset: 6px;
+  border-radius: 16px;
+}
+.power-disc {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(242, 238, 223, 0.28);
+  background: var(--a-card);
+  color: var(--a-ink);
+  transition:
+    background-color 0.45s ease,
+    color 0.45s ease,
+    border-color 0.45s ease,
+    scale 0.3s var(--ease-out);
+}
+.power[data-on] .power-disc {
+  border-color: var(--a-accent);
+  background: var(--a-accent);
+  color: var(--a-accent-ink);
+}
+button.power:hover .power-disc {
+  scale: 1.04;
+}
+.power-glyph {
+  width: 44px;
+  height: 44px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 4.5;
+  stroke-linecap: round;
+}
+/* Deux ondes qui s'éloignent du disque tant que la protection est active. */
+.power-wave {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  width: 112px;
+  height: 112px;
+  margin-left: -56px;
+  border-radius: 50%;
+  border: 2px solid var(--a-accent);
+  opacity: 0;
+  pointer-events: none;
+}
+.motion .power[data-on] .power-wave {
+  animation: power-wave 1.8s ease-out infinite;
+}
+.motion .power[data-on] .power-wave + .power-wave {
+  animation-delay: 0.9s;
+}
+@keyframes power-wave {
+  from {
+    opacity: 0.6;
+    scale: 1;
+  }
+  to {
+    opacity: 0;
+    scale: 1.4;
+  }
+}
+.power-label {
+  font-weight: 800;
+  font-size: 14px;
+}
+
+/* Section « Un clic » : la maquette s'allume en entrant dans la vue. Sans
+   mouvement, elle est simplement allumée. */
+.switch-layout {
+  display: grid;
+  gap: 32px;
+  align-items: center;
+  margin-bottom: 28px;
+}
+.switch-layout .checklist {
+  margin: 0;
+}
+.switch-stage {
+  padding: 22px 18px 30px;
+  text-align: center;
+}
+.power-state {
+  display: grid;
+  margin-top: 18px !important;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.power-state > span {
+  grid-area: 1 / 1;
+}
+.when-on {
+  color: var(--a-accent);
+}
+.when-off {
+  visibility: hidden;
+}
+.motion .switch-mock .when-off {
+  visibility: visible;
+}
+.motion .switch-mock .when-on {
+  opacity: 0;
+}
+.motion .switch-mock[data-in] .when-off {
+  animation: fade-out 0.3s ease 1.1s forwards;
+}
+.motion .switch-mock[data-in] .when-on {
+  animation: fade-in 0.4s ease 1.2s forwards;
+}
+.motion .switch-mock .power-disc {
+  border-color: rgba(242, 238, 223, 0.28);
+  background: var(--a-card);
+  color: var(--a-ink);
+}
+.motion .switch-mock[data-in] .power-disc {
+  animation: power-on 0.45s ease 1.1s forwards;
+}
+.motion .switch-mock .power-wave {
+  animation: none;
+}
+.motion .switch-mock[data-in] .power-wave {
+  animation: power-wave 1.8s ease-out 1.5s infinite;
+}
+.motion .switch-mock[data-in] .power-wave + .power-wave {
+  animation-delay: 2.4s;
+}
+@keyframes power-on {
+  to {
+    border-color: var(--a-accent);
+    background: var(--a-accent);
+    color: var(--a-accent-ink);
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes fade-in {
+  to {
+    opacity: 1;
+  }
+}
+
+/* Visite des trois onglets. */
+.app-tour {
+  display: grid;
+  gap: 28px;
+  align-items: center;
+}
+.app-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 18px;
+  padding: 4px;
+  border-radius: 22px;
+  background: var(--a-sunk);
+}
+.app-tabs [role="tab"] {
+  min-height: 36px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  color: var(--a-ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
+}
+.app-tabs [role="tab"]:hover {
+  background: rgba(200, 242, 92, 0.12);
+}
+.app-tabs [role="tab"][aria-selected="true"] {
+  background: var(--a-accent);
+  color: var(--a-accent-ink);
+  font-weight: 800;
+}
+.app-tabs [role="tab"]:focus-visible {
+  outline: 3px solid var(--a-accent);
+  outline-offset: 2px;
+}
+.app-panel {
+  min-height: 360px;
+}
+.motion .app-panel {
+  animation: panel-in 0.5s var(--ease-out);
+}
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    translate: 0 10px;
+  }
+}
+.app-caption {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.motion .app-caption {
+  animation: panel-in 0.6s var(--ease-out);
+}
+.app-caption-n {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.mock-protect {
+  text-align: center;
+}
+.mock-title {
+  margin: 14px 0 18px !important;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.mock-title.on {
+  color: var(--a-accent);
+}
+.mock-card {
+  margin-bottom: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--a-line);
+  background: var(--a-card);
+  text-align: left;
+}
+.mock-h {
+  margin-bottom: 12px !important;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.mock-label {
+  font-weight: 800;
+}
+.mock-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.mock-chip {
+  padding: 4px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(242, 238, 223, 0.35);
+  font-size: 13px;
+}
+.mock-chip.on {
+  border-color: var(--a-accent);
+  background: var(--a-accent);
+  color: var(--a-accent-ink);
+}
+.mock-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 800;
+}
+.mock-badge {
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--a-accent);
+  color: var(--a-accent-ink);
+  font-size: 11px;
+  font-weight: 400;
+}
+.mock-fp {
+  margin-top: 6px !important;
+  font-family: var(--mono);
+  font-size: 14px;
+}
+.mock-key {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--a-muted);
+}
+.mock-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px !important;
+}
+.mock-btns > span {
+  padding: 4px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(242, 238, 223, 0.35);
+  font-size: 12.5px;
+}
+.mock-btns > .mock-accent,
+.mock-contacts > .mock-accent {
+  border-color: var(--a-accent);
+  background: var(--a-accent);
+  color: var(--a-accent-ink);
+  font-weight: 800;
+}
+.mock-contacts > .mock-accent {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 7px 16px;
+  border-radius: 18px;
+  font-size: 13.5px;
+}
+.mock-input {
+  min-height: 92px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--a-sunk);
+  border: 1px solid var(--a-line);
+}
+.mock-to {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin-top: 12px;
+}
+.mock-to .mock-chips {
+  margin: 0;
+}
+.mock-note {
+  margin-top: 10px !important;
+  font-size: 12.5px;
+  color: var(--a-muted);
+}
+.mock-result {
+  margin-top: 8px !important;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--a-sunk);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--a-accent);
+  overflow-wrap: anywhere;
+}
+/* Le message se tape, puis le chiffré apparaît. */
+.motion .mock-typed {
+  clip-path: inset(0 100% 0 0);
+  animation: mock-type 1s steps(var(--n)) 0.25s forwards;
+}
+@keyframes mock-type {
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+.motion .mock-note,
+.motion .mock-result {
+  opacity: 0;
+  animation: fade-in 0.5s ease 1.5s forwards;
+}
+
+@media (min-width: 900px) {
+  .switch-layout {
+    grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+  }
+  .app-tour {
+    grid-template-columns: minmax(0, 460px) minmax(0, 1fr);
+    gap: 48px;
   }
 }
 
