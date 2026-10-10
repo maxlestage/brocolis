@@ -23,6 +23,11 @@ on:
       - "linux/**"
       - ".github/workflows/linux-cli-release.yml"
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version à publier, ex. v0.2.0 (doit être celle de Cargo.toml). Vide : build « dernier master »."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -32,6 +37,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # Publication d'une version à la main : elle doit être celle que
+      # porte le code construit, sinon le paquet mentirait sur son numéro.
+      - name: Vérifier la version demandée
+        if: inputs.version
+        shell: bash
+        env:
+          WANTED: ${{ inputs.version }}
+        run: |
+          HAVE="v$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          echo "demandée : $WANTED — Cargo.toml : $HAVE"
+          [[ "$WANTED" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "format attendu : vX.Y.Z"; exit 1; }
+          [ "$WANTED" = "$HAVE" ] || { echo "la version demandée n'est pas celle de Cargo.toml"; exit 1; }
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/cache@v6
         with:
@@ -116,7 +133,7 @@ jobs:
           echo "files=${FILES}" >> "$GITHUB_OUTPUT"
 
       - name: Publish rolling release (branch)
-        if: github.ref_type == 'branch'
+        if: github.ref_type == 'branch' && !inputs.version
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -129,12 +146,15 @@ jobs:
             --prerelease
 
       - name: Publish tagged release
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || inputs.version
         env:
           GH_TOKEN: ${{ github.token }}
+          # L'étiquette poussée, ou la version demandée : gh crée alors
+          # l'étiquette sur le commit construit.
+          VERSION: ${{ inputs.version || github.ref_name }}
         run: |
-          gh release create "${GITHUB_REF_NAME}-linux" ${{ steps.collect.outputs.files }} \
+          gh release create "${VERSION}-linux" ${{ steps.collect.outputs.files }} \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${GITHUB_SHA}" \
-            --title "Brocolis ${GITHUB_REF_NAME} Linux" \
-            --notes "Release ${GITHUB_REF_NAME} pour Linux (.deb pour Debian/Ubuntu, .rpm pour Fedora/RHEL ; x86_64)."
+            --title "Brocolis ${VERSION} Linux" \
+            --notes "Release ${VERSION} pour Linux (.deb pour Debian/Ubuntu, .rpm pour Fedora/RHEL ; x86_64)."
