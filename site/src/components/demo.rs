@@ -36,7 +36,7 @@ const B64: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456
 
 /// Jeton chiffré du cycle `n` — différent à chaque tour, stable pendant le
 /// tour (un générateur congruentiel suffit : c'est un décor).
-fn token(n: u32) -> String {
+pub(crate) fn token(n: u32) -> String {
     let mut s = n.wrapping_mul(2_654_435_761).wrapping_add(0x9E37_79B9);
     let body: String = (0..18)
         .map(|_| {

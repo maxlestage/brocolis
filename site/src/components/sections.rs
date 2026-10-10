@@ -1,4 +1,5 @@
-//! Les sept sections de l'accueil.
+//! Les sections de l'accueil (la visite de l'application est dans
+//! `app_mock.rs`).
 //!
 //! Chaque `<section>` est nommée par son propre titre via `aria-labelledby` :
 //! sans ça une section n'est pas exposée comme région et disparaît de la liste
@@ -16,6 +17,7 @@
 
 use yew::prelude::*;
 
+use crate::components::app_mock::{app_bar, power_disc};
 use crate::markup::{raw, rolling, words};
 use crate::route::Route;
 use crate::settings::use_t;
@@ -23,7 +25,7 @@ use crate::settings::use_t;
 /// En-tête de section : numéro, titre, et numéro fantôme géant en arrière-plan.
 /// Les numéros sont décoratifs — l'ordre des sections est déjà celui du
 /// document.
-fn head(index: u8, id: &'static str, title: Html, reveal: &'static str) -> Html {
+pub(crate) fn head(index: u8, id: &'static str, title: Html, reveal: &'static str) -> Html {
     html! {
         <>
             <span class="sec-ghost" aria-hidden="true">{ format!("{index:02}") }</span>
@@ -93,25 +95,37 @@ pub fn SectionPlatforms() -> Html {
     }
 }
 
+/// « Un clic » : l'interrupteur de l'application, qui s'allume quand la
+/// section entre dans la vue, et ce que ce clic fait sur le système.
 #[function_component]
-pub fn SectionAuto() -> Html {
+pub fn SectionSwitch() -> Html {
     let t = use_t();
     let items = t
         .s1_li
         .iter()
         .map(|&li| html! { <li data-reveal="left">{ tick() }{ raw(li) }</li> });
-    const CMD: &str = "sudo brocolis auto";
 
     html! {
-        <section id="auto" aria-labelledby="auto-h" data-progress="">
-            { head(2, "auto-h", words(t.s1_h), "words") }
-            <pre class="terminal" data-reveal="">
-                <code>
-                    <span class="typed" style={format!("--n: {}", CMD.len())}>{ CMD }</span>
-                    <span class="caret" aria-hidden="true" />
-                </code>
-            </pre>
-            <ul class="checklist">{ for items }</ul>
+        <section id="switch" aria-labelledby="switch-h" data-progress="">
+            { head(2, "switch-h", words(t.s1_h), "words") }
+            <div class="switch-layout">
+                // Une image, pour les lecteurs d'écran : la maquette n'est pas
+                // un bouton, elle montre celui de l'application.
+                <div class="app-window switch-mock" role="img" aria-label={t.switch_sr} data-reveal="">
+                    { app_bar() }
+                    <div class="app-body switch-stage" aria-hidden="true">
+                        <span class="power" data-on="">
+                            { power_disc() }
+                            <span class="power-label">{ t.mock.deactivate }</span>
+                        </span>
+                        <p class="power-state">
+                            <span class="when-off">{ t.mock.off_title }</span>
+                            <span class="when-on">{ t.mock.on_title }</span>
+                        </p>
+                    </div>
+                </div>
+                <ul class="checklist">{ for items }</ul>
+            </div>
             <p class="note" data-reveal="blur">{ raw(t.s1_note) }</p>
         </section>
     }
@@ -150,24 +164,6 @@ pub fn SectionQuickstart() -> Html {
         <section id="quickstart" aria-labelledby="quickstart-h" data-progress="">
             { head(4, "quickstart-h", words(t.s3_h), "words") }
             <ol class="steps">{ for items }</ol>
-        </section>
-    }
-}
-
-#[function_component]
-pub fn SectionCli() -> Html {
-    let t = use_t();
-
-    html! {
-        <section id="cli" aria-labelledby="cli-h" data-progress="">
-            // Ce titre contient du balisage (`<code>`) : il se dévoile d'un
-            // bloc plutôt que mot à mot.
-            { head(5, "cli-h", raw(t.s4_h), "mask") }
-            <p data-reveal="blur">{ t.s4_intro }</p>
-            <pre class="terminal lines" tabindex="0" data-reveal="">
-                <code>{ terminal_lines(t.s4_code) }</code>
-            </pre>
-            <p data-reveal="blur">{ raw(t.s4_outro) }</p>
         </section>
     }
 }

@@ -478,11 +478,15 @@ de la page bouge :
   (à l'apparition et au survol), manifeste qui s'allume mot à mot, liens et
   boutons dont le libellé roule au survol ;
 - démonstration : un message se tape, son segment secret se scelle en jeton
-  `[[BROCOLIS:v1:…]]` côté serveur et se rouvre chez les proches — en boucle
+  `[[BROCOLIS:v1:…]]` côté serveur et se rouvre chez le contact — en boucle
   tant qu'elle est à l'écran ;
+- l'application : sa fenêtre reproduite en HTML (ses couleurs, ses mots),
+  dont l'interrupteur s'allume en entrant dans la vue, puis une visite de
+  ses trois onglets — de vrais onglets, à la souris et au clavier, dont
+  l'interrupteur se manipule et dont le message se tape puis se chiffre ;
 - sections : filet qui se trace, numéro fantôme géant en parallaxe, cartes
   qui basculent en 3D à l'apparition puis s'inclinent sous le pointeur, coches
-  dessinées au trait, commande tapée dans le terminal, lignes qui défilent ;
+  dessinées au trait, lignes qui défilent ;
 - défilement : bandeaux dont la vitesse et le sens suivent ceux du
   défilement, repère de la section courante (et lien du menu marqué), barre
   de progression, barre de navigation qui s'efface ;
