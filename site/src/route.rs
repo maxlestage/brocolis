@@ -22,6 +22,7 @@ pub enum Route {
     #[default]
     Home,
     Download,
+    Protocol,
 }
 
 impl Route {
@@ -30,6 +31,7 @@ impl Route {
         match self {
             Route::Home => "#/",
             Route::Download => "#/telecharger",
+            Route::Protocol => "#/protocole",
         }
     }
 
@@ -41,6 +43,7 @@ impl Route {
         let path = path.split(['?', '&']).next().unwrap_or(path);
         match path.trim_end_matches('/') {
             "/telecharger" => Route::Download,
+            "/protocole" => Route::Protocol,
             _ => Route::Home,
         }
     }
@@ -82,7 +85,7 @@ pub fn init() {
         // Un lien vers `#/telecharger` ne désigne aucune ancre : le
         // navigateur laisse donc la page où elle était, parfois au milieu de
         // l'accueil.
-        if next == Route::Download {
+        if next != Route::Home {
             scroll_to_top();
         }
     });
@@ -106,6 +109,7 @@ mod tests {
         assert_eq!(Route::parse("#/telecharger/"), Route::Download);
         assert_eq!(Route::parse("#/telecharger?src=mail"), Route::Download);
         assert_eq!(Route::parse("/telecharger"), Route::Download);
+        assert_eq!(Route::parse("#/protocole"), Route::Protocol);
     }
 
     #[test]

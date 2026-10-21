@@ -10,8 +10,8 @@ use crate::route::Route;
 /// géant dont les lettres se rassemblent en arrivant (`data-progress="enter"`)
 /// et sautent au survol, bouton de retour en haut.
 ///
-/// `cta` : l'appel final à télécharger. Absent de la page de téléchargement,
-/// où il renverrait vers elle-même.
+/// `cta` : l'appel final à télécharger (et le lien vers le protocole v3).
+/// Absent des pages de téléchargement et du protocole.
 pub fn site_footer(cta: bool) -> Node {
     let call = cta.then(|| {
         div()
@@ -22,15 +22,26 @@ pub fn site_footer(cta: bool) -> Node {
                     .raw(|t| t.footer_h),
             )
             .child(
-                a().class("btn primary")
-                    .attr("data-magnetic", "")
-                    .href(Route::Download.href())
-                    .child(rolling(|t| t.nav_download))
+                div()
+                    .class("dl-btn-row")
                     .child(
-                        span()
-                            .class("btn-arrow")
-                            .attr("aria-hidden", "true")
-                            .text("→"),
+                        a().class("btn primary")
+                            .attr("data-magnetic", "")
+                            .href(Route::Download.href())
+                            .child(rolling(|t| t.nav_download))
+                            .child(
+                                span()
+                                    .class("btn-arrow")
+                                    .attr("aria-hidden", "true")
+                                    .text("→"),
+                            ),
+                    )
+                    // Le protocole v3, expliqué (`#/protocole`).
+                    .child(
+                        a().class("btn")
+                            .attr("data-magnetic", "")
+                            .href(Route::Protocol.href())
+                            .child(rolling(|t| t.proto.nav)),
                     ),
             )
     });
