@@ -80,12 +80,13 @@ pub fn add(existing: &str, name: &str, key: &str) -> Result<String, String> {
 
 /// Ajoute un contact appairé à deux avec son paquet de clés v3 (base64),
 /// arrivé à `at` (secondes Unix) : ce qu'on lui envoie part en double
-/// cliquet.
+/// cliquet — en triple cliquet avec sa capacité v4 `caps` (§9.6).
 pub fn add_paired(
     existing: &str,
     name: &str,
     key: &str,
     bundle: &str,
+    caps: Option<&str>,
     at: u64,
 ) -> Result<String, String> {
     brocolis_proto::KeyBundle::from_base64(bundle.trim())
@@ -101,6 +102,9 @@ pub fn add_paired(
         toml_edit::value(i64::try_from(at).unwrap_or(i64::MAX)),
     );
     t.insert("duo", toml_edit::value(true));
+    if let Some(c) = caps.map(str::trim).filter(|c| !c.is_empty()) {
+        t.insert("caps", toml_edit::value(c));
+    }
     Ok(doc.to_string())
 }
 
@@ -131,7 +135,7 @@ pub fn set_key(existing: &str, name: &str, key: &str) -> Result<String, String> 
     t.insert("key", toml_edit::value(key));
     // Une clé neuve n'est plus celle de l'appairage : son paquet ne lui va
     // plus (l'empreinte comparée portait sur l'ancienne).
-    for field in ["bundle", "bundle_at", "duo", "psk"] {
+    for field in ["bundle", "bundle_at", "caps", "duo", "psk"] {
         t.remove(field);
     }
     Ok(doc.to_string())

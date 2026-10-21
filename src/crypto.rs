@@ -563,8 +563,9 @@ pub fn decrypt_tokens_escaped(
     decrypt_tokens_with(input, keys, escape, &mut |_| None)
 }
 
-/// Comme [`decrypt_tokens_escaped`], les jetons v3 (`[[BROCOLIS:v3:…]]`,
-/// donnés entiers) étant ouverts par `v3` ([`crate::v3store`]).
+/// Comme [`decrypt_tokens_escaped`], les jetons v3 et v4
+/// (`[[BROCOLIS:v3:…]]`, `[[BROCOLIS:v4:…]]`, donnés entiers) étant ouverts
+/// par `v3` ([`crate::v3store`]).
 pub fn decrypt_tokens_with(
     input: &str,
     keys: &[SymKey],
@@ -593,7 +594,7 @@ pub fn decrypt_tokens_with(
             })
         } else if let Some(b64) = inner.strip_prefix("v2:") {
             decrypt_token_v2(b64, keys).map(|p| String::from_utf8_lossy(&p).into_owned())
-        } else if inner.starts_with("v3:") {
+        } else if inner.starts_with("v3:") || inner.starts_with("v4:") {
             v3(&format!("{TOKEN_HEAD}{inner}{TOKEN_SUFFIX}"))
         } else {
             None

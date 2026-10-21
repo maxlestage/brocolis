@@ -404,7 +404,7 @@ impl BrocolisApp {
                 // Le paquet de clés v3 part avec la clé publique : un
                 // correspondant à jour passe en double cliquet (§8.4).
                 let bundle = brocolis::v3store::V3Store::for_config(&files.config)
-                    .bundle_b64()
+                    .published()
                     .ok();
                 let client =
                     brocolis::pairing::RendezvousClient::new(brocolis::pairing::DEFAULT_SERVER)?;
@@ -412,7 +412,7 @@ impl BrocolisApp {
                     &client,
                     &code,
                     &identity,
-                    bundle.as_deref(),
+                    bundle.as_ref(),
                     Duration::from_secs(120),
                 )
                 .await?;
@@ -421,6 +421,7 @@ impl BrocolisApp {
                     &name,
                     &paired.key_b64,
                     paired.bundle.as_deref(),
+                    paired.caps.as_deref(),
                 )?;
                 anyhow::Ok(JobDone::Paired {
                     fingerprint: paired.fingerprint,

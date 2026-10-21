@@ -36,6 +36,10 @@ pub struct Contact {
     /// session pendant 30 jours.
     #[serde(default)]
     pub bundle_at: Option<u64>,
+    /// Sa capacité v4 signée (base64, §9.6), reçue avec le paquet : avec
+    /// elle, ce qu'on lui envoie part en triple cliquet (protocole v4).
+    #[serde(default)]
+    pub caps: Option<String>,
     /// `false` : la clé vient d'un appairage de groupe (jamais de v3).
     #[serde(default)]
     pub duo: Option<bool>,
