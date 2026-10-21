@@ -24,6 +24,7 @@ impl Strings {
             Protection::Classic => self.v3_classic,
             Protection::Psk => self.v3_psk,
             Protection::Legacy => self.v3_legacy,
+            Protection::IdentityChanged => self.identity_changed,
         }
     }
 }
@@ -180,6 +181,10 @@ pub struct Strings {
     pub psk_on: &'static str,
     pub psk_off: &'static str,
     pub psk_note: &'static str,
+    /// L'alerte de changement d'identité (§9.8).
+    pub identity_changed: &'static str,
+    pub identity_confirm: &'static str,
+    pub identity_changed_note: &'static str,
 
     pub footer: &'static str,
 }
@@ -291,6 +296,9 @@ pub static FR: Strings = Strings {
     psk_on: "Passer au double cliquet",
     psk_off: "Revenir à l'ancien format",
     psk_note: "Seulement si votre correspondant a une version à jour (application, messagerie Brocolis) : un ancien client ne lirait rien.",
+    identity_changed: "⚠️ L'identité de ce contact a changé — comparez l'empreinte avant d'écrire",
+    identity_confirm: "J'ai comparé l'empreinte",
+    identity_changed_note: "⚠️ L'identité de {name} a changé. Comparez l'empreinte de vive voix : rien ne lui sera envoyé avant votre confirmation.",
     footer: "Conçu et développé par Maxime Nathan Lestage",
 };
 
@@ -401,6 +409,9 @@ pub static EN: Strings = Strings {
     psk_on: "Switch to double ratchet",
     psk_off: "Back to the legacy format",
     psk_note: "Only if your contact runs an up-to-date version (app, Brocolis messenger): an old client would read nothing.",
+    identity_changed: "⚠️ This contact's identity changed — compare the fingerprint before writing",
+    identity_confirm: "I compared the fingerprint",
+    identity_changed_note: "⚠️ {name}'s identity changed. Compare the fingerprint out loud: nothing will be sent to them until you confirm.",
     footer: "Designed and developed by Maxime Nathan Lestage",
 };
 
@@ -511,6 +522,9 @@ pub static ES: Strings = Strings {
     psk_on: "Pasar al doble trinquete",
     psk_off: "Volver al formato antiguo",
     psk_note: "Solo si tu contacto tiene una versión al día (aplicación, mensajería Brocolis): un cliente antiguo no leería nada.",
+    identity_changed: "⚠️ La identidad de este contacto cambió: compara la huella antes de escribir",
+    identity_confirm: "He comparado la huella",
+    identity_changed_note: "⚠️ La identidad de {name} cambió. Comparad la huella en voz alta: no se le enviará nada hasta que lo confirmes.",
     footer: "Diseñado y desarrollado por Maxime Nathan Lestage",
 };
 

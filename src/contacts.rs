@@ -108,6 +108,77 @@ pub fn add_paired(
     Ok(doc.to_string())
 }
 
+/// Ré-appaire un contact existant : nouvelle clé, nouveau paquet (et
+/// capacité v4). Si le paquet porte **une autre identité** que celui qu'il
+/// avait, l'ancienne est gardée (`previous_identity`) et le contact est
+/// marqué `identity_changed` : l'envoi vers lui est bloqué jusqu'à
+/// [`confirm_identity`] (§9.8). Renvoie le TOML et `true` dans ce cas.
+pub fn repair_paired(
+    existing: &str,
+    name: &str,
+    key: &str,
+    bundle: &str,
+    caps: Option<&str>,
+    at: u64,
+) -> Result<(String, bool), String> {
+    let key = check_key(key)?;
+    let new = brocolis_proto::KeyBundle::from_base64(bundle.trim())
+        .map_err(|e| format!("paquet de clés v3 invalide : {e}"))?;
+    let mut doc = parse(existing)?;
+    let arr = contacts(&mut doc)?;
+    let i = position(arr, name).ok_or_else(|| format!("contact « {name} » inconnu"))?;
+    let t = arr.get_mut(i).expect("indice trouvé");
+    let old = t
+        .get("bundle")
+        .and_then(|v| v.as_str())
+        .and_then(|b| brocolis_proto::KeyBundle::from_base64(b.trim()).ok());
+    let (old_id, new_id) = (
+        old.as_ref().map(crate::v3::identity_of),
+        crate::v3::identity_of(&new),
+    );
+    let already = t
+        .get("identity_changed")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let changed = old_id.is_some_and(|o| o != new_id);
+    for field in ["bundle", "bundle_at", "caps", "duo", "psk"] {
+        t.remove(field);
+    }
+    t.insert("key", toml_edit::value(key));
+    t.insert("bundle", toml_edit::value(bundle.trim()));
+    t.insert(
+        "bundle_at",
+        toml_edit::value(i64::try_from(at).unwrap_or(i64::MAX)),
+    );
+    t.insert("duo", toml_edit::value(true));
+    if let Some(c) = caps.map(str::trim).filter(|c| !c.is_empty()) {
+        t.insert("caps", toml_edit::value(c));
+    }
+    if changed {
+        // Une alerte encore en attente garde l'identité d'avant la première.
+        if !already {
+            use base64::Engine as _;
+            let prev =
+                base64::engine::general_purpose::STANDARD.encode(old_id.expect("identité connue"));
+            t.insert("previous_identity", toml_edit::value(prev));
+        }
+        t.insert("identity_changed", toml_edit::value(true));
+    }
+    Ok((doc.to_string(), changed || already))
+}
+
+/// « J'ai comparé l'empreinte » : lève l'alerte de changement d'identité
+/// d'un contact (§9.8) ; l'envoi vers lui reprend.
+pub fn confirm_identity(existing: &str, name: &str) -> Result<String, String> {
+    let mut doc = parse(existing)?;
+    let arr = contacts(&mut doc)?;
+    let i = position(arr, name).ok_or_else(|| format!("contact « {name} » inconnu"))?;
+    let t = arr.get_mut(i).expect("indice trouvé");
+    t.remove("identity_changed");
+    t.remove("previous_identity");
+    Ok(doc.to_string())
+}
+
 /// Marque un contact « à deux, double cliquet » (PSK), ou retire la marque :
 /// sans paquet échangé, le v3 part alors de la clé partagée. À ne faire que
 /// si l'autre est à jour (un ancien client ne lirait rien).
@@ -135,7 +206,15 @@ pub fn set_key(existing: &str, name: &str, key: &str) -> Result<String, String> 
     t.insert("key", toml_edit::value(key));
     // Une clé neuve n'est plus celle de l'appairage : son paquet ne lui va
     // plus (l'empreinte comparée portait sur l'ancienne).
-    for field in ["bundle", "bundle_at", "caps", "duo", "psk"] {
+    for field in [
+        "bundle",
+        "bundle_at",
+        "caps",
+        "duo",
+        "psk",
+        "identity_changed",
+        "previous_identity",
+    ] {
         t.remove(field);
     }
     Ok(doc.to_string())

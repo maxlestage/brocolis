@@ -40,6 +40,15 @@ pub struct Contact {
     /// elle, ce qu'on lui envoie part en triple cliquet (protocole v4).
     #[serde(default)]
     pub caps: Option<String>,
+    /// L'identité (IK X25519 ‖ IK Ed25519, base64) qu'avait ce contact avant
+    /// un ré-appairage qui en a donné une autre (§9.8 de la sécurité de la
+    /// messagerie).
+    #[serde(default)]
+    pub previous_identity: Option<String>,
+    /// Son identité a changé et l'utilisateur ne l'a pas encore confirmée :
+    /// l'envoi vers lui est bloqué (la lecture, non).
+    #[serde(default)]
+    pub identity_changed: bool,
     /// `false` : la clé vient d'un appairage de groupe (jamais de v3).
     #[serde(default)]
     pub duo: Option<bool>,

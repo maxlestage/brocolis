@@ -133,6 +133,17 @@ enum Command {
         #[arg(long, default_value = "brocolis.toml")]
         config: PathBuf,
     },
+    /// « J'ai comparé l'empreinte » : après un ré-appairage qui a changé
+    /// l'identité d'un contact, l'envoi vers lui est bloqué jusqu'à cette
+    /// confirmation.
+    ConfirmIdentity {
+        /// Le contact.
+        #[arg(long)]
+        name: String,
+        /// Fichier de configuration TOML.
+        #[arg(long, default_value = "brocolis.toml")]
+        config: PathBuf,
+    },
     /// Protège une clé par une phrase secrète : `[[BROCOLIS-CLE:v2:…]]`
     /// (Argon2id), à transmettre sans craindre qu'on la lise en chemin.
     ///
@@ -347,6 +358,17 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Command::Contacts { config } => run_contacts(&config),
+        Command::ConfirmIdentity { name, config } => {
+            let existing = std::fs::read_to_string(&config)?;
+            let updated = brocolis::contacts::confirm_identity(&existing, &name)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            std::fs::write(&config, updated)?;
+            println!(
+                "✅ Identité de « {} » confirmée : l'envoi reprend.",
+                name.trim()
+            );
+            Ok(())
+        }
         Command::Protect {
             key,
             contact,
@@ -700,9 +722,15 @@ async fn run_pair(
 
     // Le nom est vérifié avant d'aller sur le réseau : l'autre attendrait
     // pour rien.
+    // Un contact déjà appairé (avec paquet) peut l'être de nouveau : son
+    // identité est alors comparée à l'ancienne (§9.8).
+    let mut repair = false;
     if let Some(n) = name {
-        if Config::load(config)?.contact(n).is_some() {
-            anyhow::bail!("un contact « {} » existe déjà", n.trim());
+        if let Some(c) = Config::load(config)?.contact(n) {
+            if c.bundle.is_none() {
+                anyhow::bail!("un contact « {} » existe déjà", n.trim());
+            }
+            repair = true;
         }
     }
     let priv_key = load_or_create_identity(identity)?;
@@ -736,7 +764,24 @@ async fn run_pair(
         return Ok(());
     };
     let existing = std::fs::read_to_string(config).unwrap_or_default();
+    let mut changed = false;
     let updated = match &paired.bundle {
+        Some(b) if repair => brocolis::contacts::repair_paired(
+            &existing,
+            name,
+            &paired.key_b64,
+            b,
+            paired.caps.as_deref(),
+            brocolis::v3store::now(),
+        )
+        .map(|(out, c)| {
+            changed = c;
+            out
+        }),
+        None if repair => Err(format!(
+            "« {} » n'a pas publié de paquet : contact laissé tel quel",
+            name.trim()
+        )),
         Some(b) => brocolis::contacts::add_paired(
             &existing,
             name,
@@ -757,10 +802,21 @@ async fn run_pair(
         "ancien format (le correspondant n'a pas publié de paquet v3)"
     };
     println!(
-        "   Contact « {} » ajouté à {} : {label}.",
+        "   Contact « {} » {} {} : {label}.",
         name.trim(),
+        if repair {
+            "mis à jour dans"
+        } else {
+            "ajouté à"
+        },
         config.display()
     );
+    if changed {
+        println!(
+            "   ⚠️  L'identité de ce contact a changé : rien ne lui sera envoyé avant\n      `brocolis confirm-identity --name {}` (comparez d'abord l'empreinte).",
+            name.trim()
+        );
+    }
     println!("   Redémarrez brocolis pour l'activer.");
     Ok(())
 }

@@ -718,3 +718,82 @@ fn un_groupe_partage_la_meme_cle() {
     let _ = std::fs::remove_dir_all(&f);
     let _ = std::fs::remove_dir_all(&m);
 }
+
+/// Un ré-appairage qui donne à « Bob » une autre identité (§9.8) : alerte,
+/// envoi bloqué jusqu'à `confirm-identity`.
+#[test]
+fn une_identite_changee_bloque_lenvoi() {
+    let serveur = rendezvous();
+    let a = tmpdir("id-alice");
+    let b = tmpdir("id-bob");
+    let m = tmpdir("id-autre");
+    let lance = |d: &PathBuf, code: &str, nom: &str| {
+        Command::new(bin())
+            .args(["pair", "--code", code, "--name", nom, "--server", &serveur])
+            .arg("--config")
+            .arg(d.join("brocolis.toml"))
+            .arg("--identity")
+            .arg(d.join("id.key"))
+            .args(["--timeout", "30"])
+            .current_dir(d)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap()
+    };
+    let deux = |x: &PathBuf, y: &PathBuf, code: &str| {
+        let p = lance(x, code, "Bob");
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        let q = lance(y, code, "Alice");
+        let (rp, rq) = (p.wait_with_output().unwrap(), q.wait_with_output().unwrap());
+        assert!(
+            rp.status.success(),
+            "{}",
+            String::from_utf8_lossy(&rp.stderr)
+        );
+        assert!(
+            rq.status.success(),
+            "{}",
+            String::from_utf8_lossy(&rq.stderr)
+        );
+        String::from_utf8_lossy(&rp.stdout).into_owned()
+    };
+    let premier = deux(&a, &b, "ID1");
+    assert!(!premier.contains("a changé"), "{premier}");
+    let second = deux(&a, &m, "ID2");
+    assert!(second.contains("mis à jour"), "{second}");
+    assert!(
+        second.contains("L'identité de ce contact a changé"),
+        "{second}"
+    );
+
+    let chiffre = || {
+        let o = Command::new(bin())
+            .args(["encrypt", "--text", "rdv ((au café)) ok", "--to", "Bob"])
+            .arg("--config")
+            .arg(a.join("brocolis.toml"))
+            .output()
+            .unwrap();
+        (
+            String::from_utf8_lossy(&o.stdout).into_owned(),
+            String::from_utf8_lossy(&o.stderr).into_owned(),
+        )
+    };
+    let (sortie, err) = chiffre();
+    assert!(
+        !sortie.contains("au café") && !sortie.contains("[[BROCOLIS:v"),
+        "{sortie}"
+    );
+    assert!(err.contains("l'identité de ce contact a changé"), "{err}");
+    let ok = Command::new(bin())
+        .args(["confirm-identity", "--name", "Bob", "--config"])
+        .arg(a.join("brocolis.toml"))
+        .output()
+        .unwrap();
+    assert!(ok.status.success());
+    let (sortie, _) = chiffre();
+    assert!(sortie.contains("[[BROCOLIS:v4:"), "{sortie}");
+    for d in [a, b, m] {
+        let _ = std::fs::remove_dir_all(&d);
+    }
+}

@@ -186,19 +186,38 @@ pub fn contact_generate(config: &Path, name: &str) -> anyhow::Result<String> {
 }
 
 /// Nouveau contact appairé : sa clé et, s'il en a publié un, son paquet de
-/// clés v3 (double cliquet).
+/// clés v3 (double cliquet). Un contact de ce nom qui a déjà un paquet est
+/// ré-appairé ([`contacts::repair_paired`]) : renvoie `true` si son identité
+/// a changé (§9.8).
 pub fn contact_add_paired(
     config: &Path,
     name: &str,
     b64: &str,
     bundle: Option<&str>,
     caps: Option<&str>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<bool> {
     let b64 = validate(b64)?;
+    let repair = load(config)?
+        .contacts
+        .iter()
+        .any(|p| p.paired && brocolis::config::same_name(&p.name, name));
+    let mut changed = false;
     edit(config, |s| match bundle {
+        Some(b) if repair => {
+            contacts::repair_paired(s, name, &b64, b, caps, v3store::now()).map(|(out, c)| {
+                changed = c;
+                out
+            })
+        }
         Some(b) => contacts::add_paired(s, name, &b64, b, caps, v3store::now()),
         None => contacts::add(s, name, &b64),
-    })
+    })?;
+    Ok(changed)
+}
+
+/// « J'ai comparé l'empreinte » : lève l'alerte d'identité (§9.8).
+pub fn contact_confirm_identity(config: &Path, name: &str) -> anyhow::Result<()> {
+    edit(config, |s| contacts::confirm_identity(s, name))
 }
 
 /// Marque un contact « à deux, double cliquet » (PSK), ou retire la marque.
@@ -546,6 +565,58 @@ mod tests {
             Protection::PostQuantum
         );
         for f in [a, b, c, d] {
+            let _ = std::fs::remove_dir_all(&f.dir);
+        }
+    }
+
+    #[test]
+    fn une_identite_changee_bloque_lenvoi_jusqua_confirmation() {
+        let (a, b, m) = (fresh("id-a"), fresh("id-b"), fresh("id-m"));
+        let publie = |f: &Files| {
+            brocolis::v3store::V3Store::for_config(&f.config)
+                .published()
+                .unwrap()
+        };
+        let (pb, pm) = (publie(&b), publie(&m));
+        let cle = SymKey::generate().to_base64();
+        assert!(!contact_add_paired(&a.config, "Bob", &cle, Some(&pb.bundle), None).unwrap());
+        // Ré-appairage avec le même appareil : pas d'alerte.
+        assert!(!contact_add_paired(&a.config, "Bob", &cle, Some(&pb.bundle), None).unwrap());
+        // « Bob » revient avec une autre identité (un autre appareil… ou un
+        // serveur qui s'interpose) : alerte.
+        let cle2 = SymKey::generate().to_base64();
+        assert!(contact_add_paired(&a.config, "Bob", &cle2, Some(&pm.bundle), None).unwrap());
+        let cfg = brocolis::config::Config::load(&a.config).unwrap();
+        let c = cfg.contact("Bob").unwrap();
+        assert!(c.identity_changed && c.previous_identity.is_some());
+        assert_eq!(
+            load(&a.config).unwrap().contacts[0].protection,
+            Protection::IdentityChanged
+        );
+        // Rien ne part : ni v3, ni v1.
+        let pour_bob = recipients(&a.config, false, &["Bob".into()]).unwrap();
+        assert!(seal(&a.config, "secret", &pour_bob).is_err());
+        let (texte, n) = brocolis::v3store::V3::for_config(&cfg, &a.config)
+            .encrypt_marked("rdv ((secret)) ok", &pour_bob);
+        assert_eq!(n, 0);
+        assert!(!texte.contains("secret"), "{texte}");
+        // Mais ce qu'il envoie se lit.
+        let pour_a = brocolis::crypto::SymKey::from_base64(&cle2).unwrap();
+        let (jeton, _) = brocolis::crypto::encrypt_message("coucou", &[pour_a]).unwrap();
+        assert_eq!(read(&a.config, &jeton).unwrap().unwrap().text, "coucou");
+        // Un second changement garde l'identité d'avant le premier.
+        let avant = c.previous_identity.clone();
+        contact_add_paired(&a.config, "Bob", &cle, Some(&pb.bundle), None).unwrap();
+        let cfg = brocolis::config::Config::load(&a.config).unwrap();
+        assert_eq!(cfg.contact("Bob").unwrap().previous_identity, avant);
+        // Confirmé : l'envoi reprend.
+        contact_confirm_identity(&a.config, "Bob").unwrap();
+        assert_eq!(
+            load(&a.config).unwrap().contacts[0].protection,
+            Protection::PostQuantum
+        );
+        assert!(seal(&a.config, "secret", &pour_bob).is_ok());
+        for f in [a, b, m] {
             let _ = std::fs::remove_dir_all(&f.dir);
         }
     }
