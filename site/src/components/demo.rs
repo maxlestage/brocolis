@@ -48,7 +48,7 @@ pub(crate) fn token(n: u32) -> String {
             B64[(s % 64) as usize] as char
         })
         .collect();
-    format!("[[BROCOLIS:v1:{body}…]]")
+    format!("[[BROCOLIS:v3:{body}…]]")
 }
 
 /// Passe de `from` à `to` caractère par caractère, de gauche à droite ; les
@@ -334,7 +334,7 @@ mod tests {
     #[test]
     fn le_jeton_a_la_forme_brocolis_et_change_a_chaque_tour() {
         let a = token(0);
-        assert!(a.starts_with("[[BROCOLIS:v1:") && a.ends_with("…]]"), "{a}");
+        assert!(a.starts_with("[[BROCOLIS:v3:") && a.ends_with("…]]"), "{a}");
         assert_eq!(a, token(0), "stable pendant un tour");
         assert_ne!(a, token(1), "différent d'un tour à l'autre");
     }
@@ -344,6 +344,6 @@ mod tests {
         // Aux deux bornes, aucun glyphe aléatoire n'est tiré.
         assert_eq!(morph("((demain))", "[[X]]", 0.0), "((demain))");
         assert_eq!(morph("((demain))", "[[X]]", 1.0), "[[X]]");
-        assert_eq!(morph("[[BROCOLIS:v1:abc]]", "demain", 1.0), "demain");
+        assert_eq!(morph("[[BROCOLIS:v3:abc]]", "demain", 1.0), "demain");
     }
 }

@@ -284,7 +284,7 @@ impl Lang {
 
 pub static FR: Strings = Strings {
     meta_title: "Brocolis 🥦 — Chiffrez ce que vous marquez, pour qui vous voulez",
-    meta_desc: "Brocolis est une application pour macOS, Linux et Windows qui chiffre en AES-256-GCM ce que vous marquez ((comme ceci)) sur Twitter, les forums, les messageries — pour les contacts que vous choisissez, sans rien changer côté serveur.",
+    meta_desc: "Brocolis est une application pour macOS, Linux et Windows qui chiffre ce que vous marquez ((comme ceci)) sur Twitter, les forums, les messageries — pour les contacts que vous choisissez, en double cliquet post-quantique avec vos contacts appairés, sans rien changer côté serveur.",
     meta_og_title: "Brocolis 🥦 — Chiffrement sélectif de votre trafic web",
     meta_og_desc: "Un clic, zéro configuration. AES-256-GCM sur ce que vous marquez, pour les contacts que vous choisissez. macOS, Linux, Windows.",
 
@@ -356,11 +356,11 @@ pub static FR: Strings = Strings {
     s2_cards: [
         Card {
             title: "Chiffrement sélectif",
-            body: "Seuls les segments <code>((entre doubles parenthèses))</code> sont chiffrés, en AES-256-GCM, sous la forme d'un jeton <code>[[BROCOLIS:v1:…]]</code>. Le service en ligne ne stocke que du chiffré ; le reste de la page fonctionne comme avant.",
+            body: "Seuls les segments <code>((entre doubles parenthèses))</code> sont chiffrés, en AES-256-GCM, sous la forme d'un jeton <code>[[BROCOLIS:v3:…]]</code> pour un contact appairé (<code>v1</code>/<code>v2</code> sinon). Le service en ligne ne stocke que du chiffré ; le reste de la page fonctionne comme avant.",
         },
         Card {
             title: "Un contact, une clé",
-            body: "Chaque contact a sa clé, créée dans l'application ou obtenue par un code convenu de vive voix. Choisissez pour qui le navigateur chiffre : un contact, ou plusieurs à la fois — un seul jeton, que chacun ouvre avec la sienne.",
+            body: "Chaque contact a sa clé, créée dans l'application ou obtenue par un code convenu de vive voix. Choisissez pour qui le navigateur chiffre : un contact, ou plusieurs à la fois — un seul jeton, que chacun ouvre avec la sienne. Appairé par code, un contact passe en <strong>double cliquet</strong> : le protocole de la messagerie Brocolis, sur iPhone et Android.",
         },
         Card {
             title: "Messages entiers",
@@ -385,7 +385,7 @@ pub static FR: Strings = Strings {
     app_tabs: ["Protection", "Contacts", "Message"],
     app_captions: [
         "Un interrupteur. Activé, ce que vous marquez est chiffré avant de quitter votre ordinateur, pour les contacts choisis ici. Coupé, votre système revient exactement à son état d'origine.",
-        "Un contact, une clé. Copiez-la pour la lui transmettre, changez-en si elle a fuité, renommez ou supprimez le contact. L'appairage par code crée le contact sans rien recopier.",
+        "Un contact, une clé. Copiez-la pour la lui transmettre, changez-en si elle a fuité, renommez ou supprimez le contact. L'appairage par code crée le contact sans rien recopier, en double cliquet ; chaque contact affiche sa protection.",
         "Écrivez, choisissez les destinataires, chiffrez : les segments entre parenthèses, ou tout le message. Collez un message reçu pour le lire — l'application dit de qui il vient.",
     ],
     mock: Mock {
@@ -412,12 +412,12 @@ pub static FR: Strings = Strings {
 
     s5_h: "Comment ça marche",
     s5_intro: "Brocolis s'intercale entre votre navigateur et le service en ligne. À l'envoi, il chiffre les segments marqués pour les contacts choisis ; à la réception, il déchiffre les jetons que vos clés ouvrent.",
-    s5_diagram: "Navigateur ─►  Brocolis (sur votre machine)  ─►  Service en ligne\n                             │                           │\n   « salut ((secret)) » ───► « salut [[BROCOLIS:v1:…]] »  (chiffré pour Alice)\n   « salut secret »     ◄─── « salut [[BROCOLIS:v1:…]] »  (déchiffré pour vous)",
+    s5_diagram: "Navigateur ─►  Brocolis (sur votre machine)  ─►  Service en ligne\n                             │                           │\n   « salut ((secret)) » ───► « salut [[BROCOLIS:v3:…]] »  (chiffré pour Alice)\n   « salut secret »     ◄─── « salut [[BROCOLIS:v3:…]] »  (déchiffré pour vous)",
 
     s6_h: "Vie privée et sécurité",
     s6_li: [
         "Chiffrement <strong>de bout en bout</strong> entre vous et vos contacts : le service en ligne ne voit jamais le clair.",
-        "<strong>Un contact, une clé</strong> : changer celle d'un contact (si elle a fuité) n'affecte pas les autres.",
+        "<strong>Double cliquet</strong> avec un contact appairé : une clé neuve par message, effacée aussitôt — voler une clé plus tard n'ouvre pas les messages passés —, établie en hybride X25519 + ML-KEM-768 contre l'ordinateur quantique de demain. Un contact, une clé : changer celle de l'un n'affecte pas les autres.",
         "Aucune télémétrie, aucun compte : tout tourne sur votre machine. L'appairage par code n'échange que des clés publiques ; la clé partagée, elle, ne circule jamais.",
         "Les droits administrateur sont demandés au clic, <strong>jamais conservés</strong> ; couper la protection retire le certificat et remet le proxy d'origine.",
         "Code source consultable pour audit (logiciel sous licence propriétaire).",
@@ -431,7 +431,7 @@ pub static FR: Strings = Strings {
     marquee: [
         "Chiffrement sélectif",
         "Un contact, une clé",
-        "AES-256-GCM",
+        "Double cliquet",
         "Un clic",
         "Écrit en Rust",
         "macOS · Linux · Windows",
@@ -460,7 +460,7 @@ pub static FR: Strings = Strings {
 
 pub static EN: Strings = Strings {
     meta_title: "Brocolis 🥦 — Encrypt what you mark, for whoever you choose",
-    meta_desc: "Brocolis is an app for macOS, Linux and Windows that encrypts with AES-256-GCM what you mark ((like this)) on Twitter, forums and messengers — for the contacts you choose, with nothing to change on the server side.",
+    meta_desc: "Brocolis is an app for macOS, Linux and Windows that encrypts what you mark ((like this)) on Twitter, forums and messengers — for the contacts you choose, with a post-quantum double ratchet for paired contacts, with nothing to change on the server side.",
     meta_og_title: "Brocolis 🥦 — Selective encryption for your web traffic",
     meta_og_desc: "One click, zero configuration. AES-256-GCM on what you mark, for the contacts you choose. macOS, Linux, Windows.",
 
@@ -532,11 +532,11 @@ pub static EN: Strings = Strings {
     s2_cards: [
         Card {
             title: "Selective encryption",
-            body: "Only segments wrapped in <code>((double parentheses))</code> are encrypted, with AES-256-GCM, as a <code>[[BROCOLIS:v1:…]]</code> token. The online service only stores ciphertext; the rest of the page works as before.",
+            body: "Only segments wrapped in <code>((double parentheses))</code> are encrypted, with AES-256-GCM, as a <code>[[BROCOLIS:v3:…]]</code> token for a paired contact (<code>v1</code>/<code>v2</code> otherwise). The online service only stores ciphertext; the rest of the page works as before.",
         },
         Card {
             title: "One contact, one key",
-            body: "Each contact has their own key, created in the app or obtained from a code agreed in person. Choose who the browser encrypts for: one contact, or several at once — a single token each opens with their own key.",
+            body: "Each contact has their own key, created in the app or obtained from a code agreed in person. Choose who the browser encrypts for: one contact, or several at once — a single token each opens with their own key. Paired with a code, a contact switches to the <strong>double ratchet</strong>: the protocol of the Brocolis messenger on iPhone and Android.",
         },
         Card {
             title: "Whole messages",
@@ -561,7 +561,7 @@ pub static EN: Strings = Strings {
     app_tabs: ["Protection", "Contacts", "Message"],
     app_captions: [
         "A switch. On, what you mark is encrypted before it leaves your computer, for the contacts picked here. Off, your system goes back exactly to how it was.",
-        "One contact, one key. Copy it to send it to them, change it if it leaked, rename or delete the contact. Pairing with a code creates the contact without copying anything.",
+        "One contact, one key. Copy it to send it to them, change it if it leaked, rename or delete the contact. Pairing with a code creates the contact without copying anything, with the double ratchet; each contact shows its protection.",
         "Write, pick the recipients, encrypt: the parts in parentheses, or the whole message. Paste a message you received to read it — the app tells you who it's from.",
     ],
     mock: Mock {
@@ -588,12 +588,12 @@ pub static EN: Strings = Strings {
 
     s5_h: "How it works",
     s5_intro: "Brocolis sits between your browser and the online service. On the way out, it encrypts the marked segments for the chosen contacts; on the way back, it decrypts the tokens your keys can open.",
-    s5_diagram: "Browser ─►  Brocolis (on your machine)  ─►  Online service\n                         │                         │\n   \"hi ((secret))\" ───► \"hi [[BROCOLIS:v1:…]]\"  (encrypted for Alice)\n   \"hi secret\"     ◄─── \"hi [[BROCOLIS:v1:…]]\"  (decrypted for you)",
+    s5_diagram: "Browser ─►  Brocolis (on your machine)  ─►  Online service\n                         │                         │\n   \"hi ((secret))\" ───► \"hi [[BROCOLIS:v3:…]]\"  (encrypted for Alice)\n   \"hi secret\"     ◄─── \"hi [[BROCOLIS:v3:…]]\"  (decrypted for you)",
 
     s6_h: "Privacy and security",
     s6_li: [
         "<strong>End-to-end</strong> encryption between you and your contacts: the online service never sees plaintext.",
-        "<strong>One contact, one key</strong>: changing one contact's key (if it leaked) doesn't affect the others.",
+        "<strong>Double ratchet</strong> with a paired contact: a fresh key for every message, erased right away — stealing a key later doesn't open past messages —, set up as a hybrid X25519 + ML-KEM-768 against tomorrow's quantum computer. One contact, one key: changing one doesn't affect the others.",
         "No telemetry, no account: everything runs on your machine. Pairing with a code only exchanges public keys; the shared key itself never travels.",
         "Administrator rights are requested on click and <strong>never kept</strong>; turning protection off removes the certificate and restores the original proxy.",
         "Source code available for audit (proprietary-licensed software).",
@@ -607,7 +607,7 @@ pub static EN: Strings = Strings {
     marquee: [
         "Selective encryption",
         "One contact, one key",
-        "AES-256-GCM",
+        "Double ratchet",
         "One click",
         "Written in Rust",
         "macOS · Linux · Windows",
@@ -636,7 +636,7 @@ pub static EN: Strings = Strings {
 
 pub static ES: Strings = Strings {
     meta_title: "Brocolis 🥦 — Cifra lo que marcas, para quien quieras",
-    meta_desc: "Brocolis es una aplicación para macOS, Linux y Windows que cifra con AES-256-GCM lo que marcas ((así)) en Twitter, foros y mensajerías — para los contactos que eliges, sin cambiar nada en el servidor.",
+    meta_desc: "Brocolis es una aplicación para macOS, Linux y Windows que cifra lo que marcas ((así)) en Twitter, foros y mensajerías — para los contactos que eliges, con doble trinquete poscuántico para tus contactos emparejados, sin cambiar nada en el servidor.",
     meta_og_title: "Brocolis 🥦 — Cifrado selectivo de tu tráfico web",
     meta_og_desc: "Un clic, cero configuración. AES-256-GCM en lo que marcas, para los contactos que eliges. macOS, Linux, Windows.",
 
@@ -708,11 +708,11 @@ pub static ES: Strings = Strings {
     s2_cards: [
         Card {
             title: "Cifrado selectivo",
-            body: "Solo los segmentos <code>((entre dobles paréntesis))</code> se cifran, con AES-256-GCM, como un token <code>[[BROCOLIS:v1:…]]</code>. El servicio en línea solo almacena texto cifrado; el resto de la página funciona como antes.",
+            body: "Solo los segmentos <code>((entre dobles paréntesis))</code> se cifran, con AES-256-GCM, como un token <code>[[BROCOLIS:v3:…]]</code> para un contacto emparejado (<code>v1</code>/<code>v2</code> si no). El servicio en línea solo almacena texto cifrado; el resto de la página funciona como antes.",
         },
         Card {
             title: "Un contacto, una clave",
-            body: "Cada contacto tiene su clave, creada en la aplicación u obtenida con un código acordado en persona. Elige para quién cifra el navegador: un contacto, o varios a la vez — un solo token, que cada uno abre con la suya.",
+            body: "Cada contacto tiene su clave, creada en la aplicación u obtenida con un código acordado en persona. Elige para quién cifra el navegador: un contacto, o varios a la vez — un solo token, que cada uno abre con la suya. Emparejado con un código, un contacto pasa al <strong>doble trinquete</strong>: el protocolo de la mensajería Brocolis, en iPhone y Android.",
         },
         Card {
             title: "Mensajes enteros",
@@ -737,7 +737,7 @@ pub static ES: Strings = Strings {
     app_tabs: ["Protección", "Contactos", "Mensaje"],
     app_captions: [
         "Un interruptor. Activado, lo que marcas se cifra antes de salir de tu equipo, para los contactos elegidos aquí. Desactivado, tu sistema vuelve exactamente a su estado original.",
-        "Un contacto, una clave. Cópiala para enviársela, cámbiala si se filtró, renombra o elimina el contacto. Emparejar con un código crea el contacto sin copiar nada.",
+        "Un contacto, una clave. Cópiala para enviársela, cámbiala si se filtró, renombra o elimina el contacto. Emparejar con un código crea el contacto sin copiar nada, con doble trinquete; cada contacto muestra su protección.",
         "Escribe, elige los destinatarios, cifra: los fragmentos entre paréntesis, o todo el mensaje. Pega un mensaje recibido para leerlo — la aplicación te dice de quién viene.",
     ],
     mock: Mock {
@@ -764,12 +764,12 @@ pub static ES: Strings = Strings {
 
     s5_h: "Cómo funciona",
     s5_intro: "Brocolis se sitúa entre tu navegador y el servicio en línea. Al enviar, cifra los segmentos marcados para los contactos elegidos; al recibir, descifra los tokens que tus claves pueden abrir.",
-    s5_diagram: "Navegador ─►  Brocolis (en tu equipo)  ─►  Servicio en línea\n                         │                         │\n   «hola ((secreto))» ───► «hola [[BROCOLIS:v1:…]]»  (cifrado para Alice)\n   «hola secreto»     ◄─── «hola [[BROCOLIS:v1:…]]»  (descifrado para ti)",
+    s5_diagram: "Navegador ─►  Brocolis (en tu equipo)  ─►  Servicio en línea\n                         │                         │\n   «hola ((secreto))» ───► «hola [[BROCOLIS:v3:…]]»  (cifrado para Alice)\n   «hola secreto»     ◄─── «hola [[BROCOLIS:v3:…]]»  (descifrado para ti)",
 
     s6_h: "Privacidad y seguridad",
     s6_li: [
         "Cifrado <strong>de extremo a extremo</strong> entre tú y tus contactos: el servicio en línea nunca ve el texto claro.",
-        "<strong>Un contacto, una clave</strong>: cambiar la de un contacto (si se filtró) no afecta a los demás.",
+        "<strong>Doble trinquete</strong> con un contacto emparejado: una clave nueva por mensaje, borrada enseguida — robar una clave más tarde no abre los mensajes pasados —, establecida en híbrido X25519 + ML-KEM-768 frente al ordenador cuántico de mañana. Un contacto, una clave: cambiar la de uno no afecta a los demás.",
         "Sin telemetría, sin cuenta: todo funciona en tu equipo. Emparejar con un código solo intercambia claves públicas; la clave compartida nunca viaja.",
         "Los derechos de administrador se piden al hacer clic y <strong>nunca se conservan</strong>; desactivar la protección retira el certificado y restaura el proxy original.",
         "Código fuente consultable para auditoría (software bajo licencia propietaria).",
@@ -783,7 +783,7 @@ pub static ES: Strings = Strings {
     marquee: [
         "Cifrado selectivo",
         "Un contacto, una clave",
-        "AES-256-GCM",
+        "Doble trinquete",
         "Un clic",
         "Escrito en Rust",
         "macOS · Linux · Windows",
