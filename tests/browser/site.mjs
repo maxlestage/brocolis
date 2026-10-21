@@ -276,6 +276,10 @@ async function load(page, url) {
   const { ctx, page, errors } = await newPage({ width: 390, height: 844 });
   await load(page, BASE + "/");
   // L'accueil y mène depuis sa section « Double cliquet ».
+  const v4Home = await page.$$eval("#ratchet .v4-home-h, #ratchet .v4-icon", (e) => e.length);
+  v4Home === 5
+    ? ok("accueil : le v4 (titre et quatre cartes) dans la section « Double cliquet »")
+    : bad(`accueil : v4, ${v4Home} éléments`);
   await page.$eval('#ratchet a[href="#/protocole"]', (a) => a.click());
   await page.waitForSelector("#v3-sim", { timeout: 10000 });
   ok("la section « Double cliquet » mène à #/protocole");
@@ -325,7 +329,7 @@ async function load(page, url) {
   await page.goto(BASE + "/#/protocole", { waitUntil: "networkidle" });
   await page.waitForSelector("#v3-title", { timeout: 10000 });
   const titre = await page.title();
-  titre.startsWith("Protocole v3") ? ok(`accès direct à #/protocole (« ${titre} »)`) : bad(`titre : ${titre}`);
+  titre.startsWith("Protocoles v3 et v4") ? ok(`accès direct à #/protocole (« ${titre} »)`) : bad(`titre : ${titre}`);
   errors.length === 0 ? ok("aucune erreur console (protocole)") : bad(`console : ${errors.join(" | ")}`);
   await ctx.close();
 }
@@ -518,19 +522,19 @@ for (const [locale, expected, marker] of [
 
   // Texte « déchiffré » : il défile puis revient exactement à l'original.
   const eyebrow = "[data-scramble]";
-  await until(page, (s) => document.querySelector(".hero-eyebrow " + s).textContent === "Application · Double cliquet · Rust", eyebrow);
+  await until(page, (s) => document.querySelector(".hero-eyebrow " + s).textContent === "Application · Triple cliquet v4 · Rust", eyebrow);
   const net = await page.$eval(".hero-eyebrow [data-scramble]", (e) => e.textContent);
-  net === "Application · Double cliquet · Rust" ? ok("le texte déchiffré revient intact") : bad(`surtitre : ${net}`);
+  net === "Application · Triple cliquet v4 · Rust" ? ok("le texte déchiffré revient intact") : bad(`surtitre : ${net}`);
 
   // Pendant un déchiffrage, la langue change : c'est la nouvelle qui gagne.
   const box = await page.$eval(".hero-eyebrow [data-scramble]", (e) => { const r = e.getBoundingClientRect(); return [r.x + 20, r.y + r.height / 2]; });
   await page.mouse.move(box[0], box[1]);
-  await until(page, () => document.querySelector(".hero-eyebrow [data-scramble]").textContent !== "Application · Double cliquet · Rust");
+  await until(page, () => document.querySelector(".hero-eyebrow [data-scramble]").textContent !== "Application · Triple cliquet v4 · Rust");
   const pendant = await page.$eval(".hero-eyebrow [data-scramble]", (e) => e.textContent);
   await page.click('.switcher button:has-text("EN")');
-  await until(page, () => document.querySelector(".hero-eyebrow [data-scramble]").textContent === "App · Double ratchet · Rust");
+  await until(page, () => document.querySelector(".hero-eyebrow [data-scramble]").textContent === "App · Triple ratchet v4 · Rust");
   const apres = await page.$eval(".hero-eyebrow [data-scramble]", (e) => e.textContent);
-  apres === "App · Double ratchet · Rust" && pendant !== "Application · Double cliquet · Rust"
+  apres === "App · Triple ratchet v4 · Rust" && pendant !== "Application · Triple cliquet v4 · Rust"
     ? ok(`changement de langue en plein déchiffrage : texte final anglais (pendant : « ${pendant} »)`)
     : bad(`après changement de langue : « ${apres} » (pendant : « ${pendant} »)`);
   await page.click('.switcher button:has-text("FR")');

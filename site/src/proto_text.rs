@@ -115,7 +115,7 @@ pub struct Proto {
     pub limits: [&'static str; 5],
 
     pub faq_h: &'static str,
-    pub faqs: [Faq; 7],
+    pub faqs: [Faq; 10],
 
     pub spec_h: &'static str,
     pub spec_body: &'static str,
@@ -140,13 +140,13 @@ pub struct Proto {
 // ---------------------------------------------------------------------------
 
 pub static FR: Proto = Proto {
-    meta_title: "Protocole v3 : le double cliquet — Brocolis 🥦",
+    meta_title: "Protocoles v3 et v4 : double et triple cliquet — Brocolis 🥦",
     nav: "Protocole v3",
     cta: "Tout comprendre du protocole v3",
     back: "Accueil",
-    kicker: "Protocole v3",
+    kicker: "Protocoles v3 et v4",
     title: "Une clé neuve pour chaque message",
-    lead: "Avec un contact appairé, Brocolis ne chiffre plus vos <code>((secrets))</code> avec une clé fixe. Il ouvre une <strong>session à double cliquet</strong>, comme Signal : chaque message a sa propre clé, effacée aussitôt, et la session s'établit en <strong>hybride X25519 + ML-KEM-768</strong>, à l'épreuve de l'ordinateur quantique de demain. C'est le protocole de la messagerie Brocolis — iPhone, Android, discussion du site — et brocolis le parle désormais sur macOS, Linux et Windows.",
+    lead: "Avec un contact appairé, Brocolis ne chiffre plus vos <code>((secrets))</code> avec une clé fixe. Il ouvre une <strong>session à double cliquet</strong>, comme Signal : chaque message a sa propre clé, effacée aussitôt, et la session s'établit en <strong>hybride X25519 + ML-KEM-768</strong>, à l'épreuve de l'ordinateur quantique de demain. C'est le protocole de la messagerie Brocolis — iPhone, Android, discussion du site — et brocolis le parle désormais sur macOS, Linux et Windows. Et quand vos deux appareils savent faire ML-KEM, c'est le <strong>v4</strong> : un triple cliquet post-quantique à chaque message, des en-têtes chiffrés et un expéditeur caché.",
     toc: [
         "Ce qui change",
         "Essayez le cliquet",
@@ -367,19 +367,19 @@ pub static FR: Proto = Proto {
     platforms: [
         Platform {
             name: "brocolis — macOS, Linux, Windows",
-            status: "Proxy, application et ligne de commande : appairage, envoi et réception en v3, hybride ML-KEM-768",
+            status: "Proxy, application et ligne de commande : v4 (triple cliquet), alerte si l'identité d'un contact change, groupes à cliquet",
         },
         Platform {
             name: "iPhone",
-            status: "App, clavier, Partager, iMessage ; hybride dès iOS 26, X25519 seul avant",
+            status: "App, clavier, Partager, iMessage : v4 dès iOS 26 (ML-KEM), v3 en X25519 seul avant",
         },
         Platform {
             name: "Android",
-            status: "App, Partager, messagerie ; hybride ML-KEM-768",
+            status: "App, Partager, messagerie : v4 (triple cliquet)",
         },
         Platform {
             name: "Discussion du site de la messagerie",
-            status: "Dans le navigateur, sessions gardées au coffre ; hybride ML-KEM-768",
+            status: "Dans le navigateur, sessions gardées au coffre : v4 et empreinte v4",
         },
     ],
     labels_h: "Chaque contact dit comment part le prochain message",
@@ -445,6 +445,18 @@ pub static FR: Proto = Proto {
         Faq {
             q: "Peut-on vérifier ?",
             a: "Oui : la spécification est publique, l'implémentation de référence en Rust est livrée avec brocolis (<code>proto/</code>), avec ses vecteurs de test et les vecteurs Wycheproof des primitives.",
+        },
+        Faq {
+            q: "Qu'apporte le v4 par rapport au v3 ?",
+            a: "Le post-quantique à <strong>chaque tour</strong> du cliquet, pas seulement à l'ouverture de la session ; des <strong>en-têtes chiffrés</strong> (plus d'identifiant de session ni de compteurs visibles) ; l'identité de l'expéditeur cachée dans le premier message ; et la détection d'un serveur qui voudrait vous ramener au v3.",
+        },
+        Faq {
+            q: "Dois-je faire quelque chose pour passer au v4 ?",
+            a: "Non : mettez brocolis à jour et appairez-vous. Si les deux appareils publient leur capacité v4, le contact passe au triple cliquet tout seul et l'empreinte devient celle du v4. Un contact appairé avant reste en v3 jusqu'au prochain appairage (<code>brocolis pair --name</code> avec le même nom), ou jusqu'à son premier message v4.",
+        },
+        Faq {
+            q: "Le v4 est-il vraiment mieux que Signal ?",
+            a: "Sur les points du comparatif, oui sur le papier : ML-KEM à chaque tour, en-têtes chiffrés, expéditeur caché dans le message. Mais aucun tiers ne l'a encore audité, et Signal a des années de recul. La spécification et les vecteurs de test sont publics pour que chacun puisse vérifier.",
         },
     ],
 
@@ -527,13 +539,13 @@ pub static FR: Proto = Proto {
 // ---------------------------------------------------------------------------
 
 pub static EN: Proto = Proto {
-    meta_title: "The v3 protocol: the double ratchet — Brocolis 🥦",
+    meta_title: "The v3 and v4 protocols: double and triple ratchet — Brocolis 🥦",
     nav: "v3 protocol",
     cta: "Everything about the v3 protocol",
     back: "Home",
-    kicker: "v3 protocol",
+    kicker: "v3 and v4 protocols",
     title: "A fresh key for every message",
-    lead: "With a paired contact, Brocolis no longer encrypts your <code>((secrets))</code> with a fixed key. It opens a <strong>double-ratchet session</strong>, like Signal: every message has its own key, erased right away, and the session is set up as a <strong>hybrid X25519 + ML-KEM-768</strong>, ready for tomorrow's quantum computer. It's the protocol of the Brocolis messenger — iPhone, Android, the site's chat — and brocolis now speaks it on macOS, Linux and Windows.",
+    lead: "With a paired contact, Brocolis no longer encrypts your <code>((secrets))</code> with a fixed key. It opens a <strong>double-ratchet session</strong>, like Signal: every message has its own key, erased right away, and the session is set up as a <strong>hybrid X25519 + ML-KEM-768</strong>, ready for tomorrow's quantum computer. It's the protocol of the Brocolis messenger — iPhone, Android, the site's chat — and brocolis now speaks it on macOS, Linux and Windows. And when both your devices can do ML-KEM, it's <strong>v4</strong>: a post-quantum triple ratchet on every message, encrypted headers and a hidden sender.",
     toc: [
         "What changes",
         "Try the ratchet",
@@ -754,19 +766,19 @@ pub static EN: Proto = Proto {
     platforms: [
         Platform {
             name: "brocolis — macOS, Linux, Windows",
-            status: "Proxy, app and command line: pairing, sending and receiving in v3, ML-KEM-768 hybrid",
+            status: "Proxy, app and command line: v4 (triple ratchet), alert if a contact's identity changes, ratchet groups",
         },
         Platform {
             name: "iPhone",
-            status: "App, keyboard, Share, iMessage; hybrid from iOS 26, X25519 only before",
+            status: "App, keyboard, Share, iMessage: v4 from iOS 26 (ML-KEM), v3 with X25519 only before",
         },
         Platform {
             name: "Android",
-            status: "App, Share, messenger; ML-KEM-768 hybrid",
+            status: "App, Share, messenger: v4 (triple ratchet)",
         },
         Platform {
             name: "The messenger site's chat",
-            status: "In the browser, sessions kept in the vault; ML-KEM-768 hybrid",
+            status: "In the browser, sessions kept in the vault: v4 and v4 fingerprint",
         },
     ],
     labels_h: "Each contact tells you how the next message leaves",
@@ -832,6 +844,18 @@ pub static EN: Proto = Proto {
         Faq {
             q: "Can it be checked?",
             a: "Yes: the specification is public, and the Rust reference implementation ships with brocolis (<code>proto/</code>), with its test vectors and the primitives' Wycheproof vectors.",
+        },
+        Faq {
+            q: "What does v4 add over v3?",
+            a: "Post-quantum protection on <strong>every turn</strong> of the ratchet, not just when the session opens; <strong>encrypted headers</strong> (no visible session id or counters anymore); the sender's identity hidden in the first message; and detection of a server trying to push you back to v3.",
+        },
+        Faq {
+            q: "Do I need to do anything to get v4?",
+            a: "No: update brocolis and pair. If both devices publish their v4 capability, the contact switches to the triple ratchet on its own and the fingerprint becomes the v4 one. A contact paired earlier stays on v3 until the next pairing (<code>brocolis pair --name</code> with the same name), or until their first v4 message.",
+        },
+        Faq {
+            q: "Is v4 really better than Signal?",
+            a: "On the points in the comparison, yes on paper: ML-KEM every turn, encrypted headers, the sender hidden inside the message. But no third party has audited it yet, and Signal has years of track record. The specification and test vectors are public so anyone can check.",
         },
     ],
 
@@ -914,13 +938,13 @@ pub static EN: Proto = Proto {
 // ---------------------------------------------------------------------------
 
 pub static ES: Proto = Proto {
-    meta_title: "Protocolo v3: el doble trinquete — Brocolis 🥦",
+    meta_title: "Protocolos v3 y v4: doble y triple trinquete — Brocolis 🥦",
     nav: "Protocolo v3",
     cta: "Todo sobre el protocolo v3",
     back: "Inicio",
-    kicker: "Protocolo v3",
+    kicker: "Protocolos v3 y v4",
     title: "Una clave nueva para cada mensaje",
-    lead: "Con un contacto emparejado, Brocolis ya no cifra tus <code>((secretos))</code> con una clave fija. Abre una <strong>sesión de doble trinquete</strong>, como Signal: cada mensaje tiene su propia clave, borrada enseguida, y la sesión se establece en <strong>híbrido X25519 + ML-KEM-768</strong>, preparada para el ordenador cuántico de mañana. Es el protocolo de la mensajería Brocolis — iPhone, Android, el chat del sitio — y brocolis ya lo habla en macOS, Linux y Windows.",
+    lead: "Con un contacto emparejado, Brocolis ya no cifra tus <code>((secretos))</code> con una clave fija. Abre una <strong>sesión de doble trinquete</strong>, como Signal: cada mensaje tiene su propia clave, borrada enseguida, y la sesión se establece en <strong>híbrido X25519 + ML-KEM-768</strong>, preparada para el ordenador cuántico de mañana. Es el protocolo de la mensajería Brocolis — iPhone, Android, el chat del sitio — y brocolis ya lo habla en macOS, Linux y Windows. Y cuando vuestros dos dispositivos saben hacer ML-KEM, es el <strong>v4</strong>: un triple trinquete poscuántico en cada mensaje, cabeceras cifradas y remitente oculto.",
     toc: [
         "Qué cambia",
         "Prueba el trinquete",
@@ -1141,19 +1165,19 @@ pub static ES: Proto = Proto {
     platforms: [
         Platform {
             name: "brocolis — macOS, Linux, Windows",
-            status: "Proxy, aplicación y línea de comandos: emparejamiento, envío y recepción en v3, híbrido ML-KEM-768",
+            status: "Proxy, aplicación y línea de comandos: v4 (triple trinquete), alerta si cambia la identidad de un contacto, grupos con trinquete",
         },
         Platform {
             name: "iPhone",
-            status: "App, teclado, Compartir, iMessage; híbrido desde iOS 26, solo X25519 antes",
+            status: "App, teclado, Compartir, iMessage: v4 desde iOS 26 (ML-KEM), v3 solo con X25519 antes",
         },
         Platform {
             name: "Android",
-            status: "App, Compartir, mensajería; híbrido ML-KEM-768",
+            status: "App, Compartir, mensajería: v4 (triple trinquete)",
         },
         Platform {
             name: "El chat del sitio de la mensajería",
-            status: "En el navegador, sesiones guardadas en la caja fuerte; híbrido ML-KEM-768",
+            status: "En el navegador, sesiones guardadas en la caja fuerte: v4 y huella v4",
         },
     ],
     labels_h: "Cada contacto dice cómo sale el próximo mensaje",
@@ -1219,6 +1243,18 @@ pub static ES: Proto = Proto {
         Faq {
             q: "¿Se puede verificar?",
             a: "Sí: la especificación es pública, y la implementación de referencia en Rust viene con brocolis (<code>proto/</code>), con sus vectores de prueba y los vectores Wycheproof de las primitivas.",
+        },
+        Faq {
+            q: "¿Qué aporta el v4 frente al v3?",
+            a: "Lo poscuántico en <strong>cada vuelta</strong> del trinquete, no solo al abrir la sesión; <strong>cabeceras cifradas</strong> (ya no se ven identificador de sesión ni contadores); la identidad del remitente oculta en el primer mensaje; y la detección de un servidor que quisiera devolveros al v3.",
+        },
+        Faq {
+            q: "¿Tengo que hacer algo para pasar al v4?",
+            a: "No: actualiza brocolis y empareja. Si ambos dispositivos publican su capacidad v4, el contacto pasa solo al triple trinquete y la huella pasa a ser la del v4. Un contacto emparejado antes sigue en v3 hasta el próximo emparejamiento (<code>brocolis pair --name</code> con el mismo nombre), o hasta su primer mensaje v4.",
+        },
+        Faq {
+            q: "¿De verdad el v4 es mejor que Signal?",
+            a: "En los puntos de la comparativa, sí sobre el papel: ML-KEM en cada vuelta, cabeceras cifradas, remitente oculto en el mensaje. Pero ningún tercero lo ha auditado aún, y Signal tiene años de recorrido. La especificación y los vectores de prueba son públicos para que cualquiera pueda verificar.",
         },
     ],
 

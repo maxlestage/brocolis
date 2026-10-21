@@ -145,6 +145,9 @@ pub struct Strings {
     pub v3_cards: [Card; 6],
     pub v3_diagram: &'static str,
     pub v3_note: &'static str,
+    /// Le v4 dans la section du double cliquet : titre et texte.
+    pub v4_home_h: &'static str,
+    pub v4_home_intro: &'static str,
 
     pub s6_h: &'static str,
     pub s6_li: [&'static str; 5],
@@ -458,7 +461,9 @@ pub static FR: Strings = Strings {
 Message 1    clé₁ ──► [[BROCOLIS:v3:…]]   clé₁ effacée
 Message 2    clé₂ ──► [[BROCOLIS:v3:…]]   clé₂ effacée
 Réponse      nouveau cliquet Diffie-Hellman : la session guérit",
-    v3_note: "Chaque contact affiche sa protection : <strong>🔐 double cliquet (post-quantique)</strong>, <em>classique</em>, <em>clé partagée (PSK)</em>, ou <em>ancien format</em>. Plusieurs destinataires et clés de groupe restent en v1/v2, et les anciens jetons restent lisibles pour toujours. Le protocole a une implémentation de référence en Rust et des vecteurs de test que chaque plateforme retrouve octet pour octet.",
+    v3_note: "Chaque contact affiche sa protection : <strong>🔐 triple cliquet</strong> (v4), <strong>🔐 double cliquet (post-quantique)</strong>, <em>classique</em>, <em>clé partagée (PSK)</em>, ou <em>ancien format</em>. Plusieurs destinataires et clés de groupe restent en v1/v2, et les anciens jetons restent lisibles pour toujours. Le protocole a une implémentation de référence en Rust et des vecteurs de test que chaque plateforme retrouve octet pour octet.",
+    v4_home_h: "Et maintenant, le v4 : triple cliquet",
+    v4_home_intro: "Quand les deux appareils savent faire ML-KEM, brocolis passe au <strong>protocole v4</strong> : le post-quantique à chaque message et non plus seulement à l'ouverture, des en-têtes chiffrés, un expéditeur caché, et un serveur qui ne peut plus vous ramener au v3 sans que l'empreinte le trahisse.",
 
     s6_h: "Vie privée et sécurité",
     s6_li: [
@@ -470,7 +475,7 @@ Réponse      nouveau cliquet Diffie-Hellman : la session guérit",
     ],
 
     footer: "Brocolis — chiffrement sélectif, écrit en Rust. Conçu et développé par Maxime Nathan Lestage.",
-    hero_eyebrow: "Application · Double cliquet · Rust",
+    hero_eyebrow: "Application · Triple cliquet v4 · Rust",
     hero_scroll: "Défiler",
     manifesto_label: "Manifeste",
     manifesto: "Vos mots restent les vôtres. Brocolis chiffre ce que vous marquez avant que ça ne quitte votre machine, pour ceux que vous choisissez, et laisse tout le reste intact. Aucun serveur à convaincre, rien à changer à vos habitudes.",
@@ -671,7 +676,9 @@ pub static EN: Strings = Strings {
 Message 1    key₁ ──► [[BROCOLIS:v3:…]]   key₁ erased
 Message 2    key₂ ──► [[BROCOLIS:v3:…]]   key₂ erased
 Reply        new Diffie-Hellman ratchet: the session heals",
-    v3_note: "Each contact shows its protection: <strong>🔐 double ratchet (post-quantum)</strong>, <em>classic</em>, <em>shared key (PSK)</em>, or <em>legacy format</em>. Several recipients and group keys stay on v1/v2, and old tokens stay readable forever. The protocol has a reference implementation in Rust and test vectors every platform matches byte for byte.",
+    v3_note: "Each contact shows its protection: <strong>🔐 triple ratchet</strong> (v4), <strong>🔐 double ratchet (post-quantum)</strong>, <em>classic</em>, <em>shared key (PSK)</em>, or <em>legacy format</em>. Several recipients and group keys stay on v1/v2, and old tokens stay readable forever. The protocol has a reference implementation in Rust and test vectors every platform matches byte for byte.",
+    v4_home_h: "And now, v4: the triple ratchet",
+    v4_home_intro: "When both devices can do ML-KEM, brocolis switches to the <strong>v4 protocol</strong>: post-quantum on every message rather than only at setup, encrypted headers, a hidden sender, and a server that can no longer push you back to v3 without the fingerprint giving it away.",
 
     s6_h: "Privacy and security",
     s6_li: [
@@ -683,7 +690,7 @@ Reply        new Diffie-Hellman ratchet: the session heals",
     ],
 
     footer: "Brocolis — selective encryption, written in Rust. Designed and developed by Maxime Nathan Lestage.",
-    hero_eyebrow: "App · Double ratchet · Rust",
+    hero_eyebrow: "App · Triple ratchet v4 · Rust",
     hero_scroll: "Scroll",
     manifesto_label: "Manifesto",
     manifesto: "Your words stay yours. Brocolis encrypts what you mark before it leaves your machine, for the people you choose, and leaves everything else untouched. No server to convince, no habit to change.",
@@ -884,7 +891,9 @@ pub static ES: Strings = Strings {
 Mensaje 1    clave₁ ──► [[BROCOLIS:v3:…]]   clave₁ borrada
 Mensaje 2    clave₂ ──► [[BROCOLIS:v3:…]]   clave₂ borrada
 Respuesta    nuevo trinquete Diffie-Hellman: la sesión se cura",
-    v3_note: "Cada contacto muestra su protección: <strong>🔐 doble trinquete (poscuántico)</strong>, <em>clásico</em>, <em>clave compartida (PSK)</em> o <em>formato antiguo</em>. Varios destinatarios y claves de grupo siguen en v1/v2, y los tokens antiguos siguen legibles para siempre. El protocolo tiene una implementación de referencia en Rust y vectores de prueba que cada plataforma reproduce byte a byte.",
+    v3_note: "Cada contacto muestra su protección: <strong>🔐 triple trinquete</strong> (v4), <strong>🔐 doble trinquete (poscuántico)</strong>, <em>clásico</em>, <em>clave compartida (PSK)</em> o <em>formato antiguo</em>. Varios destinatarios y claves de grupo siguen en v1/v2, y los tokens antiguos siguen legibles para siempre. El protocolo tiene una implementación de referencia en Rust y vectores de prueba que cada plataforma reproduce byte a byte.",
+    v4_home_h: "Y ahora, el v4: triple trinquete",
+    v4_home_intro: "Cuando ambos dispositivos saben hacer ML-KEM, brocolis pasa al <strong>protocolo v4</strong>: lo poscuántico en cada mensaje y no solo al establecer, cabeceras cifradas, remitente oculto, y un servidor que ya no puede devolveros al v3 sin que la huella lo delate.",
 
     s6_h: "Privacidad y seguridad",
     s6_li: [
@@ -896,7 +905,7 @@ Respuesta    nuevo trinquete Diffie-Hellman: la sesión se cura",
     ],
 
     footer: "Brocolis — cifrado selectivo, escrito en Rust. Diseñado y desarrollado por Maxime Nathan Lestage.",
-    hero_eyebrow: "Aplicación · Doble trinquete · Rust",
+    hero_eyebrow: "Aplicación · Triple trinquete v4 · Rust",
     hero_scroll: "Desplazar",
     manifesto_label: "Manifiesto",
     manifesto: "Tus palabras siguen siendo tuyas. Brocolis cifra lo que marcas antes de que salga de tu equipo, para quien tú eliges, y deja todo lo demás intacto. Ningún servidor que convencer, ningún hábito que cambiar.",
