@@ -479,11 +479,11 @@ for (const [locale, expected, marker] of [
 
   // Démonstration : le secret se scelle en jeton, puis se rouvre chez les proches.
   await page.evaluate(() => document.querySelector(".demo-board").scrollIntoView({ block: "center" }));
-  await until(page, () => document.querySelector(".demo-row:nth-child(2) .demo-token")?.textContent.startsWith("[[BROCOLIS:v1:"));
+  await until(page, () => document.querySelector(".demo-row:nth-child(2) .demo-token")?.textContent.startsWith("[[BROCOLIS:v3:"));
   const jeton = await page.$eval(".demo-row:nth-child(2) .demo-token", (e) => e.textContent);
   await page.waitForFunction(() => document.querySelector(".demo-row:nth-child(3) .demo-token.clear")?.textContent === "demain à 18h", null, { timeout: 12000 }).catch(() => {});
   const clair = await page.$eval(".demo-row:nth-child(3) .demo-token", (e) => e.textContent);
-  jeton.startsWith("[[BROCOLIS:v1:") && clair === "demain à 18h"
+  jeton.startsWith("[[BROCOLIS:v3:") && clair === "demain à 18h"
     ? ok(`démonstration : « ${jeton} » côté serveur, « ${clair} » chez les proches`)
     : bad(`démonstration : serveur=${jeton}, proches=${clair}`);
 
