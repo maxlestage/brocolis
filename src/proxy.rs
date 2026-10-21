@@ -27,6 +27,7 @@ use crate::crypto::{
     decrypt_tokens_escaped, encrypt_marked_form, encrypt_marked_multi, PlainEscape,
 };
 use crate::keys::KeyManager;
+use crate::v3store::V3;
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -45,6 +46,9 @@ pub struct AppState {
     pub keys: Arc<KeyManager>,
     pub cfg: Arc<Config>,
     pub http: reqwest::Client,
+    /// Le protocole v3 (double cliquet) : l'état gardé à côté de la
+    /// configuration. Absent, tout part et se lit en v1/v2.
+    pub v3: Option<Arc<V3>>,
 }
 
 /// En-têtes « hop-by-hop » à ne jamais relayer.
@@ -368,10 +372,13 @@ async fn forward_http(
                 // Un formulaire de navigateur transmet `((secret))` sous la
                 // forme `%28%28secret%29%29` : les marqueurs doivent être
                 // cherchés APRÈS décodage, sinon le secret part en clair.
-                let (transformed, n) = if is_form_urlencoded(&parts.headers) {
-                    encrypt_marked_form(text, &state.keys.encryption_keys())
-                } else {
-                    encrypt_marked_multi(text, &state.keys.encryption_keys())
+                let targets = state.keys.encryption_keys();
+                let form = is_form_urlencoded(&parts.headers);
+                let (transformed, n) = match (&state.v3, form) {
+                    (Some(v3), true) => v3.encrypt_marked_form(text, &targets),
+                    (Some(v3), false) => v3.encrypt_marked(text, &targets),
+                    (None, true) => encrypt_marked_form(text, &targets),
+                    (None, false) => encrypt_marked_multi(text, &targets),
                 };
                 if n > 0 {
                     tracing::info!("{method} {host}: {n} segment(s) chiffré(s)");
@@ -427,11 +434,15 @@ async fn forward_http(
                 body_rewritten = true;
                 let out = match std::str::from_utf8(&resp_body) {
                     Ok(text) => {
-                        let (transformed, n) = decrypt_tokens_escaped(
-                            text,
-                            &state.keys.all_keys(),
-                            escape_for(&resp_headers),
-                        );
+                        let keys = state.keys.all_keys();
+                        let escape = escape_for(&resp_headers);
+                        let (transformed, n) = match &state.v3 {
+                            Some(v3) => {
+                                let read = v3.read(text, &keys, escape);
+                                (read.text, read.opened)
+                            }
+                            None => decrypt_tokens_escaped(text, &keys, escape),
+                        };
                         if n > 0 {
                             tracing::info!(
                                 "{method} {host} -> {status}: {n} segment(s) déchiffré(s)"

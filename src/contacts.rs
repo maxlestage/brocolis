@@ -78,6 +78,48 @@ pub fn add(existing: &str, name: &str, key: &str) -> Result<String, String> {
     Ok(doc.to_string())
 }
 
+/// Ajoute un contact appairé à deux avec son paquet de clés v3 (base64),
+/// arrivé à `at` (secondes Unix) : ce qu'on lui envoie part en double
+/// cliquet.
+pub fn add_paired(
+    existing: &str,
+    name: &str,
+    key: &str,
+    bundle: &str,
+    at: u64,
+) -> Result<String, String> {
+    brocolis_proto::KeyBundle::from_base64(bundle.trim())
+        .map_err(|e| format!("paquet de clés v3 invalide : {e}"))?;
+    let out = add(existing, name, key)?;
+    let mut doc = parse(&out)?;
+    let arr = contacts(&mut doc)?;
+    let i = position(arr, name).expect("contact ajouté");
+    let t = arr.get_mut(i).expect("indice trouvé");
+    t.insert("bundle", toml_edit::value(bundle.trim()));
+    t.insert(
+        "bundle_at",
+        toml_edit::value(i64::try_from(at).unwrap_or(i64::MAX)),
+    );
+    t.insert("duo", toml_edit::value(true));
+    Ok(doc.to_string())
+}
+
+/// Marque un contact « à deux, double cliquet » (PSK), ou retire la marque :
+/// sans paquet échangé, le v3 part alors de la clé partagée. À ne faire que
+/// si l'autre est à jour (un ancien client ne lirait rien).
+pub fn set_psk(existing: &str, name: &str, on: bool) -> Result<String, String> {
+    let mut doc = parse(existing)?;
+    let arr = contacts(&mut doc)?;
+    let i = position(arr, name).ok_or_else(|| format!("contact « {name} » inconnu"))?;
+    let t = arr.get_mut(i).expect("indice trouvé");
+    if on {
+        t.insert("psk", toml_edit::value(true));
+    } else {
+        t.remove("psk");
+    }
+    Ok(doc.to_string())
+}
+
 /// Remplace la clé d'un contact. Ce qu'il avait chiffré avec l'ancienne
 /// devient illisible : c'est le but quand elle a fuité.
 pub fn set_key(existing: &str, name: &str, key: &str) -> Result<String, String> {
@@ -85,9 +127,13 @@ pub fn set_key(existing: &str, name: &str, key: &str) -> Result<String, String> 
     let mut doc = parse(existing)?;
     let arr = contacts(&mut doc)?;
     let i = position(arr, name).ok_or_else(|| format!("contact « {name} » inconnu"))?;
-    arr.get_mut(i)
-        .expect("indice trouvé")
-        .insert("key", toml_edit::value(key));
+    let t = arr.get_mut(i).expect("indice trouvé");
+    t.insert("key", toml_edit::value(key));
+    // Une clé neuve n'est plus celle de l'appairage : son paquet ne lui va
+    // plus (l'empreinte comparée portait sur l'ancienne).
+    for field in ["bundle", "bundle_at", "duo", "psk"] {
+        t.remove(field);
+    }
     Ok(doc.to_string())
 }
 

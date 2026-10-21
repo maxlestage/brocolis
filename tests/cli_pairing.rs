@@ -27,8 +27,8 @@ fn tmpdir(nom: &str) -> PathBuf {
 
 #[derive(Default)]
 struct Etat {
-    /// code -> [(peerId, pub)]
-    pairs: HashMap<String, Vec<(String, String)>>,
+    /// code -> [(peerId, pub, paquet v3 ou "")]
+    pairs: HashMap<String, Vec<(String, String, String)>>,
     /// code -> [(destinataire, expéditeur, sonPub, blob)]
     wraps: Vec<(String, String, String, String, String)>,
 }
@@ -91,10 +91,11 @@ fn servir(mut flux: TcpStream, etat: Arc<Mutex<Etat>>) {
             let code = champ(&corps, "code");
             let moi = champ(&corps, "peerId");
             let pubk = champ(&corps, "pub");
+            let paquet = champ(&corps, "bundle");
             let mut e = etat.lock().unwrap();
             let liste = e.pairs.entry(code.clone()).or_default();
-            if !liste.iter().any(|(p, _)| *p == moi) {
-                liste.push((moi.clone(), pubk));
+            if !liste.iter().any(|(p, _, _)| *p == moi) {
+                liste.push((moi.clone(), pubk, paquet));
             }
             pairs_json(liste, &moi)
         }
@@ -169,11 +170,15 @@ fn items_bruts(corps: &str) -> Vec<String> {
 }
 
 /// Les correspondants renvoyés excluent toujours le demandeur.
-fn pairs_json(liste: &[(String, String)], moi: &str) -> String {
+/// Le paquet v3 n'est rendu que pour qui en a publié un, comme le serveur.
+fn pairs_json(liste: &[(String, String, String)], moi: &str) -> String {
     let items: Vec<String> = liste
         .iter()
-        .filter(|(p, _)| p != moi)
-        .map(|(p, k)| format!("{{\"peerId\":\"{p}\",\"pub\":\"{k}\"}}"))
+        .filter(|(p, _, _)| p != moi)
+        .map(|(p, k, b)| match b.as_str() {
+            "" => format!("{{\"peerId\":\"{p}\",\"pub\":\"{k}\"}}"),
+            b => format!("{{\"peerId\":\"{p}\",\"pub\":\"{k}\",\"bundle\":\"{b}\"}}"),
+        })
         .collect();
     format!("{{\"peers\":[{}]}}", items.join(","))
 }
@@ -355,6 +360,166 @@ fn la_cle_appairee_permet_de_se_lire() {
         "bob doit lire ce qu'alice a chiffré"
     );
 
+    let _ = std::fs::remove_dir_all(&a);
+    let _ = std::fs::remove_dir_all(&b);
+}
+
+/// Deux `pair --name` : chacun devient le contact de l'autre avec son paquet
+/// de clés v3, l'empreinte (qui couvre la clé ET les deux identités) est la
+/// même des deux côtés, et ce qu'Alice chiffre pour Bob part en double
+/// cliquet — Bob le lit, et sait que ça vient d'Alice.
+#[test]
+fn deux_contacts_appaires_parlent_en_double_cliquet() {
+    let serveur = rendezvous();
+    let a = tmpdir("v3-alice");
+    let b = tmpdir("v3-bob");
+
+    let lance = |d: &PathBuf, nom: &str| {
+        Command::new(bin())
+            .args(["pair", "--code", "V3", "--name", nom, "--server", &serveur])
+            .arg("--config")
+            .arg(d.join("brocolis.toml"))
+            .arg("--identity")
+            .arg(d.join("id.key"))
+            .args(["--timeout", "30"])
+            .current_dir(d)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap()
+    };
+    let pa = lance(&a, "Bob");
+    std::thread::sleep(std::time::Duration::from_millis(400));
+    let pb = lance(&b, "Alice");
+    let ra = pa.wait_with_output().unwrap();
+    let rb = pb.wait_with_output().unwrap();
+    assert!(
+        ra.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ra.stderr)
+    );
+    assert!(
+        rb.status.success(),
+        "{}",
+        String::from_utf8_lossy(&rb.stderr)
+    );
+    let emp = |o: &std::process::Output| {
+        String::from_utf8_lossy(&o.stdout)
+            .lines()
+            .find(|l| l.contains("Empreinte"))
+            .map(|l| l.trim().to_string())
+            .unwrap_or_default()
+    };
+    assert_eq!(emp(&ra), emp(&rb), "la même empreinte des deux côtés");
+    let config_a = std::fs::read_to_string(a.join("brocolis.toml")).unwrap();
+    assert!(
+        config_a.contains("name = \"Bob\"") && config_a.contains("bundle = "),
+        "{config_a}"
+    );
+    assert!(a.join("v3").join("appareil.json").exists());
+
+    // La liste des contacts dit ce que donnera le prochain envoi.
+    let liste = Command::new(bin())
+        .arg("contacts")
+        .arg("--config")
+        .arg(a.join("brocolis.toml"))
+        .output()
+        .unwrap();
+    let liste = String::from_utf8(liste.stdout).unwrap();
+    assert!(liste.contains("double cliquet (post-quantique)"), "{liste}");
+
+    let chiffre = Command::new(bin())
+        .args([
+            "encrypt",
+            "--text",
+            "rdv ((au café)) ok",
+            "--to",
+            "Bob",
+            "--config",
+        ])
+        .arg(a.join("brocolis.toml"))
+        .output()
+        .unwrap();
+    assert!(chiffre.status.success());
+    let chiffre = String::from_utf8(chiffre.stdout).unwrap();
+    assert!(chiffre.contains("[[BROCOLIS:v3:"), "{chiffre}");
+    assert!(!chiffre.contains("au café"));
+
+    let lire = |d: &PathBuf| {
+        Command::new(bin())
+            .args(["decrypt", "--text", chiffre.trim(), "--config"])
+            .arg(d.join("brocolis.toml"))
+            .output()
+            .unwrap()
+    };
+    let clair = lire(&b);
+    assert!(clair.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&clair.stdout).trim(),
+        "rdv au café ok"
+    );
+    assert!(
+        String::from_utf8_lossy(&clair.stderr).contains("double cliquet, de : Alice"),
+        "{}",
+        String::from_utf8_lossy(&clair.stderr)
+    );
+    // Relu : le clair est gardé (la clé de message, elle, est effacée).
+    assert_eq!(
+        String::from_utf8_lossy(&lire(&b).stdout).trim(),
+        "rdv au café ok"
+    );
+    // Alice relit son propre envoi.
+    assert_eq!(
+        String::from_utf8_lossy(&lire(&a).stdout).trim(),
+        "rdv au café ok"
+    );
+
+    let _ = std::fs::remove_dir_all(&a);
+    let _ = std::fs::remove_dir_all(&b);
+}
+
+/// Un correspondant sans paquet v3 (un ancien client) : l'appairage reste en
+/// ancien format, avec l'empreinte d'avant des deux côtés.
+#[test]
+fn un_ancien_client_reste_en_ancien_format() {
+    let serveur = rendezvous();
+    let a = tmpdir("v3-nouveau");
+    let b = tmpdir("v3-ancien");
+    let lance = |d: &PathBuf, nom: Option<&str>| {
+        let mut c = Command::new(bin());
+        c.args(["pair", "--code", "MIXTE", "--server", &serveur]);
+        if let Some(n) = nom {
+            c.args(["--name", n]);
+        }
+        c.arg("--config")
+            .arg(d.join("brocolis.toml"))
+            .arg("--identity")
+            .arg(d.join("id.key"))
+            .args(["--timeout", "30"])
+            .current_dir(d)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap()
+    };
+    let pa = lance(&a, Some("Ancien"));
+    std::thread::sleep(std::time::Duration::from_millis(400));
+    let pb = lance(&b, None);
+    let ra = pa.wait_with_output().unwrap();
+    let rb = pb.wait_with_output().unwrap();
+    assert!(ra.status.success() && rb.status.success());
+    let emp = |o: &std::process::Output| {
+        String::from_utf8_lossy(&o.stdout)
+            .lines()
+            .find(|l| l.contains("Empreinte"))
+            .map(|l| l.trim().to_string())
+            .unwrap_or_default()
+    };
+    assert_eq!(emp(&ra), emp(&rb));
+    let config_a = std::fs::read_to_string(a.join("brocolis.toml")).unwrap();
+    assert!(config_a.contains("name = \"Ancien\""));
+    assert!(!config_a.contains("bundle"), "{config_a}");
+    assert!(String::from_utf8_lossy(&ra.stdout).contains("ancien format"));
     let _ = std::fs::remove_dir_all(&a);
     let _ = std::fs::remove_dir_all(&b);
 }

@@ -8,7 +8,11 @@
 //!   en service (l'état d'origine est mémorisé sur disque entre les deux).
 //! - `brocolis keygen`     : génère une clé symétrique AES-256 partageable.
 //! - `brocolis encrypt` / `decrypt` : la transformation du proxy, hors ligne.
-//! - `brocolis pair`       : appairage automatique X25519 à deux (rendez-vous).
+//! - `brocolis contacts`   : les contacts et la protection de chacun.
+//! - `brocolis protect` / `unprotect` : une clé protégée par une phrase
+//!   secrète (`[[BROCOLIS-CLE:v2:…]]`, Argon2id), comme la messagerie.
+//! - `brocolis pair`       : appairage automatique X25519 à deux (rendez-vous),
+//!   en double cliquet (protocole v3) avec un contact nommé.
 //! - `brocolis pair-group` : appairage de groupe (clé de groupe distribuée).
 //! - `brocolis ca`         : génère/exporte le certificat racine à installer
 //!   dans le navigateur.
@@ -105,6 +109,10 @@ enum Command {
         /// Clé base64 (surcharge la configuration).
         #[arg(long)]
         key: Option<String>,
+        /// Chiffrer pour ce contact (répétable). Pour un seul contact appairé,
+        /// le jeton part en double cliquet (v3) ; sinon v1/v2.
+        #[arg(long = "to", conflicts_with = "key")]
+        to: Vec<String>,
     },
     /// Déchiffre les jetons `[[BROCOLIS:…]]` d'un texte, comme le ferait le proxy.
     Decrypt {
@@ -118,13 +126,58 @@ enum Command {
         #[arg(long)]
         key: Option<String>,
     },
+    /// Liste les contacts : empreinte de leur clé et protection du prochain
+    /// envoi (double cliquet ou ancien format).
+    Contacts {
+        /// Fichier de configuration TOML.
+        #[arg(long, default_value = "brocolis.toml")]
+        config: PathBuf,
+    },
+    /// Protège une clé par une phrase secrète : `[[BROCOLIS-CLE:v2:…]]`
+    /// (Argon2id), à transmettre sans craindre qu'on la lise en chemin.
+    ///
+    /// La phrase (8 caractères au moins) est lue dans `BROCOLIS_PHRASE`, sinon
+    /// sur la première ligne de l'entrée standard.
+    Protect {
+        /// La clé à protéger (base64).
+        #[arg(long, conflicts_with = "contact")]
+        key: Option<String>,
+        /// Ou : la clé de ce contact.
+        #[arg(long)]
+        contact: Option<String>,
+        /// Fichier de configuration TOML (pour `--contact`).
+        #[arg(long, default_value = "brocolis.toml")]
+        config: PathBuf,
+    },
+    /// Retrouve la clé d'un `[[BROCOLIS-CLE:v1:…]]` ou `v2`, avec sa phrase
+    /// (lue dans `BROCOLIS_PHRASE`, sinon sur l'entrée standard). Affiche la
+    /// clé, ou en fait un contact avec `--name`.
+    Unprotect {
+        /// Le texte qui contient la clé protégée.
+        #[arg(long)]
+        text: String,
+        /// Ajouter la clé comme ce contact.
+        #[arg(long)]
+        name: Option<String>,
+        /// Fichier de configuration TOML (pour `--name`).
+        #[arg(long, default_value = "brocolis.toml")]
+        config: PathBuf,
+    },
     /// Appairage automatique X25519 via le serveur de rendez-vous : échange les
     /// clés publiques avec un correspondant partageant le même CODE, dérive la
-    /// clé partagée et l'ajoute au trousseau (`keys` de brocolis.toml).
+    /// clé partagée et l'ajoute au trousseau.
+    ///
+    /// Avec `--name`, la clé devient ce contact et les paquets de clés v3 sont
+    /// échangés : ce qu'on lui envoie part en double cliquet (comme la
+    /// messagerie). Sans, elle rejoint les clés sans nom (`keys`), en ancien
+    /// format.
     Pair {
         /// Code court convenu de vive voix avec le correspondant.
         #[arg(long)]
         code: String,
+        /// Nom du contact à créer (double cliquet).
+        #[arg(long)]
+        name: Option<String>,
         /// URL du serveur de rendez-vous.
         #[arg(long, default_value_t = brocolis::pairing::DEFAULT_SERVER.to_string())]
         server: String,
@@ -227,10 +280,28 @@ fn main() -> anyhow::Result<()> {
             eprintln!("# puis placez-la dans brocolis.toml (champ `key`).");
             Ok(())
         }
-        Command::Encrypt { text, config, key } => {
-            let keys = keys_for_tool(&config, key.as_deref())?;
+        Command::Encrypt {
+            text,
+            config,
+            key,
+            to,
+        } => {
             let entree = read_text(text)?;
-            let (sortie, n) = brocolis::crypto::encrypt_marked_multi(&entree, &keys);
+            let (sortie, n) = if to.is_empty() {
+                let keys = keys_for_tool(&config, key.as_deref())?;
+                brocolis::crypto::encrypt_marked_multi(&entree, &keys)
+            } else {
+                let cfg = Config::load(&config)?;
+                let v3 = brocolis::v3store::V3::for_config(&cfg, &config);
+                let mut keys = Vec::new();
+                for name in &to {
+                    let r = brocolis::v3store::find(&v3.recipients, name)
+                        .ok_or_else(|| anyhow::anyhow!("contact « {name} » inconnu"))?;
+                    keys.push(r.key.clone());
+                }
+                eprintln!("# {}", v3.protection(&keys).label());
+                v3.encrypt_marked(&entree, &keys)
+            };
             print!("{sortie}");
             if !sortie.ends_with('\n') {
                 println!();
@@ -243,14 +314,44 @@ fn main() -> anyhow::Result<()> {
         Command::Decrypt { text, config, key } => {
             let keys = keys_for_tool(&config, key.as_deref())?;
             let entree = read_text(text)?;
-            let (sortie, n) = brocolis::crypto::decrypt_tokens_multi(&entree, &keys);
+            // Avec une clé imposée, seulement v1/v2 : le v3 lit l'état de la
+            // configuration.
+            let read = if key.is_some() {
+                let (text, opened) = brocolis::crypto::decrypt_tokens_multi(&entree, &keys);
+                brocolis::v3store::Read {
+                    text,
+                    opened,
+                    ..Default::default()
+                }
+            } else {
+                let cfg = Config::load(&config)?;
+                brocolis::v3store::V3::for_config(&cfg, &config).decrypt(&entree, &keys)
+            };
+            let sortie = &read.text;
             print!("{sortie}");
             if !sortie.ends_with('\n') {
                 println!();
             }
-            eprintln!("# {n} jeton(s) déchiffré(s)");
+            eprintln!("# {} jeton(s) déchiffré(s)", read.opened);
+            if !read.v3_from.is_empty() {
+                eprintln!("# double cliquet, de : {}", read.v3_from.join(", "));
+            }
+            if read.replayed > 0 {
+                eprintln!(
+                    "# {} jeton(s) v3 déjà lu(s) sur cet appareil (un message à double \
+                     cliquet ne s'ouvre qu'une fois)",
+                    read.replayed
+                );
+            }
             Ok(())
         }
+        Command::Contacts { config } => run_contacts(&config),
+        Command::Protect {
+            key,
+            contact,
+            config,
+        } => run_protect(key, contact, &config),
+        Command::Unprotect { text, name, config } => run_unprotect(&text, name, &config),
         Command::On { config, state } => run_on(
             &config.unwrap_or_else(brocolis::system::default_config_path),
             state,
@@ -259,11 +360,12 @@ fn main() -> anyhow::Result<()> {
         Command::Status { state } => run_status(state),
         Command::Pair {
             code,
+            name,
             server,
             config,
             identity,
             timeout,
-        } => run_pair(&code, &server, &config, &identity, timeout),
+        } => run_pair(&code, name.as_deref(), &server, &config, &identity, timeout),
         Command::PairGroup {
             code,
             server,
@@ -390,7 +492,7 @@ fn spawn_key_signal_handlers(keys: Arc<KeyManager>, config_path: PathBuf) {
 #[tokio::main]
 async fn run_proxy(cfg: Config, config_path: PathBuf) -> anyhow::Result<()> {
     let listen = cfg.listen;
-    let (state, keys) = brocolis::build_app_state(cfg)?;
+    let (state, keys) = brocolis::build_app_state_v3(cfg, &config_path)?;
 
     #[cfg(unix)]
     spawn_key_signal_handlers(keys.clone(), config_path);
@@ -425,7 +527,7 @@ async fn run_auto(cfg: Config, config_path: PathBuf, system: bool) -> anyhow::Re
     let listen = cfg.listen;
     let port = listen.port();
     let ca_cert = cfg.ca_cert.clone();
-    let (state, keys) = brocolis::build_app_state(cfg)?;
+    let (state, keys) = brocolis::build_app_state_v3(cfg, &config_path)?;
 
     #[cfg(unix)]
     spawn_key_signal_handlers(keys.clone(), config_path);
@@ -580,11 +682,13 @@ fn add_key_to_config(path: &Path, key_b64: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Appairage automatique : publie ma clé publique sous `code`, attend le
-/// correspondant, dérive la clé partagée et l'ajoute au trousseau.
+/// Appairage automatique : publie ma clé publique (et, pour un contact
+/// nommé, mon paquet de clés v3) sous `code`, attend le correspondant, dérive
+/// la clé partagée et l'ajoute au trousseau.
 #[tokio::main]
 async fn run_pair(
     code: &str,
+    name: Option<&str>,
     server: &str,
     config: &Path,
     identity: &Path,
@@ -593,26 +697,153 @@ async fn run_pair(
     use brocolis::pairing::RendezvousClient;
     use std::time::Duration;
 
+    // Le nom est vérifié avant d'aller sur le réseau : l'autre attendrait
+    // pour rien.
+    if let Some(n) = name {
+        if Config::load(config)?.contact(n).is_some() {
+            anyhow::bail!("un contact « {} » existe déjà", n.trim());
+        }
+    }
     let priv_key = load_or_create_identity(identity)?;
+    let bundle = match name {
+        Some(_) => Some(brocolis::v3store::V3Store::for_config(config).bundle_b64()?),
+        None => None,
+    };
     let client = RendezvousClient::new(server)?;
     tracing::info!("Appairage sur {server}…");
-    let derived =
-        brocolis::pairing::pair_two(&client, code, &priv_key, Duration::from_secs(timeout_secs))
-            .await?;
+    let paired = brocolis::pairing::pair_two(
+        &client,
+        code,
+        &priv_key,
+        bundle.as_deref(),
+        Duration::from_secs(timeout_secs),
+    )
+    .await?;
 
     println!("✅ Appairé.");
-    println!("   Empreinte : {}", derived.fingerprint);
+    println!("   Empreinte : {}", paired.fingerprint);
     println!("   ⚠️  Comparez-la de vive voix avec votre correspondant avant tout secret.");
-    println!(
-        "   Clé partagée (base64) : {}",
-        derived.symmetric_key_base64
-    );
+    println!("   Clé partagée (base64) : {}", paired.key_b64);
 
-    add_key_to_config(config, &derived.symmetric_key_base64)?;
+    let Some(name) = name else {
+        add_key_to_config(config, &paired.key_b64)?;
+        println!(
+            "   Clé ajoutée à {} (champ `keys`). Redémarrez brocolis pour l'activer.",
+            config.display()
+        );
+        println!("   Avec --name, elle deviendrait un contact en double cliquet.");
+        return Ok(());
+    };
+    let existing = std::fs::read_to_string(config).unwrap_or_default();
+    let updated = match &paired.bundle {
+        Some(b) => brocolis::contacts::add_paired(
+            &existing,
+            name,
+            &paired.key_b64,
+            b,
+            brocolis::v3store::now(),
+        ),
+        None => brocolis::contacts::add(&existing, name, &paired.key_b64),
+    }
+    .map_err(|e| anyhow::anyhow!("écriture du contact dans {}: {e}", config.display()))?;
+    std::fs::write(config, updated)?;
+    let label = if paired.bundle.is_some() {
+        "🔐 double cliquet"
+    } else {
+        "ancien format (le correspondant n'a pas publié de paquet v3)"
+    };
     println!(
-        "   Clé ajoutée à {} (champ `keys`). Redémarrez brocolis pour l'activer.",
+        "   Contact « {} » ajouté à {} : {label}.",
+        name.trim(),
         config.display()
     );
+    println!("   Redémarrez brocolis pour l'activer.");
+    Ok(())
+}
+
+/// `contacts` — chaque contact, l'empreinte de sa clé et sa protection.
+fn run_contacts(config: &Path) -> anyhow::Result<()> {
+    let cfg = Config::load(config)?;
+    let v3 = brocolis::v3store::V3::for_config(&cfg, config);
+    let named: Vec<_> = v3
+        .recipients
+        .iter()
+        .filter(|r| r.name.is_some())
+        .cloned()
+        .collect();
+    if named.is_empty() {
+        println!("Aucun contact dans {}.", config.display());
+        return Ok(());
+    }
+    let protections = brocolis::v3store::protections(&v3.store, &named);
+    for (r, p) in named.iter().zip(protections) {
+        println!(
+            "{}\t{}\t{}",
+            r.name.as_deref().unwrap_or_default(),
+            brocolis::agreement::group_fingerprint(&r.key.to_base64()),
+            p.label()
+        );
+    }
+    Ok(())
+}
+
+/// La phrase secrète : `BROCOLIS_PHRASE`, sinon la première ligne de
+/// l'entrée standard (sans son saut de ligne).
+fn read_phrase() -> anyhow::Result<String> {
+    if let Ok(p) = std::env::var("BROCOLIS_PHRASE") {
+        return Ok(p);
+    }
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line)?;
+    Ok(line.trim_end_matches(['\r', '\n']).to_owned())
+}
+
+/// `protect` — `[[BROCOLIS-CLE:v2:…]]` (Argon2id, 64 Mio, 3 passes).
+fn run_protect(key: Option<String>, contact: Option<String>, config: &Path) -> anyhow::Result<()> {
+    let b64 = match (key, contact) {
+        (Some(k), _) => k,
+        (None, Some(name)) => {
+            let cfg = Config::load(config)?;
+            let c = cfg
+                .contact(&name)
+                .ok_or_else(|| anyhow::anyhow!("contact « {name} » inconnu"))?;
+            c.key()
+                .ok_or_else(|| anyhow::anyhow!("le contact « {name} » n'a aucune clé"))?
+                .to_owned()
+        }
+        (None, None) => anyhow::bail!("indiquez --key ou --contact"),
+    };
+    let key = SymKey::from_base64(&b64).map_err(|e| anyhow::anyhow!("clé invalide : {e}"))?;
+    let phrase = read_phrase()?;
+    let protected = brocolis_proto::cle_protegee::protect_key(
+        &key.bytes(),
+        &phrase,
+        &mut brocolis_proto::hasard::system(),
+    )
+    .map_err(|e| anyhow::anyhow!("{e}"))?;
+    println!("{protected}");
+    eprintln!("# Transmettez la phrase par un autre canal que la clé protégée.");
+    Ok(())
+}
+
+/// `unprotect` — la clé d'un `[[BROCOLIS-CLE:…]]`, avec sa phrase.
+fn run_unprotect(text: &str, name: Option<String>, config: &Path) -> anyhow::Result<()> {
+    let phrase = read_phrase()?;
+    let key = brocolis_proto::cle_protegee::unprotect_key(text, &phrase)
+        .map_err(|e| anyhow::anyhow!("clé protégée illisible : {e}"))?;
+    let b64 = SymKey::from_bytes(&key[..])
+        .map_err(|e| anyhow::anyhow!("{e}"))?
+        .to_base64();
+    match name {
+        None => println!("{b64}"),
+        Some(name) => {
+            let existing = std::fs::read_to_string(config).unwrap_or_default();
+            let updated = brocolis::contacts::add(&existing, &name, &b64)
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            std::fs::write(config, updated)?;
+            println!("Contact « {} » ajouté à {}.", name.trim(), config.display());
+        }
+    }
     Ok(())
 }
 
@@ -637,8 +868,10 @@ async fn run_pair_group(
     let peer_id = random_peer_id();
     let client = RendezvousClient::new(server)?;
 
-    // Tout le monde publie sa clé publique sous le code.
-    let mut peers = client.publish(code, &peer_id, &my_pub).await?;
+    // Tout le monde publie sa clé publique sous le code. Pas de paquet v3 :
+    // une clé de groupe reste en v1/v2, et sans paquet l'empreinte reste
+    // celle du groupe des deux côtés (§8.4).
+    let mut peers = client.publish(code, &peer_id, &my_pub, None).await?;
     let deadline = Instant::now() + Duration::from_secs(timeout_secs);
 
     if found {

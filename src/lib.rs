@@ -13,6 +13,8 @@ pub mod keys;
 pub mod pairing;
 pub mod proxy;
 pub mod system;
+pub mod v3;
+pub mod v3store;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -26,6 +28,23 @@ pub use proxy::{run, run_until, AppState};
 /// partir d'une configuration. Renvoie aussi un handle vers le gestionnaire de
 /// clés pour permettre la rotation/recharge depuis un frontend.
 pub fn build_app_state(cfg: Config) -> anyhow::Result<(Arc<AppState>, Arc<KeyManager>)> {
+    build_state(cfg, None)
+}
+
+/// Comme [`build_app_state`], avec le protocole v3 (double cliquet) : son
+/// état est gardé dans `v3/`, à côté du fichier de configuration
+/// ([`v3store`]). C'est ce que lancent la CLI et l'application.
+pub fn build_app_state_v3(
+    cfg: Config,
+    config_path: &std::path::Path,
+) -> anyhow::Result<(Arc<AppState>, Arc<KeyManager>)> {
+    build_state(cfg, Some(config_path))
+}
+
+fn build_state(
+    cfg: Config,
+    config_path: Option<&std::path::Path>,
+) -> anyhow::Result<(Arc<AppState>, Arc<KeyManager>)> {
     // Le fournisseur cryptographique rustls doit être installé AVANT la
     // construction du client reqwest.
     ca::ensure_crypto_provider();
@@ -90,12 +109,21 @@ pub fn build_app_state(cfg: Config) -> anyhow::Result<(Arc<AppState>, Arc<KeyMan
         tracing::info!("Portée: {:?}", cfg.encrypt_hosts);
     }
 
+    let v3 = config_path.map(|p| Arc::new(v3store::V3::for_config(&cfg, p)));
+    if let Some(v3) = &v3 {
+        tracing::info!(
+            "Protocole v3 (double cliquet) : état dans {}",
+            v3.store.dir().display()
+        );
+    }
+
     let keys_handle = keys.clone();
     let state = Arc::new(AppState {
         ca,
         keys,
         cfg: Arc::new(cfg),
         http,
+        v3,
     });
     Ok((state, keys_handle))
 }

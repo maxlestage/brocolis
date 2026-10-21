@@ -13,6 +13,19 @@ pub enum Lang {
 
 pub const LANGS: [Lang; 3] = [Lang::Fr, Lang::En, Lang::Es];
 
+impl Strings {
+    /// Le libellé de la protection d'un contact (§8.8).
+    pub fn protection(&self, p: brocolis::v3::Protection) -> &'static str {
+        use brocolis::v3::Protection;
+        match p {
+            Protection::PostQuantum => self.v3_pq,
+            Protection::Classic => self.v3_classic,
+            Protection::Psk => self.v3_psk,
+            Protection::Legacy => self.v3_legacy,
+        }
+    }
+}
+
 impl Lang {
     pub fn label(self) -> &'static str {
         match self {
@@ -152,6 +165,17 @@ pub struct Strings {
     pub no_recipient: &'static str,
     pub nothing_readable: &'static str,
     pub no_keys: &'static str,
+    /// `{n}` : messages à double cliquet déjà lus ici, au clair oublié.
+    pub replayed: &'static str,
+
+    // Protection d'un contact (protocole v3 de la messagerie).
+    pub v3_pq: &'static str,
+    pub v3_classic: &'static str,
+    pub v3_psk: &'static str,
+    pub v3_legacy: &'static str,
+    pub psk_on: &'static str,
+    pub psk_off: &'static str,
+    pub psk_note: &'static str,
 
     pub footer: &'static str,
 }
@@ -253,6 +277,14 @@ pub static FR: Strings = Strings {
     nothing_readable: "Aucun jeton lisible avec vos clés.",
     no_keys: "Aucune clé : voyez l'onglet Contacts.",
 
+    replayed: "{n} message(s) à double cliquet déjà lu(s) sur cet appareil : un tel message ne s'ouvre qu'une fois.",
+    v3_pq: "🔐 double cliquet (post-quantique)",
+    v3_classic: "🔐 double cliquet (classique)",
+    v3_psk: "🔐 double cliquet, clé partagée (PSK)",
+    v3_legacy: "ancien format",
+    psk_on: "Passer au double cliquet",
+    psk_off: "Revenir à l'ancien format",
+    psk_note: "Seulement si votre correspondant a une version à jour (application, messagerie Brocolis) : un ancien client ne lirait rien.",
     footer: "Conçu et développé par Maxime Nathan Lestage",
 };
 
@@ -353,6 +385,14 @@ pub static EN: Strings = Strings {
     nothing_readable: "No token your keys can read.",
     no_keys: "No key: see the Contacts tab.",
 
+    replayed: "{n} double-ratchet message(s) already read on this device: such a message opens only once.",
+    v3_pq: "🔐 double ratchet (post-quantum)",
+    v3_classic: "🔐 double ratchet (classic)",
+    v3_psk: "🔐 double ratchet, shared key (PSK)",
+    v3_legacy: "legacy format",
+    psk_on: "Switch to double ratchet",
+    psk_off: "Back to the legacy format",
+    psk_note: "Only if your contact runs an up-to-date version (app, Brocolis messenger): an old client would read nothing.",
     footer: "Designed and developed by Maxime Nathan Lestage",
 };
 
@@ -453,6 +493,14 @@ pub static ES: Strings = Strings {
     nothing_readable: "Ningún token legible con tus claves.",
     no_keys: "Ninguna clave: mira la pestaña Contactos.",
 
+    replayed: "{n} mensaje(s) de doble trinquete ya leído(s) en este equipo: un mensaje así solo se abre una vez.",
+    v3_pq: "🔐 doble trinquete (poscuántico)",
+    v3_classic: "🔐 doble trinquete (clásico)",
+    v3_psk: "🔐 doble trinquete, clave compartida (PSK)",
+    v3_legacy: "formato antiguo",
+    psk_on: "Pasar al doble trinquete",
+    psk_off: "Volver al formato antiguo",
+    psk_note: "Solo si tu contacto tiene una versión al día (aplicación, mensajería Brocolis): un cliente antiguo no leería nada.",
     footer: "Diseñado y desarrollado por Maxime Nathan Lestage",
 };
 
@@ -487,6 +535,7 @@ mod tests {
                 assert!(g.contains("{name}"), "{g}");
             }
             assert!(t.service_note.contains("{path}"));
+            assert!(t.replayed.contains("{n}"));
         }
     }
 }

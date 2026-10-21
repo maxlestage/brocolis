@@ -7,6 +7,8 @@
 
 use std::path::Path;
 
+use brocolis::v3::Protection;
+use brocolis::v3store::{self, V3};
 use brocolis::{Config, SymKey, contacts};
 
 /// Une clé, telle qu'affichée.
@@ -34,6 +36,14 @@ impl Entry {
 pub struct Person {
     pub name: String,
     pub key: Entry,
+    /// Ce que donnera le prochain envoi : double cliquet ou ancien format.
+    pub protection: Protection,
+    /// Appairé avec échange des paquets v3.
+    pub paired: bool,
+    /// Marqué « à deux, double cliquet » (PSK).
+    pub psk: bool,
+    /// Sa clé est une clé de groupe : jamais de double cliquet.
+    pub group: bool,
 }
 
 /// Tout ce que le fichier contient de clés.
@@ -76,12 +86,24 @@ pub fn load(config: &Path) -> anyhow::Result<Book> {
             own.push(Entry::new(k, own.is_empty() && primary == Some(k)));
         }
     }
+    let v3 = V3::for_config(&cfg, config);
+    let protections = v3store::protections(&v3.store, &v3.recipients);
     let contacts = cfg
         .contacts
         .iter()
-        .map(|c| Person {
-            name: c.name.clone(),
-            key: Entry::new(c.key.trim(), false),
+        .map(|c| {
+            let found = v3
+                .recipients
+                .iter()
+                .position(|r| r.name.as_deref() == Some(c.name.as_str()));
+            Person {
+                name: c.name.clone(),
+                key: Entry::new(c.key.trim(), false),
+                protection: found.map_or(Protection::Legacy, |i| protections[i]),
+                paired: found.is_some_and(|i| v3.recipients[i].bundle.is_some()),
+                psk: c.psk,
+                group: found.is_none_or(|i| v3.recipients[i].group),
+            }
         })
         .collect();
     Ok(Book {
@@ -163,6 +185,26 @@ pub fn contact_generate(config: &Path, name: &str) -> anyhow::Result<String> {
     Ok(b64)
 }
 
+/// Nouveau contact appairé : sa clé et, s'il en a publié un, son paquet de
+/// clés v3 (double cliquet).
+pub fn contact_add_paired(
+    config: &Path,
+    name: &str,
+    b64: &str,
+    bundle: Option<&str>,
+) -> anyhow::Result<()> {
+    let b64 = validate(b64)?;
+    edit(config, |s| match bundle {
+        Some(b) => contacts::add_paired(s, name, &b64, b, v3store::now()),
+        None => contacts::add(s, name, &b64),
+    })
+}
+
+/// Marque un contact « à deux, double cliquet » (PSK), ou retire la marque.
+pub fn contact_set_psk(config: &Path, name: &str, on: bool) -> anyhow::Result<()> {
+    edit(config, |s| contacts::set_psk(s, name, on))
+}
+
 /// Remplace la clé d'un contact : celle qu'il a donnée, ou (`None`) une clé
 /// neuve, renvoyée pour la lui transmettre.
 pub fn contact_set_key(config: &Path, name: &str, b64: Option<&str>) -> anyhow::Result<String> {
@@ -213,9 +255,34 @@ pub fn recipients(config: &Path, me: bool, names: &[String]) -> anyhow::Result<V
     Ok(keys)
 }
 
-/// Déchiffre avec TOUTES les clés (les vôtres et celles des contacts), et dit
-/// de qui vient le message. `None` : aucune clé du tout.
-pub fn read(config: &Path, input: &str) -> anyhow::Result<Option<(String, usize, Vec<String>)>> {
+/// Ce qu'une lecture a donné.
+pub struct Reading {
+    pub text: String,
+    pub opened: usize,
+    /// Les contacts qui ont écrit ce qui s'est ouvert.
+    pub from: Vec<String>,
+    /// Messages à double cliquet déjà lus ici, dont le clair est oublié.
+    pub replayed: usize,
+}
+
+/// Chiffre un message pour ces clés : en double cliquet (v3) pour un seul
+/// contact appairé, v1/v2 sinon. Renvoie aussi la protection obtenue.
+pub fn seal(
+    config: &Path,
+    input: &str,
+    keys: &[SymKey],
+) -> anyhow::Result<(String, brocolis::crypto::Sealed, Protection)> {
+    let cfg = Config::load(config)?;
+    let v3 = V3::for_config(&cfg, config);
+    let protection = v3.protection(keys);
+    let (out, sealed) = v3.encrypt_message(input, keys)?;
+    Ok((out, sealed, protection))
+}
+
+/// Déchiffre avec TOUTES les clés (les vôtres et celles des contacts) et
+/// l'état du double cliquet, et dit de qui vient le message. `None` : aucune
+/// clé du tout.
+pub fn read(config: &Path, input: &str) -> anyhow::Result<Option<Reading>> {
     let cfg = Config::load(config)?;
     let keys = cfg
         .all_key_b64()
@@ -225,8 +292,19 @@ pub fn read(config: &Path, input: &str) -> anyhow::Result<Option<(String, usize,
     if keys.is_empty() {
         return Ok(None);
     }
-    let (out, n) = brocolis::crypto::decrypt_tokens_multi(input, &keys);
-    Ok(Some((out, n, contacts::readers(input, &cfg))))
+    let read = V3::for_config(&cfg, config).decrypt(input, &keys);
+    let mut from = contacts::readers(input, &cfg);
+    for n in read.v3_from {
+        if !from.contains(&n) {
+            from.push(n);
+        }
+    }
+    Ok(Some(Reading {
+        text: read.text,
+        opened: read.opened,
+        from,
+        replayed: read.replayed,
+    }))
 }
 
 #[cfg(test)]
@@ -348,9 +426,58 @@ mod tests {
         assert!(recipients(&f.config, false, &["Zoé".into()]).is_err());
 
         let (chiffre, _) = brocolis::crypto::encrypt_message("salut", &keys).unwrap();
-        let (clair, n, de) = read(&f.config, &chiffre).unwrap().unwrap();
-        assert_eq!((clair.as_str(), n), ("salut", 1));
-        assert_eq!(de, ["Alice"]);
+        let lu = read(&f.config, &chiffre).unwrap().unwrap();
+        assert_eq!((lu.text.as_str(), lu.opened), ("salut", 1));
+        assert_eq!(lu.from, ["Alice"]);
         let _ = std::fs::remove_dir_all(&f.dir);
+    }
+
+    #[test]
+    fn deux_appareils_appaires_parlent_en_double_cliquet() {
+        let (a, b) = (fresh("v3-a"), fresh("v3-b"));
+        let paquet = |f: &Files| {
+            brocolis::v3store::V3Store::for_config(&f.config)
+                .bundle_b64()
+                .unwrap()
+        };
+        let (pa, pb) = (paquet(&a), paquet(&b));
+        let cle = SymKey::generate().to_base64();
+        contact_add_paired(&a.config, "Bob", &cle, Some(&pb)).unwrap();
+        contact_add_paired(&b.config, "Alice", &cle, Some(&pa)).unwrap();
+        let bob = load(&a.config).unwrap();
+        assert_eq!(bob.contacts[0].protection, Protection::PostQuantum);
+        assert!(bob.contacts[0].paired && !bob.contacts[0].group);
+
+        let pour_bob = recipients(&a.config, false, &["Bob".into()]).unwrap();
+        let (jeton, _, p) = seal(&a.config, "rendez-vous à 8 h", &pour_bob).unwrap();
+        assert_eq!(p, Protection::PostQuantum);
+        assert!(jeton.starts_with("[[BROCOLIS:v3:"), "{jeton}");
+        let lu = read(&b.config, &jeton).unwrap().unwrap();
+        assert_eq!(lu.text, "rendez-vous à 8 h");
+        assert_eq!(lu.from, ["Alice"]);
+        // Relu : le clair est gardé, la clé de message est effacée.
+        assert_eq!(
+            read(&b.config, &jeton).unwrap().unwrap().text,
+            "rendez-vous à 8 h"
+        );
+        // Mon propre envoi se relit sur mon appareil.
+        assert_eq!(
+            read(&a.config, &jeton).unwrap().unwrap().text,
+            "rendez-vous à 8 h"
+        );
+
+        // Un contact sans paquet : ancien format, sauf s'il est marqué PSK.
+        contact_add(&a.config, "Carole", &SymKey::generate().to_base64()).unwrap();
+        let carole = recipients(&a.config, false, &["Carole".into()]).unwrap();
+        let (v1, _, p) = seal(&a.config, "x", &carole).unwrap();
+        assert_eq!(p, Protection::Legacy);
+        assert!(v1.starts_with("[[BROCOLIS:v1:"));
+        contact_set_psk(&a.config, "Carole", true).unwrap();
+        let (psk, _, p) = seal(&a.config, "x", &carole).unwrap();
+        assert_eq!(p, Protection::Psk);
+        assert!(psk.starts_with("[[BROCOLIS:v3:"));
+        for f in [a, b] {
+            let _ = std::fs::remove_dir_all(&f.dir);
+        }
     }
 }

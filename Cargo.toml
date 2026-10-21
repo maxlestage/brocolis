@@ -11,11 +11,12 @@ readme = "Readme.md"
 homepage = "https://brocolis-dafbe9beac75.herokuapp.com/"
 repository = "https://github.com/maxlestage/brocolis"
 
-# Espace de travail : le proxy (ce paquet) et l'application de bureau
-# (`app/`), qui partagent la bibliothèque et le même `target/`. Le site
-# (`site/`) reste à part : il compile pour wasm32, avec son propre verrou.
+# Espace de travail : le proxy (ce paquet), l'application de bureau (`app/`)
+# et le protocole de la messagerie (`proto/`, copie de sa référence), qui
+# partagent le même `target/`. Le site (`site/`) reste à part : il compile pour
+# wasm32, avec son propre verrou.
 [workspace]
-members = [".", "app"]
+members = [".", "app", "proto"]
 exclude = ["site"]
 
 [lib]
@@ -68,6 +69,9 @@ anyhow = "1"
 thiserror = "2"
 futures-util = { version = "0.3.33", default-features = false, features = ["std"] }
 futures-core = "0.3.33"
+# Le protocole v3 de la messagerie (double cliquet, hybride X25519 + ML-KEM-768,
+# clé protégée Argon2id) : son implémentation de référence, telle quelle.
+brocolis-proto = { path = "proto" }
 
 # Dépendances de test uniquement.
 [dev-dependencies]
@@ -145,6 +149,19 @@ assets = [
     { source = "Readme.md", dest = "/usr/share/doc/brocolis/README.md", mode = "644", doc = true },
     { source = "linux/README.md", dest = "/usr/share/doc/brocolis/LINUX.md", mode = "644", doc = true },
 ]
+
+# Argon2id (64 Mio), PBKDF2 (600 000 tours) et ML-KEM sont très lents sans
+# optimisation : ces dépendances-là sont optimisées même en debug, pour que
+# `cargo test` reste rapide.
+[profile.dev.package]
+argon2 = { opt-level = 3 }
+blake2 = { opt-level = 3 }
+pbkdf2 = { opt-level = 3 }
+hmac = { opt-level = 3 }
+sha2 = { opt-level = 3 }
+ml-kem = { opt-level = 3 }
+curve25519-dalek = { opt-level = 3 }
+ed25519-dalek = { opt-level = 3 }
 
 # Binaires distribués : sans symboles de débogage (l'application de bureau
 # passe ainsi d'environ 31 Mo à une dizaine), et liés avec une LTO légère.

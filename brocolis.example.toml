@@ -54,10 +54,27 @@ ca_key = "brocolis-ca.key"
 # [[contacts]]
 # name = "Bob"
 # key = "CLE_PARTAGEE_AVEC_BOB"
+#
+# Un contact appairé avec `brocolis pair --name` (ou l'application) garde
+# aussi le paquet de clés v3 de son appareil : ce qu'on lui envoie part alors
+# en double cliquet, comme la messagerie (une clé neuve par message, établie
+# en hybride X25519 + ML-KEM-768). L'état des sessions est dans `v3/`, à
+# côté de ce fichier.
+# [[contacts]]
+# name = "Carole"
+# key = "CLE_PARTAGEE_AVEC_CAROLE"
+# bundle = "PAQUET_V3_DE_CAROLE"
+# bundle_at = 1790000000
+# duo = true
+#
+# Sans paquet échangé, `psk = true` passe au double cliquet à partir de la clé
+# partagée — seulement si l'autre a une version à jour.
+# psk = true
 
 # Pour qui le proxy chiffre les ((segments)) : des noms de contacts (l'onglet
-# Protection de l'application le règle). Un seul nom = jeton v1 avec sa clé ;
-# plusieurs = un seul jeton v2 que chacun ouvre avec sa clé. Absent : la clé
+# Protection de l'application le règle). Un seul nom = double cliquet (v3)
+# s'il est appairé, sinon jeton v1 avec sa clé ; plusieurs = un seul jeton v2
+# que chacun ouvre avec sa clé. Absent : la clé
 # `key`. Un nom inconnu empêche le démarrage plutôt que de chiffrer pour
 # quelqu'un d'autre.
 # encrypt_to = ["Alice", "Bob"]
