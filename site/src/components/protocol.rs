@@ -432,6 +432,15 @@ fn platforms() -> Element {
             .child(h3().tr(move |s| s.proto.platforms[i].name))
             .child(p().tr(move |s| s.proto.platforms[i].status))
     });
+    let labels_v4 = (0..FR.proto.labels_v4.len()).map(|i| {
+        li().attr("data-reveal", "left")
+            .child(
+                span()
+                    .class("v3-label")
+                    .tr(move |s| s.proto.labels_v4[i].label),
+            )
+            .child(span().tr(move |s| s.proto.labels_v4[i].new))
+    });
     let labels = (0..FR.proto.labels.len()).map(|i| {
         li().attr("data-reveal", "left")
             .child(
@@ -446,7 +455,7 @@ fn platforms() -> Element {
         .child(div().class("grid").children(cards))
         .child(h3().class("v3-sub").tr(|t| t.proto.labels_h))
         .child(p().raw(|t| t.proto.labels_intro))
-        .child(ul().class("v3-labels").children(labels))
+        .child(ul().class("v3-labels").children(labels_v4).children(labels))
         .child(h3().class("v3-sub").tr(|t| t.proto.limits_h))
         .child(ul().class("checklist v3-limits").children((0..5).map(|i| {
             li().attr("data-reveal", "left")
@@ -482,7 +491,65 @@ fn spec() -> Element {
         )
 }
 
+/// Le v4, au-delà de Signal (§9).
+fn beyond() -> Element {
+    const ICONS: [&str; 4] = ["⚛️", "🕶️", "🎭", "🛡️"];
+    let cards = (0..4).map(|i| {
+        article()
+            .class("card")
+            .attr("data-reveal", "card")
+            .attr("data-tilt", "")
+            .attr("data-spot", "")
+            .child(
+                span()
+                    .class("v4-icon")
+                    .attr("aria-hidden", "true")
+                    .text(ICONS[i]),
+            )
+            .child(h3().tr(move |s| s.proto.v4_cards[i].q))
+            .child(p().tr(move |s| s.proto.v4_cards[i].a))
+    });
+    let head = thead().child(
+        tr().children((0..4).map(|i| th().attr("scope", "col").tr(move |s| s.proto.v4_cols[i]))),
+    );
+    let rows = (0..6).map(|r| {
+        tr().child(th().attr("scope", "row").tr(move |s| s.proto.v4_rows[r][0]))
+            .child(td().class("old").tr(move |s| s.proto.v4_rows[r][1]))
+            .child(td().class("old").tr(move |s| s.proto.v4_rows[r][2]))
+            .child(td().class("new").tr(move |s| s.proto.v4_rows[r][3]))
+    });
+    block("v4", |p| p.v4_h)
+        .child(p().attr("data-reveal", "blur").tr(|t| t.proto.v4_intro))
+        .child(div().class("grid").children(cards))
+        .child(
+            div()
+                .class("table-wrap")
+                .attr("tabindex", "0")
+                .attr("data-reveal", "")
+                .child(
+                    table()
+                        .class("v3-table cmp v4")
+                        .child(head)
+                        .child(tbody().children(rows)),
+                ),
+        )
+        .child(p().attr("data-reveal", "blur").tr(|t| t.proto.v4_cost))
+        .child(
+            p().class("v3-note")
+                .attr("data-reveal", "")
+                .tr(|t| t.proto.v4_honest),
+        )
+}
+
 pub fn protocol_page() -> Node {
+    let toc_v4 = li().child(
+        a().href("#v4")
+            .on_click(|ev| {
+                ev.prevent_default();
+                crate::dom::scroll_to_id("v4");
+            })
+            .tr(|s| s.proto.toc_v4),
+    );
     let toc = (0..ANCHORS.len()).map(|i| {
         li().child(
             a().href(format!("#{}", ANCHORS[i]))
@@ -545,8 +612,9 @@ pub fn protocol_page() -> Node {
                 nav()
                     .class("v3-toc")
                     .attr_tr("aria-label", |t| t.proto.nav)
-                    .child(ol().children(toc)),
+                    .child(ol().child(toc_v4).children(toc)),
             )
+            .child(beyond())
             .child(comparison())
             .child(
                 block("v3-sim", |p| p.sim_h)

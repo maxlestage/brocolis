@@ -280,12 +280,17 @@ async function load(page, url) {
   await page.waitForSelector("#v3-sim", { timeout: 10000 });
   ok("la section « Double cliquet » mène à #/protocole");
   const ids = await page.$$eval(".v3-main section[id]", (els) => els.map((e) => e.id));
-  const attendu = ["v3-change", "v3-sim", "v3-steps", "v3-token", "v3-threats", "v3-where", "v3-faq"];
+  const attendu = ["v4", "v3-change", "v3-sim", "v3-steps", "v3-token", "v3-threats", "v3-where", "v3-faq"];
   JSON.stringify(ids) === JSON.stringify(attendu)
-    ? ok("protocole : les sept parties, dans l'ordre")
+    ? ok("protocole : les huit parties (v4 en tête), dans l'ordre")
     : bad(`protocole : ${JSON.stringify(ids)}`);
-  const lignes = await page.$$eval(".v3-table.cmp tbody tr", (r) => r.length);
+  const lignes = await page.$$eval(".v3-table.cmp:not(.v4) tbody tr", (r) => r.length);
   lignes === 7 ? ok("comparatif : 7 lignes") : bad(`comparatif : ${lignes} lignes`);
+  const v4 = await page.$$eval(".v3-table.v4 tbody tr", (r) => r.length);
+  const v4Cols = await page.$$eval(".v3-table.v4 thead th", (r) => r.length);
+  v4 === 6 && v4Cols === 4
+    ? ok("v4 : comparatif Signal / v3 / v4, 6 lignes")
+    : bad(`v4 : ${v4} lignes, ${v4Cols} colonnes`);
   // Le simulateur : vous, vous, l'espion, vous, Alice, vous.
   const [ecrire, repondre, espion] = await page.$$(".sim-btn");
   const espionInactif = await espion.evaluate((b) => b.disabled);
