@@ -289,6 +289,93 @@ pub fn readers(input: &str, cfg: &Config) -> Vec<String> {
         .collect()
 }
 
+/// Ajoute un groupe à cliquet : `id` (16 octets base64) est tiré par celui
+/// qui crée le groupe (`None`) et recopié par les autres membres. Chaque
+/// membre doit être un contact. Renvoie le TOML et l'identifiant.
+pub fn add_group(
+    existing: &str,
+    name: &str,
+    id: Option<&str>,
+    members: &[String],
+) -> Result<(String, String), String> {
+    use base64::Engine as _;
+    let name = check_name(name)?;
+    let cfg: Config = toml::from_str(existing).map_err(|e| format!("TOML invalide : {e}"))?;
+    if cfg.group(&name).is_some() {
+        return Err(format!("un groupe « {name} » existe déjà"));
+    }
+    if members.is_empty() {
+        return Err("un groupe a au moins un autre membre".into());
+    }
+    for m in members {
+        if cfg.contact(m).is_none() {
+            return Err(format!("contact « {} » inconnu", m.trim()));
+        }
+    }
+    let id = match id {
+        Some(i) => {
+            let raw = base64::engine::general_purpose::STANDARD
+                .decode(i.trim())
+                .map_err(|_| "identifiant de groupe illisible".to_string())?;
+            if raw.len() != 16 {
+                return Err("identifiant de groupe : 16 octets".into());
+            }
+            i.trim().to_owned()
+        }
+        None => {
+            let mut raw = [0u8; 16];
+            rand::Rng::fill_bytes(&mut rand::rng(), &mut raw);
+            base64::engine::general_purpose::STANDARD.encode(raw)
+        }
+    };
+    let mut doc = parse(existing)?;
+    let arr = doc
+        .entry("groups")
+        .or_insert(Item::ArrayOfTables(ArrayOfTables::new()))
+        .as_array_of_tables_mut()
+        .ok_or_else(|| "`groups` doit être une liste de tables [[groups]]".to_string())?;
+    let mut t = Table::new();
+    t.insert("name", toml_edit::value(name));
+    t.insert("id", toml_edit::value(id.clone()));
+    let mut list = toml_edit::Array::new();
+    for m in members {
+        list.push(m.trim());
+    }
+    t.insert("members", toml_edit::value(list));
+    arr.push(t);
+    Ok((doc.to_string(), id))
+}
+
+/// Change les membres d'un groupe. Retirer quelqu'un fait tirer une chaîne
+/// neuve au prochain envoi : il ne lit plus la suite.
+pub fn set_group_members(existing: &str, name: &str, members: &[String]) -> Result<String, String> {
+    let cfg: Config = toml::from_str(existing).map_err(|e| format!("TOML invalide : {e}"))?;
+    for m in members {
+        if cfg.contact(m).is_none() {
+            return Err(format!("contact « {} » inconnu", m.trim()));
+        }
+    }
+    let mut doc = parse(existing)?;
+    let arr = doc
+        .get_mut("groups")
+        .and_then(|g| g.as_array_of_tables_mut())
+        .ok_or_else(|| format!("groupe « {name} » inconnu"))?;
+    let t = arr
+        .iter_mut()
+        .find(|t| {
+            t.get("name")
+                .and_then(|v| v.as_str())
+                .is_some_and(|n| same_name(n, name))
+        })
+        .ok_or_else(|| format!("groupe « {name} » inconnu"))?;
+    let mut list = toml_edit::Array::new();
+    for m in members {
+        list.push(m.trim());
+    }
+    t.insert("members", toml_edit::value(list));
+    Ok(doc.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
