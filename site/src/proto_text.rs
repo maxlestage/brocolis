@@ -120,6 +120,19 @@ pub struct Proto {
     pub spec_h: &'static str,
     pub spec_body: &'static str,
     pub spec_cta: &'static str,
+
+    /// Le v4 (`docs/SECURITE.md` §9) : cartes (`q` titre, `a` texte),
+    /// comparatif Signal / v3 / v4, prix et honnêteté sur l'audit.
+    pub toc_v4: &'static str,
+    pub v4_h: &'static str,
+    pub v4_intro: &'static str,
+    pub v4_cols: [&'static str; 4],
+    pub v4_rows: [[&'static str; 4]; 6],
+    pub v4_cards: [Faq; 4],
+    pub v4_cost: &'static str,
+    pub v4_honest: &'static str,
+    /// Les libellés v4, en tête de la liste des libellés.
+    pub labels_v4: [Row; 2],
 }
 
 // ---------------------------------------------------------------------------
@@ -435,6 +448,75 @@ pub static FR: Proto = Proto {
         },
     ],
 
+    toc_v4: "Le v4, au-delà de Signal",
+    v4_h: "Protocole v4 : au-delà de Signal",
+    v4_intro: "Le v3 avait deux faiblesses. Le post-quantique s'arrêtait à l'établissement : un attaquant qui garde tes jetons et casse X25519 plus tard lisait la suite. Et tout ce qui entoure le chiffré restait en clair : identifiant de session, compteurs, identité de l'expéditeur du premier message. Le v4 corrige les deux, et va plus loin que Signal sur chacun.",
+    v4_cols: ["", "Signal (2025)", "Brocolis v3", "Brocolis v4"],
+    v4_rows: [
+        [
+            "ML-KEM dans le cliquet",
+            "Par épisodes, en morceaux sur plusieurs messages (SPQR)",
+            "Non : seulement à l'établissement",
+            "À chaque tour, dès le premier message reçu",
+        ],
+        ["En-têtes de cliquet chiffrés", "Non", "Non", "Oui"],
+        [
+            "Identifiant de session visible",
+            "Sans objet (son serveur)",
+            "Oui, 8 octets",
+            "Non",
+        ],
+        [
+            "Identité de l'expéditeur du premier message",
+            "Protégée par le serveur (sealed sender)",
+            "En clair",
+            "Chiffrée, X25519 + ML-KEM",
+        ],
+        [
+            "Type de message visible",
+            "Sans objet",
+            "Oui",
+            "Non : dans le chiffré",
+        ],
+        [
+            "Retour forcé à l'ancien protocole",
+            "Sans objet",
+            "Possible par le serveur",
+            "Détecté : l'empreinte v4 diffère",
+        ],
+    ],
+    v4_cards: [
+        Faq {
+            q: "Triple cliquet",
+            a: "Chaque nouvelle chaîne d'envoi mélange un échange X25519 et une encapsulation ML-KEM-768 neuve. Casser X25519 un jour ne suffit plus, même pour les messages d'après.",
+        },
+        Faq {
+            q: "En-têtes chiffrés",
+            a: "La clé de cliquet, les compteurs et le type de message voyagent chiffrés sous des clés d'en-tête qui tournent elles aussi. Rien ne relie deux messages d'une même conversation.",
+        },
+        Faq {
+            q: "Expéditeur caché",
+            a: "Le premier message ne dit plus qui l'envoie : l'identité est scellée sous X25519 et ML-KEM, et seul le destinataire l'ouvre.",
+        },
+        Faq {
+            q: "Ni déclassement, ni substitution",
+            a: "La capacité v4 est signée ; si le serveur la retire d'un côté, les empreintes comparées de vive voix diffèrent. Un contact qui revient avec une autre identité déclenche une alerte, et rien ne part avant ta confirmation.",
+        },
+    ],
+    v4_cost: "Le prix : un message v4 pèse environ 2,5 Ko (3,4 Ko une fois encodé) contre 225 octets en v3, car chaque message porte une clé ML-KEM. Le v4 part dès que les deux appareils savent faire ML-KEM ; sinon c'est le v3, lisible pour toujours.",
+    v4_honest: "Honnêteté : le v4 n'a pas encore été audité par un tiers. Ses vecteurs de test sont vérifiés par une implémentation indépendante et son déchiffrement est soumis au fuzzing, mais « mieux que Signal » se prouve par un audit, pas par une page web.",
+    labels_v4: [
+        Row {
+            label: "🔐 triple cliquet (post-quantique à chaque message)",
+            old: "",
+            new: "Appairé à deux, les deux appareils publient leur capacité v4 : protocole v4",
+        },
+        Row {
+            label: "🔐 triple cliquet, clé partagée (PSK)",
+            old: "",
+            new: "Le v4 à partir de la clé partagée, quand un message v4 est déjà arrivé sur cette clé",
+        },
+    ],
     spec_h: "La spécification",
     spec_body: "Tout ce qui est décrit ici est écrit, avec ses formules et ses cas limites, dans <code>docs/SECURITE.md</code> de la messagerie Brocolis. Brocolis, l'iPhone, Android et le site en suivent le même texte.",
     spec_cta: "Lire la spécification",
@@ -753,6 +835,75 @@ pub static EN: Proto = Proto {
         },
     ],
 
+    toc_v4: "v4, beyond Signal",
+    v4_h: "v4 protocol: beyond Signal",
+    v4_intro: "v3 had two weaknesses. Post-quantum protection stopped at setup: an attacker who keeps your tokens and breaks X25519 later could read what followed. And everything around the ciphertext stayed in clear: session id, counters, the first message's sender identity. v4 fixes both, and goes further than Signal on each.",
+    v4_cols: ["", "Signal (2025)", "Brocolis v3", "Brocolis v4"],
+    v4_rows: [
+        [
+            "ML-KEM in the ratchet",
+            "In episodes, chunked over several messages (SPQR)",
+            "No: only at setup",
+            "Every turn, from the first message received",
+        ],
+        ["Encrypted ratchet headers", "No", "No", "Yes"],
+        [
+            "Visible session id",
+            "n/a (its server)",
+            "Yes, 8 bytes",
+            "No",
+        ],
+        [
+            "Sender identity in the first message",
+            "Protected by the server (sealed sender)",
+            "In clear",
+            "Encrypted, X25519 + ML-KEM",
+        ],
+        [
+            "Visible message type",
+            "n/a",
+            "Yes",
+            "No: inside the ciphertext",
+        ],
+        [
+            "Forced fallback to the old protocol",
+            "n/a",
+            "Possible for the server",
+            "Detected: the v4 fingerprint differs",
+        ],
+    ],
+    v4_cards: [
+        Faq {
+            q: "Triple ratchet",
+            a: "Every new sending chain mixes an X25519 exchange and a fresh ML-KEM-768 encapsulation. Breaking X25519 someday is no longer enough, even for later messages.",
+        },
+        Faq {
+            q: "Encrypted headers",
+            a: "The ratchet key, counters and message type travel encrypted under header keys that rotate too. Nothing links two messages of the same conversation.",
+        },
+        Faq {
+            q: "Hidden sender",
+            a: "The first message no longer says who sent it: the identity is sealed under X25519 and ML-KEM, and only the recipient opens it.",
+        },
+        Faq {
+            q: "No downgrade, no swap",
+            a: "The v4 capability is signed; if the server strips it on one side, the fingerprints you compare out loud differ. A contact coming back with another identity raises an alert, and nothing is sent until you confirm.",
+        },
+    ],
+    v4_cost: "The price: a v4 message weighs about 2.5 KB (3.4 KB once encoded) versus 225 bytes in v3, since every message carries an ML-KEM key. v4 kicks in as soon as both devices can do ML-KEM; otherwise it's v3, readable forever.",
+    v4_honest: "Honesty: v4 hasn't been audited by a third party yet. Its test vectors are checked by an independent implementation and its decryption is fuzzed, but “better than Signal” is proven by an audit, not a web page.",
+    labels_v4: [
+        Row {
+            label: "🔐 triple ratchet (post-quantum on every message)",
+            old: "",
+            new: "Paired one-to-one, both devices publish their v4 capability: v4 protocol",
+        },
+        Row {
+            label: "🔐 triple ratchet, shared key (PSK)",
+            old: "",
+            new: "v4 from the shared key, once a v4 message has arrived on that key",
+        },
+    ],
     spec_h: "The specification",
     spec_body: "Everything described here is written down, with its formulas and edge cases, in the Brocolis messenger's <code>docs/SECURITE.md</code>. Brocolis, the iPhone, Android and the site follow the same text.",
     spec_cta: "Read the specification",
@@ -1071,6 +1222,75 @@ pub static ES: Proto = Proto {
         },
     ],
 
+    toc_v4: "El v4, más allá de Signal",
+    v4_h: "Protocolo v4: más allá de Signal",
+    v4_intro: "El v3 tenía dos debilidades. Lo poscuántico se detenía en el establecimiento: un atacante que guarda tus tokens y rompe X25519 más adelante leía lo que seguía. Y todo lo que rodea al cifrado quedaba en claro: identificador de sesión, contadores, identidad del remitente del primer mensaje. El v4 corrige ambas, y va más lejos que Signal en cada una.",
+    v4_cols: ["", "Signal (2025)", "Brocolis v3", "Brocolis v4"],
+    v4_rows: [
+        [
+            "ML-KEM en el trinquete",
+            "Por episodios, en trozos sobre varios mensajes (SPQR)",
+            "No: solo al establecer",
+            "En cada vuelta, desde el primer mensaje recibido",
+        ],
+        ["Cabeceras del trinquete cifradas", "No", "No", "Sí"],
+        [
+            "Identificador de sesión visible",
+            "No aplica (su servidor)",
+            "Sí, 8 bytes",
+            "No",
+        ],
+        [
+            "Identidad del remitente del primer mensaje",
+            "Protegida por el servidor (sealed sender)",
+            "En claro",
+            "Cifrada, X25519 + ML-KEM",
+        ],
+        [
+            "Tipo de mensaje visible",
+            "No aplica",
+            "Sí",
+            "No: dentro del cifrado",
+        ],
+        [
+            "Vuelta forzada al protocolo antiguo",
+            "No aplica",
+            "Posible para el servidor",
+            "Detectada: la huella v4 difiere",
+        ],
+    ],
+    v4_cards: [
+        Faq {
+            q: "Triple trinquete",
+            a: "Cada nueva cadena de envío mezcla un intercambio X25519 y una encapsulación ML-KEM-768 nueva. Romper X25519 algún día ya no basta, ni para los mensajes siguientes.",
+        },
+        Faq {
+            q: "Cabeceras cifradas",
+            a: "La clave del trinquete, los contadores y el tipo de mensaje viajan cifrados con claves de cabecera que también giran. Nada une dos mensajes de una misma conversación.",
+        },
+        Faq {
+            q: "Remitente oculto",
+            a: "El primer mensaje ya no dice quién lo envía: la identidad va sellada con X25519 y ML-KEM, y solo el destinatario la abre.",
+        },
+        Faq {
+            q: "Ni degradación, ni sustitución",
+            a: "La capacidad v4 va firmada; si el servidor la quita de un lado, las huellas que comparáis en voz alta difieren. Un contacto que vuelve con otra identidad dispara una alerta, y no sale nada hasta que lo confirmes.",
+        },
+    ],
+    v4_cost: "El precio: un mensaje v4 pesa unos 2,5 KB (3,4 KB codificado) frente a 225 bytes en v3, porque cada mensaje lleva una clave ML-KEM. El v4 se usa en cuanto ambos dispositivos saben hacer ML-KEM; si no, es el v3, legible para siempre.",
+    v4_honest: "Honestidad: el v4 aún no lo ha auditado un tercero. Sus vectores de prueba los verifica una implementación independiente y su descifrado pasa por fuzzing, pero «mejor que Signal» se demuestra con una auditoría, no con una página web.",
+    labels_v4: [
+        Row {
+            label: "🔐 triple trinquete (poscuántico en cada mensaje)",
+            old: "",
+            new: "Emparejados de dos en dos, ambos dispositivos publican su capacidad v4: protocolo v4",
+        },
+        Row {
+            label: "🔐 triple trinquete, clave compartida (PSK)",
+            old: "",
+            new: "El v4 a partir de la clave compartida, cuando ya ha llegado un mensaje v4 con esa clave",
+        },
+    ],
     spec_h: "La especificación",
     spec_body: "Todo lo descrito aquí está escrito, con sus fórmulas y casos límite, en <code>docs/SECURITE.md</code> de la mensajería Brocolis. Brocolis, el iPhone, Android y el sitio siguen el mismo texto.",
     spec_cta: "Leer la especificación",

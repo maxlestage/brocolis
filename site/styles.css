@@ -1672,7 +1672,21 @@ pre {
 .v3-label {
   font-weight: 700;
   color: var(--ink);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+}
+/* Le v4 : icône des cartes, et l'encadré sur l'audit. */
+.v4-icon {
+  display: block;
+  font-size: 26px;
+  margin-bottom: 10px;
+}
+.v3-note {
+  margin-top: 20px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 12px;
+  color: var(--ink);
 }
 .v3-limits {
   margin-top: 8px;
