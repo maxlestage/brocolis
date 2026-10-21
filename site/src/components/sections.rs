@@ -245,11 +245,52 @@ pub fn section_how_it_works() -> Node {
         .into()
 }
 
+/// Le double cliquet : le protocole v3 de la messagerie, expliqué.
+pub fn section_ratchet() -> Node {
+    let cards = (0..6).map(|i| {
+        article()
+            .class("card feature-card")
+            .attr("data-reveal", "card")
+            .attr("data-tilt", "")
+            .attr("data-spot", "")
+            .child(
+                span()
+                    .class("card-index")
+                    .attr("aria-hidden", "true")
+                    .attr("data-scramble", "")
+                    .text(format!("v3·{}", i + 1)),
+            )
+            .child(h3().tr(move |t| t.v3_cards[i].title))
+            .child(p().raw(move |t| t.v3_cards[i].body))
+    });
+
+    section_shell("ratchet")
+        .child(head(7, "ratchet-h", words(|t| t.v3_h), "words"))
+        .child(p().attr("data-reveal", "blur").raw(|t| t.v3_intro))
+        .child(div().class("grid grid-3").children(cards))
+        .child(
+            pre()
+                .class("terminal diagram lines")
+                .attr("tabindex", "0")
+                .attr("role", "img")
+                .attr_tr("aria-label", |t| t.v3_h)
+                .style("margin-top: 24px")
+                .attr("data-reveal", "")
+                .child(code().child(terminal_lines(|t| t.v3_diagram))),
+        )
+        .child(
+            p().class("note")
+                .attr("data-reveal", "blur")
+                .raw(|t| t.v3_note),
+        )
+        .into()
+}
+
 pub fn section_privacy() -> Node {
     let items = (0..5).map(|i| item(true, move |t| t.s6_li[i]));
 
     section_shell("privacy")
-        .child(head(7, "privacy-h", words(|t| t.s6_h), "words"))
+        .child(head(8, "privacy-h", words(|t| t.s6_h), "words"))
         .child(ul().class("checklist").children(items))
         .into()
 }

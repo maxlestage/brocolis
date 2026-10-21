@@ -10,7 +10,7 @@ use crate::components::marquee::marquee;
 use crate::components::navbar::navbar;
 use crate::components::sections::{
     section_features, section_how_it_works, section_platforms, section_privacy, section_quickstart,
-    section_switch,
+    section_ratchet, section_switch,
 };
 use crate::components::skip_link::skip_link;
 
@@ -36,6 +36,7 @@ pub fn landing() -> Node {
             .child(section_quickstart())
             .child(section_app())
             .child(section_how_it_works())
+            .child(section_ratchet())
             .child(section_privacy())
             .into(),
         site_footer(true),
@@ -48,7 +49,7 @@ pub fn landing() -> Node {
 /// `motion`). Décoratif — la barre de navigation porte la même information
 /// (`data-current`) de façon accessible.
 fn spy() -> Node {
-    let digits = (1..=7).map(|n| span().text(format!("{n:02}")));
+    let digits = (1..=8).map(|n| span().text(format!("{n:02}")));
     div()
         .class("spy")
         .attr("aria-hidden", "true")
@@ -57,6 +58,6 @@ fn spy() -> Node {
                 .class("spy-window")
                 .child(span().class("spy-strip").children(digits)),
         )
-        .child(span().class("spy-total").text("/ 07"))
+        .child(span().class("spy-total").text("/ 08"))
         .into()
 }
