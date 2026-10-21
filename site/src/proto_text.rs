@@ -409,7 +409,7 @@ pub static FR: Proto = Proto {
 
     limits_h: "Ce que le v3 ne fait pas",
     limits: [
-        "<strong>Les groupes</strong> (une clé connue de trois personnes ou plus) restent en v1/v2 : les « Sender Keys » sont à venir.",
+        "<strong>Une clé de groupe</strong> (connue de trois personnes ou plus) reste en v1/v2. Les <strong>groupes à cliquet</strong> (Sender Keys) fonctionnent dans brocolis : <code>brocolis group-create</code>, puis <code>encrypt --group</code> ; dans les applications, l'écran pour en créer est à venir.",
         "<strong>La page déchiffrée</strong> reste lisible par le JavaScript du site consulté : c'est le principe d'un proxy qui déchiffre dans la page.",
         "<strong>Les métadonnées</strong> du service (qui publie quoi, quand) ne changent pas.",
         "<strong>Un appareil déverrouillé</strong> entre de mauvaises mains lit ce que vous lisez.",
@@ -796,7 +796,7 @@ pub static EN: Proto = Proto {
 
     limits_h: "What v3 doesn't do",
     limits: [
-        "<strong>Groups</strong> (a key known to three people or more) stay on v1/v2: \"Sender Keys\" are coming.",
+        "<strong>A group key</strong> (known to three people or more) stays on v1/v2. <strong>Ratchet groups</strong> (Sender Keys) work in brocolis: <code>brocolis group-create</code>, then <code>encrypt --group</code>; in the apps, the screen to create one is coming.",
         "<strong>The decrypted page</strong> stays readable by the visited site's JavaScript: that's how a proxy decrypting in the page works.",
         "<strong>The service's metadata</strong> (who posts what, when) doesn't change.",
         "<strong>An unlocked device</strong> in the wrong hands reads what you read.",
@@ -1183,7 +1183,7 @@ pub static ES: Proto = Proto {
 
     limits_h: "Lo que el v3 no hace",
     limits: [
-        "<strong>Los grupos</strong> (una clave conocida por tres personas o más) siguen en v1/v2: las «Sender Keys» están en camino.",
+        "<strong>Una clave de grupo</strong> (conocida por tres personas o más) sigue en v1/v2. Los <strong>grupos con trinquete</strong> (Sender Keys) funcionan en brocolis: <code>brocolis group-create</code> y luego <code>encrypt --group</code>; en las aplicaciones, la pantalla para crearlos llegará.",
         "<strong>La página descifrada</strong> sigue siendo legible por el JavaScript del sitio visitado: así funciona un proxy que descifra en la página.",
         "<strong>Los metadatos</strong> del servicio (quién publica qué, cuándo) no cambian.",
         "<strong>Un equipo desbloqueado</strong> en malas manos lee lo que tú lees.",
