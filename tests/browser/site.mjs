@@ -271,6 +271,60 @@ async function load(page, url) {
   await ctx.close();
 }
 
+// --- 2 bis. Page « Protocole v3 » --------------------------------------------
+{
+  const { ctx, page, errors } = await newPage({ width: 390, height: 844 });
+  await load(page, BASE + "/");
+  // L'accueil y mène depuis sa section « Double cliquet ».
+  await page.$eval('#ratchet a[href="#/protocole"]', (a) => a.click());
+  await page.waitForSelector("#v3-sim", { timeout: 10000 });
+  ok("la section « Double cliquet » mène à #/protocole");
+  const ids = await page.$$eval(".v3-main section[id]", (els) => els.map((e) => e.id));
+  const attendu = ["v3-change", "v3-sim", "v3-steps", "v3-token", "v3-threats", "v3-where", "v3-faq"];
+  JSON.stringify(ids) === JSON.stringify(attendu)
+    ? ok("protocole : les sept parties, dans l'ordre")
+    : bad(`protocole : ${JSON.stringify(ids)}`);
+  const lignes = await page.$$eval(".v3-table.cmp tbody tr", (r) => r.length);
+  lignes === 7 ? ok("comparatif : 7 lignes") : bad(`comparatif : ${lignes} lignes`);
+  // Le simulateur : vous, vous, l'espion, vous, Alice, vous.
+  const [ecrire, repondre, espion] = await page.$$(".sim-btn");
+  const espionInactif = await espion.evaluate((b) => b.disabled);
+  for (const b of [ecrire, ecrire]) await b.click();
+  await espion.click();
+  for (const b of [ecrire, repondre, ecrire]) await b.click();
+  await until(page, () => document.querySelectorAll(".sim-msg").length === 5);
+  const bilan = await page.evaluate(() => ({
+    msgs: document.querySelectorAll(".sim-msg").length,
+    tours: document.querySelectorAll(".sim-turn").length,
+    lus: document.querySelectorAll(".sim-badge.bad").length,
+    score: document.querySelector(".sim-score").textContent,
+    espion: document.querySelectorAll(".sim-btn")[2].disabled,
+  }));
+  espionInactif &&
+  bilan.msgs === 5 &&
+  bilan.tours === 2 &&
+  bilan.lus === 2 &&
+  bilan.score === "L'espion lit 2 message(s) sur 5." &&
+  bilan.espion
+    ? ok(`simulateur : ${bilan.score} (avant la copie : hors de portée ; après la guérison : aussi)`)
+    : bad(`simulateur : ${JSON.stringify(bilan)}`);
+  await page.click(".sim-reset");
+  await until(page, () => document.querySelector(".sim-empty") !== null);
+  (await page.$(".sim-empty")) ? ok("simulateur : « Recommencer » vide le fil") : bad("simulateur : pas remis à zéro");
+  // Une question s'ouvre.
+  await page.click(".v3-faq summary");
+  (await page.$eval(".v3-faq", (d) => d.open)) ? ok("FAQ : une question s'ouvre") : bad("FAQ fermée");
+  const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  over <= 0 ? ok("protocole : aucun débordement horizontal (390px)") : bad(`protocole : débordement de ${over}px`);
+  // Accès direct, et titre de l'onglet.
+  await page.goto(BASE + "/#/protocole", { waitUntil: "networkidle" });
+  await page.waitForSelector("#v3-title", { timeout: 10000 });
+  const titre = await page.title();
+  titre.startsWith("Protocole v3") ? ok(`accès direct à #/protocole (« ${titre} »)`) : bad(`titre : ${titre}`);
+  errors.length === 0 ? ok("aucune erreur console (protocole)") : bad(`console : ${errors.join(" | ")}`);
+  await ctx.close();
+}
+
 // --- 3. Bureau : menu horizontal -------------------------------------------
 {
   const { ctx, page, errors } = await newPage({ width: 1280, height: 900 });

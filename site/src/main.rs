@@ -27,6 +27,7 @@ mod dom;
 mod i18n;
 mod markup;
 mod motion;
+mod proto_text;
 mod route;
 mod settings;
 mod theme;
@@ -34,7 +35,7 @@ mod theme;
 use active::html::{div, span};
 use active::{Node, effect, fragment, fragment_dyn};
 
-use components::{ambient, curtain, download_page, landing};
+use components::{ambient, curtain, download_page, landing, protocol_page};
 use dom::{set_meta, set_root_attribute, set_title};
 use markup::keep;
 use route::{Route, router};
@@ -70,6 +71,7 @@ fn document_effects() {
         set_title(&match route.get() {
             Route::Home => t.meta_title.to_owned(),
             Route::Download => format!("{} — Brocolis 🥦", t.dl_h),
+            Route::Protocol => t.proto.meta_title.to_owned(),
         });
         set_meta("meta[name=\"description\"]", t.meta_desc);
         set_meta("meta[property=\"og:title\"]", t.meta_og_title);
@@ -87,6 +89,7 @@ fn app() -> Node {
             vec![match router.route.get() {
                 Route::Home => landing(),
                 Route::Download => download_page(),
+                Route::Protocol => protocol_page(),
             }]
         }),
         // Un nouveau volet à chaque navigation : son animation rejoue.

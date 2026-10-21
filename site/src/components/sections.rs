@@ -283,6 +283,20 @@ pub fn section_ratchet() -> Node {
                 .attr("data-reveal", "blur")
                 .raw(|t| t.v3_note),
         )
+        .child(
+            p().class("v3-more").attr("data-reveal", "").child(
+                a().class("btn primary")
+                    .attr("data-magnetic", "")
+                    .href(Route::Protocol.href())
+                    .child(rolling(|t| t.proto.cta))
+                    .child(
+                        span()
+                            .class("btn-arrow")
+                            .attr("aria-hidden", "true")
+                            .text("→"),
+                    ),
+            ),
+        )
         .into()
 }
 

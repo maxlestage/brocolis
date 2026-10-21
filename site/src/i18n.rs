@@ -171,6 +171,9 @@ pub struct Strings {
     pub demo_after: &'static str,
     pub demo_locked: &'static str,
     pub demo_unlocked: &'static str,
+
+    /// La page « Protocole v3 » (`proto_text`).
+    pub proto: &'static crate::proto_text::Proto,
 }
 
 impl Strings {
@@ -495,6 +498,7 @@ Réponse      nouveau cliquet Diffie-Hellman : la session guérit",
     demo_after: " au café.",
     demo_locked: "chiffré",
     demo_unlocked: "déchiffré",
+    proto: &crate::proto_text::FR,
 };
 
 // ---------------------------------------------------------------------------
@@ -707,6 +711,7 @@ Reply        new Diffie-Hellman ratchet: the session heals",
     demo_after: " at the café.",
     demo_locked: "encrypted",
     demo_unlocked: "decrypted",
+    proto: &crate::proto_text::EN,
 };
 
 // ---------------------------------------------------------------------------
@@ -919,4 +924,5 @@ Respuesta    nuevo trinquete Diffie-Hellman: la sesión se cura",
     demo_after: " en el café.",
     demo_locked: "cifrado",
     demo_unlocked: "descifrado",
+    proto: &crate::proto_text::ES,
 };

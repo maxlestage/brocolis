@@ -1312,6 +1312,436 @@ pre {
   color: var(--accent);
 }
 
+/* Page « Protocole v3 » (#/protocole) --------------------------------------- */
+
+:root {
+  --risk: #ffb4a6;
+  --risk-bg: rgba(255, 120, 100, 0.14);
+}
+:root[data-theme="light"] {
+  --risk: #a3321f;
+  --risk-bg: rgba(163, 50, 31, 0.1);
+}
+.v3-kicker {
+  margin: 0 0 12px;
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.v3-lead {
+  max-width: 68ch;
+}
+.v3-lead code,
+.v3-block code {
+  overflow-wrap: anywhere;
+}
+.v3-toc ol {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 36px 0 0;
+  padding: 0;
+  counter-reset: toc;
+}
+.v3-toc li {
+  counter-increment: toc;
+}
+.v3-toc a {
+  display: inline-flex;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 14px;
+  text-decoration: none;
+  color: var(--ink);
+  background: var(--chip-bg);
+  transition: border-color 0.3s ease, color 0.3s ease;
+}
+.v3-toc a::before {
+  content: counter(toc, decimal-leading-zero);
+  font-family: var(--mono);
+  color: var(--accent);
+}
+.v3-toc a:hover {
+  border-color: var(--accent);
+}
+.v3-main section.v3-block {
+  padding: 88px 0 0;
+  scroll-margin-top: var(--nav-h);
+}
+/* Pas le retrait des sections de l'accueil (calées sur leur numéro). */
+.v3-main section.v3-block > *,
+.v3-main section.v3-spec > * {
+  margin-left: 0;
+}
+.v3-main section.v3-spec::before {
+  content: none;
+}
+.v3-block > h2 {
+  margin: 0 0 20px;
+  font-size: clamp(34px, 7vw, 72px);
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+.v3-block > p {
+  max-width: 68ch;
+}
+.v3-sub {
+  margin: 48px 0 12px;
+  font-size: 22px;
+}
+.table-wrap {
+  margin-top: 24px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+}
+.v3-table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+.v3-table th,
+.v3-table td {
+  padding: 14px 16px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+}
+.v3-table tr:last-child th,
+.v3-table tr:last-child td {
+  border-bottom: 0;
+}
+.v3-table thead th {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--chip-bg);
+}
+.v3-table tbody th {
+  font-weight: 700;
+  color: var(--ink);
+  width: 26%;
+}
+.v3-table td {
+  color: var(--muted);
+}
+.v3-table td.new {
+  color: var(--ink);
+}
+.v3-table.cmp td.new::before {
+  content: "✓ ";
+  color: var(--accent);
+  font-weight: 800;
+}
+
+/* Le simulateur. */
+.sim {
+  margin-top: 24px;
+}
+.sim-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.sim-btn[disabled] {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.sim-btn.sim-spy {
+  border-color: var(--risk);
+  color: var(--risk);
+}
+.sim-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 140px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--code-bg);
+  color: var(--code-ink);
+}
+.sim-empty {
+  margin: auto;
+  font-size: 14px;
+  opacity: 0.75;
+}
+.sim-msg {
+  max-width: min(440px, 88%);
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  animation: sim-in 0.35s var(--ease-out);
+}
+.sim-msg.mine {
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+}
+.sim-msg.theirs {
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+}
+.sim-who {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--code-accent);
+}
+.sim .sim-text {
+  margin: 4px 0 6px;
+  font-size: 15px;
+  color: var(--code-ink);
+}
+.sim-key {
+  display: block;
+  font-family: var(--mono);
+  font-size: 12px;
+  opacity: 0.7;
+}
+.sim-badge {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.sim-badge.ok {
+  background: rgba(200, 242, 92, 0.16);
+  color: #c8f25c;
+}
+.sim-badge.bad {
+  background: rgba(255, 120, 100, 0.18);
+  color: #ffb4a6;
+}
+.sim-divider {
+  align-self: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 12px;
+  text-align: center;
+  animation: sim-in 0.35s var(--ease-out);
+}
+.sim-turn {
+  color: var(--code-accent);
+  border: 1px dashed rgba(200, 242, 92, 0.4);
+}
+.sim-spied {
+  color: #ffb4a6;
+  border: 1px dashed rgba(255, 180, 166, 0.5);
+}
+.sim-score {
+  min-height: 1.5em;
+  margin: 14px 0 0;
+  font-weight: 700;
+  color: var(--ink);
+}
+.sim-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+@keyframes sim-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* Le déroulé. */
+.v3-steps {
+  list-style: none;
+  display: grid;
+  gap: 14px;
+  margin: 24px 0 0;
+  padding: 0;
+}
+.v3-step h3 {
+  margin: 0 0 8px;
+}
+.v3-step p {
+  margin: 0;
+  color: var(--muted);
+}
+.v3-step .v3-detail {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--code-bg);
+  color: var(--code-ink);
+  font-size: 13px;
+}
+.v3-detail code {
+  background: none;
+  color: inherit;
+  padding: 0;
+}
+
+/* Le jeton. */
+.tk-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.tk-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px dashed var(--accent);
+  background: var(--chip-bg);
+}
+.tk-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 16px 0 24px;
+}
+.tk-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--code-bg);
+  color: var(--code-ink);
+  border: 1px solid var(--line);
+}
+.tk-field.first {
+  border: 1px dashed var(--accent);
+  background: var(--chip-bg);
+  color: var(--ink);
+}
+.tk-name {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 14px;
+}
+.tk-size {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+}
+.tk-field:not(.first) .tk-size {
+  color: var(--code-accent);
+}
+.tk-size::after {
+  content: " o";
+}
+:lang(en) .tk-size::after,
+:lang(es) .tk-size::after {
+  content: " B";
+}
+.tk-desc {
+  font-size: 12.5px;
+  opacity: 0.8;
+}
+
+/* Plateformes, libellés, limites, questions. */
+.v3-labels {
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+}
+.v3-labels li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+.v3-label {
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.v3-limits {
+  margin-top: 8px;
+}
+.v3-limits li {
+  padding-left: 32px;
+}
+.v3-limits li::before {
+  content: "✕";
+  position: absolute;
+  left: 4px;
+  top: 18px;
+  font-weight: 800;
+  color: var(--risk);
+}
+/* Les cartes des plateformes restent alignées (pas le décalage de l'accueil). */
+.v3-main .grid:not(.grid-3) .card:nth-child(even) {
+  top: 0;
+}
+.v3-faq {
+  border-bottom: 1px solid var(--line);
+}
+.v3-faq summary {
+  cursor: pointer;
+  padding: 18px 0;
+  font-size: 18px;
+  font-weight: 700;
+  list-style: none;
+}
+.v3-faq summary::-webkit-details-marker {
+  display: none;
+}
+.v3-faq summary::before {
+  content: "+";
+  display: inline-block;
+  width: 1.4em;
+  color: var(--accent);
+  transition: transform 0.3s var(--ease-out);
+}
+.v3-faq[open] summary::before {
+  transform: rotate(45deg);
+}
+.v3-faq p {
+  margin: 0 0 18px 1.4em;
+  max-width: 68ch;
+  color: var(--muted);
+}
+.v3-main section.v3-spec {
+  margin-top: 88px;
+  padding: 36px 28px;
+}
+.v3-spec h2 {
+  margin: 0 0 12px;
+}
+.v3-spec p {
+  max-width: 64ch;
+}
+.v3-more {
+  margin-top: 24px;
+}
+@media (min-width: 761px) {
+  .v3-steps {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .v3-steps .v3-step:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
 /* ==========================================================================
    Mouvement, deuxième passe : chaque bloc de la page bouge.
    Les variables écrites par `motion` (voir son en-tête) : --p, --py, --rx,
