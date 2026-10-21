@@ -245,7 +245,8 @@ pub fn section_how_it_works() -> Node {
         .into()
 }
 
-/// Le double cliquet : le protocole v3 de la messagerie, expliqué.
+/// Le double cliquet (v3) et le triple cliquet (v4) de la messagerie,
+/// expliqués.
 pub fn section_ratchet() -> Node {
     let cards = (0..6).map(|i| {
         article()
@@ -262,6 +263,23 @@ pub fn section_ratchet() -> Node {
             )
             .child(h3().tr(move |t| t.v3_cards[i].title))
             .child(p().raw(move |t| t.v3_cards[i].body))
+    });
+
+    const V4_ICONS: [&str; 4] = ["⚛️", "🕶️", "🎭", "🛡️"];
+    let v4_cards = (0..4).map(|i| {
+        article()
+            .class("card feature-card")
+            .attr("data-reveal", "card")
+            .attr("data-tilt", "")
+            .attr("data-spot", "")
+            .child(
+                span()
+                    .class("v4-icon")
+                    .attr("aria-hidden", "true")
+                    .text(V4_ICONS[i]),
+            )
+            .child(h3().tr(move |t| t.proto.v4_cards[i].q))
+            .child(p().tr(move |t| t.proto.v4_cards[i].a))
     });
 
     section_shell("ratchet")
@@ -282,6 +300,18 @@ pub fn section_ratchet() -> Node {
             p().class("note")
                 .attr("data-reveal", "blur")
                 .raw(|t| t.v3_note),
+        )
+        .child(
+            h3().class("v4-home-h")
+                .attr("data-reveal", "words")
+                .tr(|t| t.v4_home_h),
+        )
+        .child(p().attr("data-reveal", "blur").raw(|t| t.v4_home_intro))
+        .child(div().class("grid v4-grid").children(v4_cards))
+        .child(
+            p().class("v3-note")
+                .attr("data-reveal", "")
+                .tr(|t| t.proto.v4_honest),
         )
         .child(
             p().class("v3-more").attr("data-reveal", "").child(

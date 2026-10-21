@@ -3107,3 +3107,11 @@ button.power:hover .power-disc {
     color: var(--ink);
   }
 }
+.v4-home-h {
+  margin: 56px 0 12px;
+  font-size: 26px;
+}
+/* Les cartes du v4 restent alignées : l'encadré qui suit ne les chevauche pas. */
+.grid.v4-grid:not(.grid-3) .card:nth-child(even) {
+  top: 0;
+}

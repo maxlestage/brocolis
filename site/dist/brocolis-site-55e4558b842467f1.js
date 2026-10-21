@@ -685,7 +685,7 @@ function __wbg_get_imports() {
         },
         __wbindgen_generic_0000000000000005: function(arg0, arg1) {
             // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("Event")], shim_idx: 39, ret: Unit, inner_ret: Some(Unit) }, mutable: false }) -> Externref`.
-            const ret = makeClosure(arg0, arg1, __wasm_bindgen_func_elem_1071);
+            const ret = makeClosure(arg0, arg1, __wasm_bindgen_func_elem_1079);
             return addHeapObject(ret);
         },
         __wbindgen_generic_0000000000000006: function(arg0, arg1) {
@@ -724,8 +724,8 @@ function __wasm_bindgen_func_elem_302_3(arg0, arg1, arg2) {
     wasm.__wasm_bindgen_func_elem_302_3(arg0, arg1, addHeapObject(arg2));
 }
 
-function __wasm_bindgen_func_elem_1071(arg0, arg1, arg2) {
-    wasm.__wasm_bindgen_func_elem_1071(arg0, arg1, addHeapObject(arg2));
+function __wasm_bindgen_func_elem_1079(arg0, arg1, arg2) {
+    wasm.__wasm_bindgen_func_elem_1079(arg0, arg1, addHeapObject(arg2));
 }
 
 function __wasm_bindgen_func_elem_307(arg0, arg1, arg2, arg3) {
