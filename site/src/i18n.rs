@@ -139,6 +139,13 @@ pub struct Strings {
     pub s5_intro: &'static str,
     pub s5_diagram: &'static str,
 
+    // Section « Double cliquet » : le protocole v3 de la messagerie.
+    pub v3_h: &'static str,
+    pub v3_intro: &'static str,
+    pub v3_cards: [Card; 6],
+    pub v3_diagram: &'static str,
+    pub v3_note: &'static str,
+
     pub s6_h: &'static str,
     pub s6_li: [&'static str; 5],
 
@@ -414,6 +421,42 @@ pub static FR: Strings = Strings {
     s5_intro: "Brocolis s'intercale entre votre navigateur et le service en ligne. À l'envoi, il chiffre les segments marqués pour les contacts choisis ; à la réception, il déchiffre les jetons que vos clés ouvrent.",
     s5_diagram: "Navigateur ─►  Brocolis (sur votre machine)  ─►  Service en ligne\n                             │                           │\n   « salut ((secret)) » ───► « salut [[BROCOLIS:v3:…]] »  (chiffré pour Alice)\n   « salut secret »     ◄─── « salut [[BROCOLIS:v3:…]] »  (déchiffré pour vous)",
 
+    v3_h: "Le double cliquet",
+    v3_intro: "Avec un contact appairé, Brocolis ne chiffre plus avec une clé fixe : il parle le <strong>protocole v3</strong> de la messagerie Brocolis — le même que l'iPhone, Android et la discussion du site. Une session à double cliquet, comme Signal, établie en hybride post-quantique.",
+    v3_cards: [
+        Card {
+            title: "Une clé par message",
+            body: "Chaque message a sa propre clé, dérivée puis <strong>effacée aussitôt</strong>. Voler votre ordinateur demain n'ouvre pas ce que vous avez envoyé hier : c'est la confidentialité persistante.",
+        },
+        Card {
+            title: "Post-quantique",
+            body: "La session s'établit en <strong>hybride X25519 + ML-KEM-768</strong> (FIPS 203), comme Signal PQXDH et iMessage PQ3 : celui qui garde vos jetons en attendant un ordinateur quantique devra casser les deux.",
+        },
+        Card {
+            title: "Une session qui guérit",
+            body: "À chaque réponse, un nouvel échange Diffie-Hellman fait tourner le cliquet : si un logiciel espion a lu l'état un instant, il <strong>perd la main</strong> dès le premier aller-retour.",
+        },
+        Card {
+            title: "Longueur masquée",
+            body: "Avant chiffrement, le texte est complété au multiple de <strong>160 octets</strong> : un « oui » et une phrase entière donnent des jetons de même taille.",
+        },
+        Card {
+            title: "Appairage vérifié",
+            body: "À l'appairage, chaque appareil publie son <strong>paquet de clés signé</strong>. L'empreinte à comparer de vive voix couvre la clé partagée et les deux identités : un serveur qui substituerait un paquet se trahirait.",
+        },
+        Card {
+            title: "Rejeu et désordre",
+            body: "Les messages peuvent arriver dans le désordre ou en double : les clés sautées sont gardées puis effacées, un message rejoué est ignoré, une page rechargée retrouve son clair.",
+        },
+    ],
+    v3_diagram: "Appairage    vous ── paquet v3 signé (X25519, ML-KEM-768) ──► Alice
+             empreinte = clé partagée + les deux identités
+
+Message 1    clé₁ ──► [[BROCOLIS:v3:…]]   clé₁ effacée
+Message 2    clé₂ ──► [[BROCOLIS:v3:…]]   clé₂ effacée
+Réponse      nouveau cliquet Diffie-Hellman : la session guérit",
+    v3_note: "Chaque contact affiche sa protection : <strong>🔐 double cliquet (post-quantique)</strong>, <em>classique</em>, <em>clé partagée (PSK)</em>, ou <em>ancien format</em>. Plusieurs destinataires et clés de groupe restent en v1/v2, et les anciens jetons restent lisibles pour toujours. Le protocole a une implémentation de référence en Rust et des vecteurs de test que chaque plateforme retrouve octet pour octet.",
+
     s6_h: "Vie privée et sécurité",
     s6_li: [
         "Chiffrement <strong>de bout en bout</strong> entre vous et vos contacts : le service en ligne ne voit jamais le clair.",
@@ -424,7 +467,7 @@ pub static FR: Strings = Strings {
     ],
 
     footer: "Brocolis — chiffrement sélectif, écrit en Rust. Conçu et développé par Maxime Nathan Lestage.",
-    hero_eyebrow: "Application · AES-256-GCM · Rust",
+    hero_eyebrow: "Application · Double cliquet · Rust",
     hero_scroll: "Défiler",
     manifesto_label: "Manifeste",
     manifesto: "Vos mots restent les vôtres. Brocolis chiffre ce que vous marquez avant que ça ne quitte votre machine, pour ceux que vous choisissez, et laisse tout le reste intact. Aucun serveur à convaincre, rien à changer à vos habitudes.",
@@ -590,6 +633,42 @@ pub static EN: Strings = Strings {
     s5_intro: "Brocolis sits between your browser and the online service. On the way out, it encrypts the marked segments for the chosen contacts; on the way back, it decrypts the tokens your keys can open.",
     s5_diagram: "Browser ─►  Brocolis (on your machine)  ─►  Online service\n                         │                         │\n   \"hi ((secret))\" ───► \"hi [[BROCOLIS:v3:…]]\"  (encrypted for Alice)\n   \"hi secret\"     ◄─── \"hi [[BROCOLIS:v3:…]]\"  (decrypted for you)",
 
+    v3_h: "The double ratchet",
+    v3_intro: "With a paired contact, Brocolis no longer encrypts with a fixed key: it speaks the <strong>v3 protocol</strong> of the Brocolis messenger — the same as the iPhone, Android and the site's chat. A double-ratchet session, like Signal, set up as a post-quantum hybrid.",
+    v3_cards: [
+        Card {
+            title: "One key per message",
+            body: "Every message gets its own key, derived then <strong>erased right away</strong>. Stealing your computer tomorrow doesn't open what you sent yesterday: that's forward secrecy.",
+        },
+        Card {
+            title: "Post-quantum",
+            body: "The session is set up as a <strong>hybrid X25519 + ML-KEM-768</strong> (FIPS 203), like Signal PQXDH and iMessage PQ3: whoever keeps your tokens until a quantum computer exists will have to break both.",
+        },
+        Card {
+            title: "A session that heals",
+            body: "With every reply, a fresh Diffie-Hellman exchange turns the ratchet: if spyware read the state for a moment, it <strong>loses its grip</strong> at the first round trip.",
+        },
+        Card {
+            title: "Hidden length",
+            body: "Before encryption, the text is padded to a multiple of <strong>160 bytes</strong>: a \"yes\" and a whole sentence give tokens of the same size.",
+        },
+        Card {
+            title: "Verified pairing",
+            body: "When pairing, each device publishes its <strong>signed key bundle</strong>. The fingerprint you compare in person covers the shared key and both identities: a server swapping a bundle would give itself away.",
+        },
+        Card {
+            title: "Replays and disorder",
+            body: "Messages may arrive out of order or twice: skipped keys are kept then erased, a replayed message is ignored, a reloaded page finds its plaintext again.",
+        },
+    ],
+    v3_diagram: "Pairing      you ── signed v3 bundle (X25519, ML-KEM-768) ──► Alice
+             fingerprint = shared key + both identities
+
+Message 1    key₁ ──► [[BROCOLIS:v3:…]]   key₁ erased
+Message 2    key₂ ──► [[BROCOLIS:v3:…]]   key₂ erased
+Reply        new Diffie-Hellman ratchet: the session heals",
+    v3_note: "Each contact shows its protection: <strong>🔐 double ratchet (post-quantum)</strong>, <em>classic</em>, <em>shared key (PSK)</em>, or <em>legacy format</em>. Several recipients and group keys stay on v1/v2, and old tokens stay readable forever. The protocol has a reference implementation in Rust and test vectors every platform matches byte for byte.",
+
     s6_h: "Privacy and security",
     s6_li: [
         "<strong>End-to-end</strong> encryption between you and your contacts: the online service never sees plaintext.",
@@ -600,7 +679,7 @@ pub static EN: Strings = Strings {
     ],
 
     footer: "Brocolis — selective encryption, written in Rust. Designed and developed by Maxime Nathan Lestage.",
-    hero_eyebrow: "App · AES-256-GCM · Rust",
+    hero_eyebrow: "App · Double ratchet · Rust",
     hero_scroll: "Scroll",
     manifesto_label: "Manifesto",
     manifesto: "Your words stay yours. Brocolis encrypts what you mark before it leaves your machine, for the people you choose, and leaves everything else untouched. No server to convince, no habit to change.",
@@ -766,6 +845,42 @@ pub static ES: Strings = Strings {
     s5_intro: "Brocolis se sitúa entre tu navegador y el servicio en línea. Al enviar, cifra los segmentos marcados para los contactos elegidos; al recibir, descifra los tokens que tus claves pueden abrir.",
     s5_diagram: "Navegador ─►  Brocolis (en tu equipo)  ─►  Servicio en línea\n                         │                         │\n   «hola ((secreto))» ───► «hola [[BROCOLIS:v3:…]]»  (cifrado para Alice)\n   «hola secreto»     ◄─── «hola [[BROCOLIS:v3:…]]»  (descifrado para ti)",
 
+    v3_h: "El doble trinquete",
+    v3_intro: "Con un contacto emparejado, Brocolis ya no cifra con una clave fija: habla el <strong>protocolo v3</strong> de la mensajería Brocolis — el mismo que el iPhone, Android y el chat del sitio. Una sesión de doble trinquete, como Signal, establecida en híbrido poscuántico.",
+    v3_cards: [
+        Card {
+            title: "Una clave por mensaje",
+            body: "Cada mensaje tiene su propia clave, derivada y <strong>borrada enseguida</strong>. Robar tu ordenador mañana no abre lo que enviaste ayer: es la confidencialidad persistente.",
+        },
+        Card {
+            title: "Poscuántico",
+            body: "La sesión se establece en <strong>híbrido X25519 + ML-KEM-768</strong> (FIPS 203), como Signal PQXDH e iMessage PQ3: quien guarde tus tokens esperando un ordenador cuántico tendrá que romper los dos.",
+        },
+        Card {
+            title: "Una sesión que se cura",
+            body: "Con cada respuesta, un nuevo intercambio Diffie-Hellman gira el trinquete: si un programa espía leyó el estado un instante, <strong>pierde el control</strong> en la primera ida y vuelta.",
+        },
+        Card {
+            title: "Longitud oculta",
+            body: "Antes de cifrar, el texto se completa hasta un múltiplo de <strong>160 bytes</strong>: un «sí» y una frase entera dan tokens del mismo tamaño.",
+        },
+        Card {
+            title: "Emparejamiento verificado",
+            body: "Al emparejar, cada equipo publica su <strong>paquete de claves firmado</strong>. La huella que comparáis en persona cubre la clave compartida y las dos identidades: un servidor que sustituyera un paquete se delataría.",
+        },
+        Card {
+            title: "Repeticiones y desorden",
+            body: "Los mensajes pueden llegar desordenados o repetidos: las claves saltadas se guardan y luego se borran, un mensaje repetido se ignora, una página recargada recupera su texto.",
+        },
+    ],
+    v3_diagram: "Emparejar    tú ── paquete v3 firmado (X25519, ML-KEM-768) ──► Alice
+             huella = clave compartida + las dos identidades
+
+Mensaje 1    clave₁ ──► [[BROCOLIS:v3:…]]   clave₁ borrada
+Mensaje 2    clave₂ ──► [[BROCOLIS:v3:…]]   clave₂ borrada
+Respuesta    nuevo trinquete Diffie-Hellman: la sesión se cura",
+    v3_note: "Cada contacto muestra su protección: <strong>🔐 doble trinquete (poscuántico)</strong>, <em>clásico</em>, <em>clave compartida (PSK)</em> o <em>formato antiguo</em>. Varios destinatarios y claves de grupo siguen en v1/v2, y los tokens antiguos siguen legibles para siempre. El protocolo tiene una implementación de referencia en Rust y vectores de prueba que cada plataforma reproduce byte a byte.",
+
     s6_h: "Privacidad y seguridad",
     s6_li: [
         "Cifrado <strong>de extremo a extremo</strong> entre tú y tus contactos: el servicio en línea nunca ve el texto claro.",
@@ -776,7 +891,7 @@ pub static ES: Strings = Strings {
     ],
 
     footer: "Brocolis — cifrado selectivo, escrito en Rust. Diseñado y desarrollado por Maxime Nathan Lestage.",
-    hero_eyebrow: "Aplicación · AES-256-GCM · Rust",
+    hero_eyebrow: "Aplicación · Doble trinquete · Rust",
     hero_scroll: "Desplazar",
     manifesto_label: "Manifiesto",
     manifesto: "Tus palabras siguen siendo tuyas. Brocolis cifra lo que marcas antes de que salga de tu equipo, para quien tú eliges, y deja todo lo demás intacto. Ningún servidor que convencer, ningún hábito que cambiar.",

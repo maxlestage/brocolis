@@ -104,7 +104,7 @@ async function load(page, url) {
   h1.includes("Brocolis") ? ok(`accueil : h1 « ${h1.trim()} »`) : bad(`h1 inattendu : ${h1}`);
 
   const sections = await page.$$eval("main section[id]", (els) => els.map((e) => e.id));
-  const expected = ["platforms", "switch", "features", "quickstart", "app", "how", "privacy"];
+  const expected = ["platforms", "switch", "features", "quickstart", "app", "how", "ratchet", "privacy"];
   JSON.stringify(sections) === JSON.stringify(expected)
     ? ok(`7 sections dans l'ordre : ${sections.join(", ")}`)
     : bad(`sections : attendu ${expected.join(",")} — obtenu ${sections.join(",")}`);
@@ -459,19 +459,19 @@ for (const [locale, expected, marker] of [
 
   // Texte « déchiffré » : il défile puis revient exactement à l'original.
   const eyebrow = "[data-scramble]";
-  await until(page, (s) => document.querySelector(".hero-eyebrow " + s).textContent === "Application · AES-256-GCM · Rust", eyebrow);
+  await until(page, (s) => document.querySelector(".hero-eyebrow " + s).textContent === "Application · Double cliquet · Rust", eyebrow);
   const net = await page.$eval(".hero-eyebrow [data-scramble]", (e) => e.textContent);
-  net === "Application · AES-256-GCM · Rust" ? ok("le texte déchiffré revient intact") : bad(`surtitre : ${net}`);
+  net === "Application · Double cliquet · Rust" ? ok("le texte déchiffré revient intact") : bad(`surtitre : ${net}`);
 
   // Pendant un déchiffrage, la langue change : c'est la nouvelle qui gagne.
   const box = await page.$eval(".hero-eyebrow [data-scramble]", (e) => { const r = e.getBoundingClientRect(); return [r.x + 20, r.y + r.height / 2]; });
   await page.mouse.move(box[0], box[1]);
-  await until(page, () => document.querySelector(".hero-eyebrow [data-scramble]").textContent !== "Application · AES-256-GCM · Rust");
+  await until(page, () => document.querySelector(".hero-eyebrow [data-scramble]").textContent !== "Application · Double cliquet · Rust");
   const pendant = await page.$eval(".hero-eyebrow [data-scramble]", (e) => e.textContent);
   await page.click('.switcher button:has-text("EN")');
-  await until(page, () => document.querySelector(".hero-eyebrow [data-scramble]").textContent === "App · AES-256-GCM · Rust");
+  await until(page, () => document.querySelector(".hero-eyebrow [data-scramble]").textContent === "App · Double ratchet · Rust");
   const apres = await page.$eval(".hero-eyebrow [data-scramble]", (e) => e.textContent);
-  apres === "App · AES-256-GCM · Rust" && pendant !== "Application · AES-256-GCM · Rust"
+  apres === "App · Double ratchet · Rust" && pendant !== "Application · Double cliquet · Rust"
     ? ok(`changement de langue en plein déchiffrage : texte final anglais (pendant : « ${pendant} »)`)
     : bad(`après changement de langue : « ${apres} » (pendant : « ${pendant} »)`);
   await page.click('.switcher button:has-text("FR")');
