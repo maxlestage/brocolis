@@ -184,6 +184,9 @@ pub struct Recipient {
     pub bundle_at: u64,
     /// Sa capacité v4 (§9.6), si elle est valide pour ce paquet.
     pub caps: Option<[u8; 64]>,
+    /// Son identité a changé sans confirmation (§9.8) : rien ne part vers
+    /// lui.
+    pub identity_changed: bool,
     /// Une clé de groupe (3 personnes ou plus) : jamais de v3 (§7.4).
     pub group: bool,
     /// Marquée « à deux, double cliquet » (PSK) par l'utilisateur.
@@ -191,6 +194,15 @@ pub struct Recipient {
 }
 
 impl Recipient {
+    /// Ce que donnera le prochain envoi (§8.8), alerte d'identité d'abord.
+    fn protection(&self, e: &Engine, now: u64) -> Protection {
+        if self.identity_changed {
+            Protection::IdentityChanged
+        } else {
+            e.protection(&self.info(), now)
+        }
+    }
+
     pub fn info(&self) -> KeyInfo<'_> {
         KeyInfo {
             id: &self.id,
@@ -249,6 +261,7 @@ pub fn recipients(cfg: &Config) -> Vec<Recipient> {
             bundle,
             bundle_at: c.bundle_at.unwrap_or(0),
             caps,
+            identity_changed: c.identity_changed,
             group: c.duo == Some(false) || shared,
             psk: c.psk,
             key,
@@ -268,6 +281,7 @@ pub fn recipients(cfg: &Config) -> Vec<Recipient> {
             bundle: None,
             bundle_at: 0,
             caps: None,
+            identity_changed: false,
             group: true,
             psk: false,
             key,
@@ -286,8 +300,18 @@ pub fn find<'a>(all: &'a [Recipient], name: &str) -> Option<&'a Recipient> {
 /// (§8.8). Le v3 indisponible : tout est en ancien format.
 pub fn protections(store: &V3Store, all: &[Recipient]) -> Vec<Protection> {
     store
-        .transaction(|e, now| all.iter().map(|r| e.protection(&r.info(), now)).collect())
-        .unwrap_or_else(|_| vec![Protection::Legacy; all.len()])
+        .transaction(|e, now| all.iter().map(|r| r.protection(e, now)).collect())
+        .unwrap_or_else(|_| {
+            all.iter()
+                .map(|r| {
+                    if r.identity_changed {
+                        Protection::IdentityChanged
+                    } else {
+                        Protection::Legacy
+                    }
+                })
+                .collect()
+        })
 }
 
 /// Ce qui scelle un texte en jeton ; `None` : échec fermé.
@@ -344,9 +368,10 @@ impl V3 {
     /// Ce que donnerait un envoi pour ces clés (§8.8).
     pub fn protection(&self, targets: &[SymKey]) -> Protection {
         match self.single(targets) {
+            Some(r) if r.identity_changed => Protection::IdentityChanged,
             Some(r) => self
                 .store
-                .transaction(|e, now| e.protection(&r.info(), now))
+                .transaction(|e, now| r.protection(e, now))
                 .unwrap_or(Protection::Legacy),
             None => Protection::Legacy,
         }
@@ -357,6 +382,16 @@ impl V3 {
     /// repart en v1/v2, et aucun jeton v3 n'est rendu sans son état écrit.
     fn with_sealer<R>(&self, targets: &[SymKey], op: &mut dyn FnMut(&mut Sealer<'_>) -> R) -> R {
         let legacy = |text: &str| crate::crypto::seal_token(text.as_bytes(), targets);
+        // L'identité d'un destinataire a changé (§9.8) : échec fermé, rien
+        // ne part — ni en v3/v4, ni en v1/v2 (la clé vient du même
+        // ré-appairage).
+        if self
+            .recipients
+            .iter()
+            .any(|r| r.identity_changed && targets.iter().any(|t| t.bytes() == r.raw))
+        {
+            return op(&mut |_: &str| None);
+        }
         if let Some(r) = self.single(targets) {
             let info = r.info();
             let done = self.store.transaction(|e, now| {

@@ -66,6 +66,10 @@ pub enum Protection {
     Psk,
     /// L'ancien format (v1/v2).
     Legacy,
+    /// L'identité du contact a changé (§9.8) : l'envoi est bloqué jusqu'à ce
+    /// que l'utilisateur confirme l'empreinte (propre à brocolis : le site
+    /// n'a qu'un correspondant par clé).
+    IdentityChanged,
 }
 
 impl Protection {
@@ -78,12 +82,15 @@ impl Protection {
             Protection::Classic => "🔐 double cliquet (classique)",
             Protection::Psk => "🔐 double cliquet, clé partagée (PSK)",
             Protection::Legacy => "ancien format",
+            Protection::IdentityChanged => {
+                "⚠️ l'identité de ce contact a changé — comparez l'empreinte avant d'écrire"
+            }
         }
     }
 
     /// Le prochain envoi part-il en v3 (ou v4) ?
     pub fn is_v3(self) -> bool {
-        self != Protection::Legacy
+        !matches!(self, Protection::Legacy | Protection::IdentityChanged)
     }
 
     /// Le prochain envoi part-il en v4 (triple cliquet) ?

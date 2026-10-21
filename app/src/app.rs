@@ -77,6 +77,8 @@ enum Act {
     CancelDelete,
     /// Double cliquet à partir de la clé partagée : oui ou non.
     Psk(String, bool),
+    /// « J'ai comparé l'empreinte » après un changement d'identité (§9.8).
+    ConfirmIdentity(String),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -99,7 +101,11 @@ enum JobKind {
 
 enum JobDone {
     Elevated,
-    Paired { fingerprint: String },
+    Paired {
+        fingerprint: String,
+        /// Le nom, si l'identité de ce contact a changé (§9.8).
+        identity_changed: Option<String>,
+    },
 }
 
 struct Job {
@@ -349,11 +355,21 @@ impl BrocolisApp {
                     self.notify(if refused(&e) { Kind::Info } else { Kind::Err }, msg);
                 }
             }
-            (JobKind::Pair, Ok(JobDone::Paired { fingerprint })) => {
+            (
+                JobKind::Pair,
+                Ok(JobDone::Paired {
+                    fingerprint,
+                    identity_changed,
+                }),
+            ) => {
                 self.pair_fingerprint = Some(fingerprint);
                 self.pair_code.clear();
                 self.pair_name.clear();
                 self.keys_changed();
+                if let Some(name) = identity_changed {
+                    let msg = t.identity_changed_note.replace("{name}", &name);
+                    self.notify(Kind::Err, msg);
+                }
             }
             (JobKind::Pair, Ok(JobDone::Elevated)) => {}
             (JobKind::Pair, Err(e)) => {
@@ -386,7 +402,8 @@ impl BrocolisApp {
             return;
         }
         // Vérifié avant d'aller sur le réseau : l'autre attendrait pour rien.
-        if self.book.person(&name).is_some() {
+        // Un contact déjà appairé peut l'être de nouveau (ré-appairage, §9.8).
+        if self.book.person(&name).is_some_and(|p| !p.paired) {
             let msg = self.t().contact_exists.replace("{name}", &name);
             self.notify(Kind::Err, msg);
             return;
@@ -416,7 +433,7 @@ impl BrocolisApp {
                     Duration::from_secs(120),
                 )
                 .await?;
-                keyring::contact_add_paired(
+                let changed = keyring::contact_add_paired(
                     &files.config,
                     &name,
                     &paired.key_b64,
@@ -425,6 +442,7 @@ impl BrocolisApp {
                 )?;
                 anyhow::Ok(JobDone::Paired {
                     fingerprint: paired.fingerprint,
+                    identity_changed: changed.then_some(name),
                 })
             })
             .map_err(|e| e.to_string())
@@ -791,6 +809,11 @@ impl BrocolisApp {
                         });
                     }
                     None => {
+                        if person.protection == brocolis::v3::Protection::IdentityChanged
+                            && small_button(ui, t.identity_confirm).clicked()
+                        {
+                            acts.push(Act::ConfirmIdentity(name.clone()));
+                        }
                         ui.horizontal_wrapped(|ui| {
                             if small_button(ui, t.copy).clicked() {
                                 acts.push(Act::Copy(person.key.b64.clone()));
@@ -1064,6 +1087,9 @@ impl BrocolisApp {
                 keyring::contact_delete(&config, &name).map(|()| None)
             }
             Act::Psk(name, on) => keyring::contact_set_psk(&config, &name, on).map(|()| None),
+            Act::ConfirmIdentity(name) => {
+                keyring::contact_confirm_identity(&config, &name).map(|()| None)
+            }
         };
         match result {
             Ok(note) => {
