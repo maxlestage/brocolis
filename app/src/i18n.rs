@@ -18,6 +18,8 @@ impl Strings {
     pub fn protection(&self, p: brocolis::v3::Protection) -> &'static str {
         use brocolis::v3::Protection;
         match p {
+            Protection::Triple => self.v4,
+            Protection::TriplePsk => self.v4_psk,
             Protection::PostQuantum => self.v3_pq,
             Protection::Classic => self.v3_classic,
             Protection::Psk => self.v3_psk,
@@ -169,6 +171,8 @@ pub struct Strings {
     pub replayed: &'static str,
 
     // Protection d'un contact (protocole v3 de la messagerie).
+    pub v4: &'static str,
+    pub v4_psk: &'static str,
     pub v3_pq: &'static str,
     pub v3_classic: &'static str,
     pub v3_psk: &'static str,
@@ -278,6 +282,8 @@ pub static FR: Strings = Strings {
     no_keys: "Aucune clé : voyez l'onglet Contacts.",
 
     replayed: "{n} message(s) à double cliquet déjà lu(s) sur cet appareil : un tel message ne s'ouvre qu'une fois.",
+    v4: "🔐 triple cliquet (post-quantique à chaque message)",
+    v4_psk: "🔐 triple cliquet, clé partagée (PSK)",
     v3_pq: "🔐 double cliquet (post-quantique)",
     v3_classic: "🔐 double cliquet (classique)",
     v3_psk: "🔐 double cliquet, clé partagée (PSK)",
@@ -386,6 +392,8 @@ pub static EN: Strings = Strings {
     no_keys: "No key: see the Contacts tab.",
 
     replayed: "{n} double-ratchet message(s) already read on this device: such a message opens only once.",
+    v4: "🔐 triple ratchet (post-quantum on every message)",
+    v4_psk: "🔐 triple ratchet, shared key (PSK)",
     v3_pq: "🔐 double ratchet (post-quantum)",
     v3_classic: "🔐 double ratchet (classic)",
     v3_psk: "🔐 double ratchet, shared key (PSK)",
@@ -494,6 +502,8 @@ pub static ES: Strings = Strings {
     no_keys: "Ninguna clave: mira la pestaña Contactos.",
 
     replayed: "{n} mensaje(s) de doble trinquete ya leído(s) en este equipo: un mensaje así solo se abre una vez.",
+    v4: "🔐 triple trinquete (poscuántico en cada mensaje)",
+    v4_psk: "🔐 triple trinquete, clave compartida (PSK)",
     v3_pq: "🔐 doble trinquete (poscuántico)",
     v3_classic: "🔐 doble trinquete (clásico)",
     v3_psk: "🔐 doble trinquete, clave compartida (PSK)",

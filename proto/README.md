@@ -1,11 +1,5 @@
 # brocolis-proto
 
-> **Copie conforme** de [`proto/` du dépôt de la messagerie](https://github.com/maxlestage/messagerie-/tree/master/proto),
-> qui en est la source (master `61cc936`) : brocolis s'en sert pour le
-> protocole v3 (`src/v3.rs`, `src/v3store.rs`). Toute correction se fait
-> là-bas, puis se recopie ici ; les liens vers `docs/SECURITE.md` désignent
-> le document de ce dépôt-là.
-
 L'implémentation de référence, en Rust, du protocole de sécurité de
 Brocolis 🥦 et Talka ([`docs/SECURITE.md`](../docs/SECURITE.md), qui est le
 contrat). Swift (iPhone), Kotlin (Android) et WebAssembly (navigateurs)
@@ -20,6 +14,7 @@ retrouvent ses vecteurs [`vectors.json`](vectors.json) octet pour octet.
 | `session` | établissement (X25519, hybride ML-KEM, clé partagée), Double Ratchet | §4.2–4.3 |
 | `jeton_v3` | `[[BROCOLIS:v3:…]]`, types 0x01–0x04, décodage strict | §4.4 |
 | `groupe` | Sender Keys : distribution (0x03), messages signés (0x04) | §4.5 |
+| `session4`, `jeton_v4` | **v4** : triple cliquet (X25519 + ML-KEM-768 à chaque tour), en-têtes chiffrés, identité de l'expéditeur cachée, `[[BROCOLIS:v4:…]]`, capacité signée | §9 |
 | `kdf` | chaque dérivation, exposée pour les vecteurs | — |
 
 Uniquement RustCrypto et dalek, `#![forbid(unsafe_code)]`, aucune panique sur

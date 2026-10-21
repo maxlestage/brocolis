@@ -107,6 +107,15 @@ impl V3Store {
             .ok_or_else(|| anyhow::anyhow!("paquet de clés v3 indisponible"))
     }
 
+    /// Ce que l'on publie au salon (§8.4, §9.6) : paquet et capacité v4.
+    pub fn published(&self) -> anyhow::Result<crate::pairing::Published> {
+        let (bundle, caps) = self.transaction(|e, _| (e.bundle_b64(), e.caps_b64()))?;
+        Ok(crate::pairing::Published {
+            bundle: bundle.ok_or_else(|| anyhow::anyhow!("paquet de clés v3 indisponible"))?,
+            caps,
+        })
+    }
+
     /// Mon identité v3 : IK X25519 ‖ IK Ed25519 (empreinte d'appairage).
     pub fn identity(&self) -> anyhow::Result<[u8; 64]> {
         self.transaction(|e, _| e.identity())
@@ -173,6 +182,8 @@ pub struct Recipient {
     /// Le paquet du correspondant reçu à l'appairage.
     pub bundle: Option<KeyBundle>,
     pub bundle_at: u64,
+    /// Sa capacité v4 (§9.6), si elle est valide pour ce paquet.
+    pub caps: Option<[u8; 64]>,
     /// Une clé de groupe (3 personnes ou plus) : jamais de v3 (§7.4).
     pub group: bool,
     /// Marquée « à deux, double cliquet » (PSK) par l'utilisateur.
@@ -185,6 +196,7 @@ impl Recipient {
             id: &self.id,
             key: self.raw,
             bundle: self.bundle.as_ref(),
+            caps: self.caps.as_ref(),
             bundle_at: self.bundle_at,
             group: self.group,
             psk: self.psk,
@@ -223,15 +235,20 @@ pub fn recipients(cfg: &Config) -> Vec<Recipient> {
                 .contacts
                 .iter()
                 .any(|o| !same_name(&o.name, &c.name) && o.key() == Some(b64));
+        let bundle = c
+            .bundle
+            .as_deref()
+            .and_then(|b| KeyBundle::from_base64(b.trim()).ok());
+        let caps = bundle
+            .as_ref()
+            .and_then(|b| crate::pairing::caps_of(b, c.caps.as_deref()));
         out.push(Recipient {
             name: Some(c.name.clone()),
             id: key_id(&key),
             raw: key.bytes(),
-            bundle: c
-                .bundle
-                .as_deref()
-                .and_then(|b| KeyBundle::from_base64(b.trim()).ok()),
+            bundle,
             bundle_at: c.bundle_at.unwrap_or(0),
+            caps,
             group: c.duo == Some(false) || shared,
             psk: c.psk,
             key,
@@ -250,6 +267,7 @@ pub fn recipients(cfg: &Config) -> Vec<Recipient> {
             raw: key.bytes(),
             bundle: None,
             bundle_at: 0,
+            caps: None,
             group: true,
             psk: false,
             key,
@@ -299,6 +317,8 @@ pub struct Read {
     /// ces jetons est un de mes envois.
     pub v3_from: Vec<String>,
     pub v3_mine: bool,
+    /// Un des jetons ouverts était un v4 (triple cliquet).
+    pub v4: bool,
 }
 
 impl V3 {
@@ -381,7 +401,9 @@ impl V3 {
     /// Déchiffre tous les jetons : v1/v2 avec `keys`, v3 avec l'état (le
     /// clair gardé, une session, un premier message d'un contact ou en PSK).
     pub fn read(&self, input: &str, keys: &[SymKey], escape: crate::crypto::PlainEscape) -> Read {
-        if !input.contains(brocolis_proto::jeton_v3::HEAD) {
+        if !input.contains(brocolis_proto::jeton_v3::HEAD)
+            && !input.contains(brocolis_proto::jeton_v4::HEAD)
+        {
             let (text, opened) = crate::crypto::decrypt_tokens_escaped(input, keys, escape);
             return Read {
                 text,
@@ -393,11 +415,13 @@ impl V3 {
         let mut replayed = 0;
         let mut from: Vec<String> = Vec::new();
         let mut mine = false;
+        let mut v4 = false;
         let done = self.store.transaction(|e, now| {
             crate::crypto::decrypt_tokens_with(input, keys, escape, &mut |token| match e
                 .open(token, &infos, now)
             {
                 crate::v3::Opened::Text(t) => {
+                    v4 |= token.starts_with(brocolis_proto::jeton_v4::HEAD);
                     if e.is_mine(token) {
                         mine = true;
                     } else if let Some(name) = e
@@ -427,6 +451,7 @@ impl V3 {
             replayed,
             v3_from: from,
             v3_mine: mine,
+            v4,
         }
     }
 
@@ -485,7 +510,7 @@ mod tests {
         let key = SymKey::generate();
         let k = key.to_base64();
         let conf = |nom: &str, paquet: &str| -> Config {
-            let t = crate::contacts::add_paired("", nom, &k, paquet, now()).unwrap();
+            let t = crate::contacts::add_paired("", nom, &k, paquet, None, now()).unwrap();
             toml::from_str(&t).unwrap()
         };
         let a = V3 {

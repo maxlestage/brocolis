@@ -334,7 +334,8 @@ fn main() -> anyhow::Result<()> {
             }
             eprintln!("# {} jeton(s) déchiffré(s)", read.opened);
             if !read.v3_from.is_empty() {
-                eprintln!("# double cliquet, de : {}", read.v3_from.join(", "));
+                let cliquet = if read.v4 { "triple" } else { "double" };
+                eprintln!("# {cliquet} cliquet, de : {}", read.v3_from.join(", "));
             }
             if read.replayed > 0 {
                 eprintln!(
@@ -706,7 +707,7 @@ async fn run_pair(
     }
     let priv_key = load_or_create_identity(identity)?;
     let bundle = match name {
-        Some(_) => Some(brocolis::v3store::V3Store::for_config(config).bundle_b64()?),
+        Some(_) => Some(brocolis::v3store::V3Store::for_config(config).published()?),
         None => None,
     };
     let client = RendezvousClient::new(server)?;
@@ -715,7 +716,7 @@ async fn run_pair(
         &client,
         code,
         &priv_key,
-        bundle.as_deref(),
+        bundle.as_ref(),
         Duration::from_secs(timeout_secs),
     )
     .await?;
@@ -741,13 +742,16 @@ async fn run_pair(
             name,
             &paired.key_b64,
             b,
+            paired.caps.as_deref(),
             brocolis::v3store::now(),
         ),
         None => brocolis::contacts::add(&existing, name, &paired.key_b64),
     }
     .map_err(|e| anyhow::anyhow!("écriture du contact dans {}: {e}", config.display()))?;
     std::fs::write(config, updated)?;
-    let label = if paired.bundle.is_some() {
+    let label = if paired.caps.is_some() {
+        "🔐 triple cliquet"
+    } else if paired.bundle.is_some() {
         "🔐 double cliquet"
     } else {
         "ancien format (le correspondant n'a pas publié de paquet v3)"

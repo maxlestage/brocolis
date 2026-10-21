@@ -8,7 +8,7 @@
 //! Protocole identique à l'app iOS (`PairingClient.swift`) :
 //!
 //! ```text
-//! POST /pair {code, peerId, pub, bundle?}        -> { peers: [{peerId, pub, bundle?}] }
+//! POST /pair {code, peerId, pub, bundle?, caps?} -> { peers: [{peerId, pub, bundle?, caps?}] }
 //! GET  /pair?code=..&peerId=..                   -> { peers: [...] }
 //! POST /wrap {code, fromPeerId, fromPub, items}  -> { ok, count }
 //! GET  /wrap?code=..&peerId=..                   -> { wrap: {from, fromPub, blob} | null }
@@ -18,6 +18,10 @@
 //! messagerie) : publié à chaque publication, vérifié par le serveur, rendu
 //! avec le participant. Un ancien client l'ignore ; s'il manque d'un côté,
 //! l'appairage reste en ancien format (et l'empreinte aussi).
+//!
+//! `caps` est la capacité v4 signée (§9.6) : avec elle des deux côtés, le
+//! contact passe au triple cliquet et l'empreinte prend le contexte v4
+//! (§9.7) — un serveur qui la retirerait d'un côté se trahirait.
 
 use std::time::Duration;
 
@@ -47,6 +51,17 @@ pub struct PairingPeer {
     /// Son paquet de clés v3 (base64), s'il en a publié un.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bundle: Option<String>,
+    /// Sa capacité v4 signée (base64), s'il en a publié une.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caps: Option<String>,
+}
+
+/// Ce que l'on publie au salon en plus de sa clé publique : le paquet v3
+/// (§8.4) et la capacité v4 (§9.6), en base64.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Published {
+    pub bundle: String,
+    pub caps: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -101,11 +116,14 @@ impl RendezvousClient {
         code: &str,
         peer_id: &str,
         public_key: &str,
-        bundle: Option<&str>,
+        mine: Option<&Published>,
     ) -> Result<Vec<PairingPeer>, PairingError> {
         let mut body = serde_json::json!({ "code": code, "peerId": peer_id, "pub": public_key });
-        if let Some(b) = bundle {
-            body["bundle"] = serde_json::Value::from(b);
+        if let Some(m) = mine {
+            body["bundle"] = serde_json::Value::from(m.bundle.as_str());
+            if let Some(c) = &m.caps {
+                body["caps"] = serde_json::Value::from(c.as_str());
+            }
         }
         let resp: PairingResponse = self.post_json("/pair", &body).await?;
         Ok(resp.peers)
@@ -219,20 +237,42 @@ pub struct Paired {
     /// Le paquet v3 du correspondant (base64), seulement si les deux côtés en
     /// ont publié un : c'est ce qui fait passer le contact en double cliquet.
     pub bundle: Option<String>,
+    /// Sa capacité v4 (base64), seulement si les deux côtés en ont publié
+    /// une valide : le contact passe alors au triple cliquet.
+    pub caps: Option<String>,
+}
+
+/// Une capacité v4 (base64) valide pour ce paquet (§9.6).
+pub fn caps_of(bundle: &brocolis_proto::KeyBundle, caps: Option<&str>) -> Option<[u8; 64]> {
+    use base64::Engine as _;
+    let raw = base64::engine::general_purpose::STANDARD
+        .decode(caps?.trim())
+        .ok()?;
+    let raw: [u8; 64] = raw.try_into().ok()?;
+    crate::v3::caps_valid(bundle, Some(&raw)).then_some(raw)
 }
 
 /// L'empreinte d'un appairage à deux avec les deux paquets (§8.4) :
-/// `SHA-256("Brocolis_v3_Appairage" ‖ K ‖ min(P_A, P_B) ‖ max(P_A, P_B))[0..8]`.
-/// `None` si une clé ou un paquet est illisible.
-pub fn duo_fingerprint(key_b64: &str, mine: &str, theirs: &str) -> Option<String> {
+/// `SHA-256("Brocolis_v3_Appairage" ‖ K ‖ min(P_A, P_B) ‖ max(P_A, P_B))[0..8]`,
+/// sous `"Brocolis_v4_Appairage"` quand les deux capacités v4 sont valides
+/// (§9.7). Renvoie aussi si c'est le cas. `None` si une clé ou un paquet est
+/// illisible.
+pub fn duo_fingerprint(
+    key_b64: &str,
+    mine: &Published,
+    theirs: &str,
+    theirs_caps: Option<&str>,
+) -> Option<(String, bool)> {
     let key = crate::crypto::SymKey::from_base64(key_b64).ok()?.bytes();
-    let a = brocolis_proto::KeyBundle::from_base64(mine.trim()).ok()?;
+    let a = brocolis_proto::KeyBundle::from_base64(mine.bundle.trim()).ok()?;
     let b = brocolis_proto::KeyBundle::from_base64(theirs.trim()).ok()?;
-    Some(crate::v3::pairing_fingerprint(
-        &key,
-        &crate::v3::identity_of(&a),
-        &crate::v3::identity_of(&b),
-    ))
+    let v4 = caps_of(&a, mine.caps.as_deref()).is_some() && caps_of(&b, theirs_caps).is_some();
+    let (ia, ib) = (crate::v3::identity_of(&a), crate::v3::identity_of(&b));
+    Some(if v4 {
+        (crate::v3::pairing_fingerprint4(&key, &ia, &ib), true)
+    } else {
+        (crate::v3::pairing_fingerprint(&key, &ia, &ib), false)
+    })
 }
 
 /// Appairage à deux (le « mode compatible » de la messagerie) : publie la clé
@@ -247,13 +287,13 @@ pub async fn pair_two(
     client: &RendezvousClient,
     code: &str,
     identity: &crate::agreement::PrivateKey,
-    bundle: Option<&str>,
+    mine: Option<&Published>,
     timeout: Duration,
 ) -> anyhow::Result<Paired> {
     let peer_id = random_peer_id();
     let my_pub = identity.public_key_base64();
     tracing::info!("Publication de la clé publique (code « {code} »)…");
-    let mut peers = client.publish(code, &peer_id, &my_pub, bundle).await?;
+    let mut peers = client.publish(code, &peer_id, &my_pub, mine).await?;
 
     let deadline = tokio::time::Instant::now() + timeout;
     while peers.is_empty() {
@@ -273,21 +313,31 @@ pub async fn pair_two(
     // Les deux paquets, ou l'ancien format des deux côtés : un paquet
     // illisible compte comme absent (l'autre côté, qui le voit valide,
     // afficherait une autre empreinte — c'est le signal voulu).
-    let v3 = bundle
-        .zip(peer.bundle.as_deref())
-        .and_then(|(mine, theirs)| {
-            duo_fingerprint(&derived.symmetric_key_base64, mine, theirs).map(|f| (f, theirs))
-        });
+    let v3 = mine.zip(peer.bundle.as_deref()).and_then(|(mine, theirs)| {
+        duo_fingerprint(
+            &derived.symmetric_key_base64,
+            mine,
+            theirs,
+            peer.caps.as_deref(),
+        )
+        .map(|f| (f, theirs))
+    });
     Ok(match v3 {
-        Some((fingerprint, theirs)) => Paired {
+        Some(((fingerprint, v4), theirs)) => Paired {
             key_b64: derived.symmetric_key_base64,
             fingerprint,
             bundle: Some(theirs.trim().to_owned()),
+            caps: peer
+                .caps
+                .as_deref()
+                .filter(|_| v4)
+                .map(|c| c.trim().to_owned()),
         },
         None => Paired {
             key_b64: derived.symmetric_key_base64,
             fingerprint: derived.fingerprint,
             bundle: None,
+            caps: None,
         },
     })
 }
@@ -374,6 +424,7 @@ mod tests {
         let resp: PairingResponse = serde_json::from_str(json).unwrap();
         assert_eq!(resp.peers[0].bundle.as_deref(), Some("B"));
         assert!(resp.peers[1].bundle.is_none());
+        assert!(resp.peers[0].caps.is_none());
     }
 
     #[test]

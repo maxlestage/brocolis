@@ -192,10 +192,11 @@ pub fn contact_add_paired(
     name: &str,
     b64: &str,
     bundle: Option<&str>,
+    caps: Option<&str>,
 ) -> anyhow::Result<()> {
     let b64 = validate(b64)?;
     edit(config, |s| match bundle {
-        Some(b) => contacts::add_paired(s, name, &b64, b, v3store::now()),
+        Some(b) => contacts::add_paired(s, name, &b64, b, caps, v3store::now()),
         None => contacts::add(s, name, &b64),
     })
 }
@@ -442,8 +443,9 @@ mod tests {
         };
         let (pa, pb) = (paquet(&a), paquet(&b));
         let cle = SymKey::generate().to_base64();
-        contact_add_paired(&a.config, "Bob", &cle, Some(&pb)).unwrap();
-        contact_add_paired(&b.config, "Alice", &cle, Some(&pa)).unwrap();
+        // Sans capacité v4 publiée (un correspondant d'avant le v4) : v3.
+        contact_add_paired(&a.config, "Bob", &cle, Some(&pb), None).unwrap();
+        contact_add_paired(&b.config, "Alice", &cle, Some(&pa), None).unwrap();
         let bob = load(&a.config).unwrap();
         assert_eq!(bob.contacts[0].protection, Protection::PostQuantum);
         assert!(bob.contacts[0].paired && !bob.contacts[0].group);
@@ -477,6 +479,73 @@ mod tests {
         assert_eq!(p, Protection::Psk);
         assert!(psk.starts_with("[[BROCOLIS:v3:"));
         for f in [a, b] {
+            let _ = std::fs::remove_dir_all(&f.dir);
+        }
+    }
+
+    #[test]
+    fn avec_la_capacite_v4_ils_passent_au_triple_cliquet() {
+        let (a, b) = (fresh("v4-a"), fresh("v4-b"));
+        let publie = |f: &Files| {
+            brocolis::v3store::V3Store::for_config(&f.config)
+                .published()
+                .unwrap()
+        };
+        let (pa, pb) = (publie(&a), publie(&b));
+        assert!(pa.caps.is_some());
+        let cle = SymKey::generate().to_base64();
+        contact_add_paired(&a.config, "Bob", &cle, Some(&pb.bundle), pb.caps.as_deref()).unwrap();
+        contact_add_paired(
+            &b.config,
+            "Alice",
+            &cle,
+            Some(&pa.bundle),
+            pa.caps.as_deref(),
+        )
+        .unwrap();
+        // Les deux voient la même empreinte, sous le contexte v4.
+        let fa = brocolis::pairing::duo_fingerprint(&cle, &pa, &pb.bundle, pb.caps.as_deref());
+        let fb = brocolis::pairing::duo_fingerprint(&cle, &pb, &pa.bundle, pa.caps.as_deref());
+        assert_eq!(fa, fb);
+        assert!(fa.unwrap().1, "contexte v4");
+        let bob = load(&a.config).unwrap();
+        assert_eq!(bob.contacts[0].protection, Protection::Triple);
+
+        let pour_bob = recipients(&a.config, false, &["Bob".into()]).unwrap();
+        let (jeton, _, p) = seal(&a.config, "rendez-vous à 8 h", &pour_bob).unwrap();
+        assert_eq!(p, Protection::Triple);
+        assert!(jeton.starts_with("[[BROCOLIS:v4:"), "{jeton}");
+        let lu = read(&b.config, &jeton).unwrap().unwrap();
+        assert_eq!(lu.text, "rendez-vous à 8 h");
+        assert_eq!(
+            lu.from,
+            ["Alice"],
+            "l'expéditeur, sans identifiant en clair"
+        );
+        assert_eq!(read(&b.config, &jeton).unwrap().unwrap().from, ["Alice"]);
+        let pour_alice = recipients(&b.config, false, &["Alice".into()]).unwrap();
+        let (retour, _, _) = seal(&b.config, "ok", &pour_alice).unwrap();
+        let lu = read(&a.config, &retour).unwrap().unwrap();
+        assert_eq!(
+            (lu.text.as_str(), lu.from.as_slice()),
+            ("ok", &["Bob".to_owned()][..])
+        );
+        // Une capacité d'une autre identité ne vaut rien : v3.
+        let (c, d) = (fresh("v4-c"), fresh("v4-d"));
+        let pc = publie(&c);
+        contact_add_paired(
+            &d.config,
+            "Carole",
+            &cle,
+            Some(&pc.bundle),
+            pb.caps.as_deref(),
+        )
+        .unwrap();
+        assert_eq!(
+            load(&d.config).unwrap().contacts[0].protection,
+            Protection::PostQuantum
+        );
+        for f in [a, b, c, d] {
             let _ = std::fs::remove_dir_all(&f.dir);
         }
     }

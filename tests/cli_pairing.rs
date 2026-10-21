@@ -25,10 +25,12 @@ fn tmpdir(nom: &str) -> PathBuf {
     d
 }
 
+type Pair = (String, String, String, String);
+
 #[derive(Default)]
 struct Etat {
-    /// code -> [(peerId, pub, paquet v3 ou "")]
-    pairs: HashMap<String, Vec<(String, String, String)>>,
+    /// code -> [(peerId, pub, paquet v3 ou "", capacité v4 ou "")]
+    pairs: HashMap<String, Vec<Pair>>,
     /// code -> [(destinataire, expéditeur, sonPub, blob)]
     wraps: Vec<(String, String, String, String, String)>,
 }
@@ -92,10 +94,17 @@ fn servir(mut flux: TcpStream, etat: Arc<Mutex<Etat>>) {
             let moi = champ(&corps, "peerId");
             let pubk = champ(&corps, "pub");
             let paquet = champ(&corps, "bundle");
+            // Un code « V3… » joue un serveur d'avant le v4 : il ne relaie
+            // pas la capacité.
+            let caps = if code.starts_with("V3") {
+                String::new()
+            } else {
+                champ(&corps, "caps")
+            };
             let mut e = etat.lock().unwrap();
             let liste = e.pairs.entry(code.clone()).or_default();
-            if !liste.iter().any(|(p, _, _)| *p == moi) {
-                liste.push((moi.clone(), pubk, paquet));
+            if !liste.iter().any(|(p, _, _, _)| *p == moi) {
+                liste.push((moi.clone(), pubk, paquet, caps));
             }
             pairs_json(liste, &moi)
         }
@@ -170,14 +179,21 @@ fn items_bruts(corps: &str) -> Vec<String> {
 }
 
 /// Les correspondants renvoyés excluent toujours le demandeur.
-/// Le paquet v3 n'est rendu que pour qui en a publié un, comme le serveur.
-fn pairs_json(liste: &[(String, String, String)], moi: &str) -> String {
+/// Le paquet v3 (et la capacité v4) n'est rendu que pour qui en a publié
+/// un, comme le serveur.
+fn pairs_json(liste: &[Pair], moi: &str) -> String {
     let items: Vec<String> = liste
         .iter()
-        .filter(|(p, _, _)| p != moi)
-        .map(|(p, k, b)| match b.as_str() {
-            "" => format!("{{\"peerId\":\"{p}\",\"pub\":\"{k}\"}}"),
-            b => format!("{{\"peerId\":\"{p}\",\"pub\":\"{k}\",\"bundle\":\"{b}\"}}"),
+        .filter(|(p, _, _, _)| p != moi)
+        .map(|(p, k, b, c)| {
+            let mut o = format!("{{\"peerId\":\"{p}\",\"pub\":\"{k}\"");
+            if !b.is_empty() {
+                o.push_str(&format!(",\"bundle\":\"{b}\""));
+            }
+            if !c.is_empty() {
+                o.push_str(&format!(",\"caps\":\"{c}\""));
+            }
+            o + "}"
         })
         .collect();
     format!("{{\"peers\":[{}]}}", items.join(","))
@@ -370,13 +386,29 @@ fn la_cle_appairee_permet_de_se_lire() {
 /// cliquet — Bob le lit, et sait que ça vient d'Alice.
 #[test]
 fn deux_contacts_appaires_parlent_en_double_cliquet() {
+    duo_parle("V3", false);
+}
+
+/// Avec un serveur qui relaie la capacité v4 (§9.6) : triple cliquet, et une
+/// empreinte v4 identique des deux côtés.
+#[test]
+fn deux_contacts_appaires_parlent_en_triple_cliquet() {
+    duo_parle("V4", true);
+}
+
+fn duo_parle(code: &str, v4: bool) {
     let serveur = rendezvous();
-    let a = tmpdir("v3-alice");
-    let b = tmpdir("v3-bob");
+    let a = tmpdir(&format!("{code}-alice"));
+    let b = tmpdir(&format!("{code}-bob"));
+    let (cliquet, tete) = if v4 {
+        ("triple cliquet", "[[BROCOLIS:v4:")
+    } else {
+        ("double cliquet", "[[BROCOLIS:v3:")
+    };
 
     let lance = |d: &PathBuf, nom: &str| {
         Command::new(bin())
-            .args(["pair", "--code", "V3", "--name", nom, "--server", &serveur])
+            .args(["pair", "--code", code, "--name", nom, "--server", &serveur])
             .arg("--config")
             .arg(d.join("brocolis.toml"))
             .arg("--identity")
@@ -426,7 +458,11 @@ fn deux_contacts_appaires_parlent_en_double_cliquet() {
         .output()
         .unwrap();
     let liste = String::from_utf8(liste.stdout).unwrap();
-    assert!(liste.contains("double cliquet (post-quantique)"), "{liste}");
+    assert!(
+        liste.contains(&format!("{cliquet} (post-quantique")),
+        "{liste}"
+    );
+    assert_eq!(config_a.contains("caps = "), v4, "{config_a}");
 
     let chiffre = Command::new(bin())
         .args([
@@ -442,7 +478,7 @@ fn deux_contacts_appaires_parlent_en_double_cliquet() {
         .unwrap();
     assert!(chiffre.status.success());
     let chiffre = String::from_utf8(chiffre.stdout).unwrap();
-    assert!(chiffre.contains("[[BROCOLIS:v3:"), "{chiffre}");
+    assert!(chiffre.contains(tete), "{chiffre}");
     assert!(!chiffre.contains("au café"));
 
     let lire = |d: &PathBuf| {
@@ -459,7 +495,7 @@ fn deux_contacts_appaires_parlent_en_double_cliquet() {
         "rdv au café ok"
     );
     assert!(
-        String::from_utf8_lossy(&clair.stderr).contains("double cliquet, de : Alice"),
+        String::from_utf8_lossy(&clair.stderr).contains(&format!("{cliquet}, de : Alice")),
         "{}",
         String::from_utf8_lossy(&clair.stderr)
     );
