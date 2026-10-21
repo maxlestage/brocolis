@@ -28,7 +28,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use brocolis_proto::KeyBundle;
+use brocolis_proto::{KeyBundle, Token};
 
 use crate::config::{same_name, Config};
 use crate::crypto::SymKey;
@@ -426,6 +426,58 @@ impl V3 {
         })
     }
 
+    /// Les membres d'un groupe, dans l'ordre ; `None` si l'un d'eux n'est
+    /// pas (ou plus) un contact.
+    fn members(&self, g: &crate::config::Group) -> Option<Vec<&Recipient>> {
+        g.members
+            .iter()
+            .map(|m| find(&self.recipients, m))
+            .collect()
+    }
+
+    /// Le groupe part-il à cliquet (§9.9) : chaque membre a une session à
+    /// deux possible, et aucune identité n'a changé.
+    pub fn group_ratchet(&self, g: &crate::config::Group) -> bool {
+        let Some(members) = self.members(g) else {
+            return false;
+        };
+        g.id_bytes().is_some()
+            && !members.is_empty()
+            && self
+                .store
+                .transaction(|e, now| members.iter().all(|r| r.protection(e, now).is_v3()))
+                .unwrap_or(false)
+    }
+
+    /// Chiffre les segments `((…))` pour un groupe : à cliquet si chaque
+    /// membre le permet (chaînes remises par les sessions à deux, puis un
+    /// message de groupe par segment), sinon un jeton v2 pour les clés des
+    /// membres. Une identité changée : échec fermé.
+    pub fn encrypt_marked_group(&self, input: &str, g: &crate::config::Group) -> (String, usize) {
+        let Some(members) = self.members(g) else {
+            return crate::crypto::encrypt_marked_with(input, &mut |_| None);
+        };
+        let targets: Vec<SymKey> = members.iter().map(|r| r.key.clone()).collect();
+        if members.iter().any(|r| r.identity_changed) {
+            return crate::crypto::encrypt_marked_with(input, &mut |_| None);
+        }
+        let legacy = |text: &str| crate::crypto::seal_token(text.as_bytes(), &targets);
+        if let Some(gid) = g.id_bytes() {
+            let infos: Vec<KeyInfo<'_>> = members.iter().map(|r| r.info()).collect();
+            let done = self.store.transaction(|e, now| {
+                crate::crypto::encrypt_marked_with(input, &mut |text: &str| {
+                    e.seal_group(&gid, &infos, text, now)
+                        .or_else(|| legacy(text))
+                })
+            });
+            match done {
+                Ok(out) => return out,
+                Err(err) => tracing::warn!("v3 indisponible ({err}) : groupe en v2"),
+            }
+        }
+        crate::crypto::encrypt_marked_with(input, &mut |text: &str| legacy(text))
+    }
+
     /// [`crate::crypto::encrypt_marked_form`], en v3 quand c'est possible.
     pub fn encrypt_marked_form(&self, body: &str, targets: &[SymKey]) -> (String, usize) {
         self.with_sealer(targets, &mut |seal| {
@@ -451,10 +503,21 @@ impl V3 {
         let mut from: Vec<String> = Vec::new();
         let mut mine = false;
         let mut v4 = false;
+        // Un message de groupe à cliquet (§9.9) arrive avec les chaînes
+        // remises aux autres membres : celles qu'on ne peut pas ouvrir ne
+        // sont pas pour nous, elles ne s'affichent pas.
+        let group = crate::v3::find_tokens(input).iter().any(|&(a, b)| {
+            matches!(
+                Token::decode(&crate::v3::normalize(&input[a..b])),
+                Ok(Token::Group(_))
+            )
+        });
         let done = self.store.transaction(|e, now| {
             crate::crypto::decrypt_tokens_with(input, keys, escape, &mut |token| match e
                 .open(token, &infos, now)
             {
+                crate::v3::Opened::Text(t) if t.is_empty() => Some(t),
+                crate::v3::Opened::Hidden => Some(String::new()),
                 crate::v3::Opened::Text(t) => {
                     v4 |= token.starts_with(brocolis_proto::jeton_v4::HEAD);
                     if e.is_mine(token) {
@@ -472,6 +535,15 @@ impl V3 {
                 crate::v3::Opened::Replay => {
                     replayed += 1;
                     None
+                }
+                crate::v3::Opened::Failed(_)
+                    if group
+                        && !matches!(
+                            Token::decode(&crate::v3::normalize(token)),
+                            Ok(Token::Group(_))
+                        ) =>
+                {
+                    Some(String::new())
                 }
                 crate::v3::Opened::Failed(_) => None,
             })

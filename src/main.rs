@@ -113,6 +113,10 @@ enum Command {
         /// le jeton part en double cliquet (v3) ; sinon v1/v2.
         #[arg(long = "to", conflicts_with = "key")]
         to: Vec<String>,
+        /// Chiffrer pour ce groupe : à cliquet (Sender Keys) si chaque membre
+        /// est appairé, sinon un jeton v2 pour leurs clés.
+        #[arg(long, conflicts_with_all = ["key", "to"])]
+        group: Option<String>,
     },
     /// Déchiffre les jetons `[[BROCOLIS:…]]` d'un texte, comme le ferait le proxy.
     Decrypt {
@@ -129,6 +133,34 @@ enum Command {
     /// Liste les contacts : empreinte de leur clé et protection du prochain
     /// envoi (double cliquet ou ancien format).
     Contacts {
+        /// Fichier de configuration TOML.
+        #[arg(long, default_value = "brocolis.toml")]
+        config: PathBuf,
+    },
+    /// Crée un groupe à cliquet avec des contacts appairés, ou le rejoint
+    /// avec l'identifiant que son créateur affiche (`--id`).
+    GroupCreate {
+        /// Nom du groupe.
+        #[arg(long)]
+        name: String,
+        /// Les autres membres (noms de contacts, séparés par des virgules).
+        #[arg(long, value_delimiter = ',', required = true)]
+        members: Vec<String>,
+        /// L'identifiant du groupe, pour le rejoindre.
+        #[arg(long)]
+        id: Option<String>,
+        /// Fichier de configuration TOML.
+        #[arg(long, default_value = "brocolis.toml")]
+        config: PathBuf,
+    },
+    /// Change les membres d'un groupe : qui en sort ne lit plus la suite.
+    GroupMembers {
+        /// Nom du groupe.
+        #[arg(long)]
+        name: String,
+        /// Les autres membres, désormais.
+        #[arg(long, value_delimiter = ',', required = true)]
+        members: Vec<String>,
         /// Fichier de configuration TOML.
         #[arg(long, default_value = "brocolis.toml")]
         config: PathBuf,
@@ -296,9 +328,25 @@ fn main() -> anyhow::Result<()> {
             config,
             key,
             to,
+            group,
         } => {
             let entree = read_text(text)?;
-            let (sortie, n) = if to.is_empty() {
+            let (sortie, n) = if let Some(g) = group {
+                let cfg = Config::load(&config)?;
+                let g = cfg
+                    .group(&g)
+                    .ok_or_else(|| anyhow::anyhow!("groupe « {g} » inconnu"))?;
+                let v3 = brocolis::v3store::V3::for_config(&cfg, &config);
+                eprintln!(
+                    "# {}",
+                    if v3.group_ratchet(g) {
+                        "groupe à cliquet (Sender Keys)"
+                    } else {
+                        "groupe, ancien format (un membre sans session à deux)"
+                    }
+                );
+                v3.encrypt_marked_group(&entree, g)
+            } else if to.is_empty() {
                 let keys = keys_for_tool(&config, key.as_deref())?;
                 brocolis::crypto::encrypt_marked_multi(&entree, &keys)
             } else {
@@ -358,6 +406,36 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Command::Contacts { config } => run_contacts(&config),
+        Command::GroupCreate {
+            name,
+            members,
+            id,
+            config,
+        } => {
+            let existing = std::fs::read_to_string(&config).unwrap_or_default();
+            let (updated, id) =
+                brocolis::contacts::add_group(&existing, &name, id.as_deref(), &members)
+                    .map_err(|e| anyhow::anyhow!(e))?;
+            std::fs::write(&config, updated)?;
+            println!("✅ Groupe « {} » : {}", name.trim(), members.join(", "));
+            println!("   Identifiant : {id}");
+            println!(
+                "   Chaque membre le rejoint avec `brocolis group-create --name … --members … --id {id}`."
+            );
+            Ok(())
+        }
+        Command::GroupMembers {
+            name,
+            members,
+            config,
+        } => {
+            let existing = std::fs::read_to_string(&config)?;
+            let updated = brocolis::contacts::set_group_members(&existing, &name, &members)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            std::fs::write(&config, updated)?;
+            println!("✅ Groupe « {} » : {}", name.trim(), members.join(", "));
+            Ok(())
+        }
         Command::ConfirmIdentity { name, config } => {
             let existing = std::fs::read_to_string(&config)?;
             let updated = brocolis::contacts::confirm_identity(&existing, &name)

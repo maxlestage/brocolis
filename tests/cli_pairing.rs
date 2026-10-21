@@ -797,3 +797,142 @@ fn une_identite_changee_bloque_lenvoi() {
         let _ = std::fs::remove_dir_all(&d);
     }
 }
+
+/// Un groupe à cliquet (§9.9) : trois personnes appairées deux à deux ; ce
+/// que l'une écrit au groupe, les deux autres le lisent ; qui en sort ne lit
+/// plus la suite.
+#[test]
+fn un_groupe_a_cliquet_se_lit_et_exclut_qui_sort() {
+    let serveur = rendezvous();
+    let a = tmpdir("g-alice");
+    let b = tmpdir("g-bob");
+    let c = tmpdir("g-carole");
+    let lance = |d: &PathBuf, code: &str, nom: &str| {
+        Command::new(bin())
+            .args(["pair", "--code", code, "--name", nom, "--server", &serveur])
+            .arg("--config")
+            .arg(d.join("brocolis.toml"))
+            .arg("--identity")
+            .arg(d.join("id.key"))
+            .args(["--timeout", "30"])
+            .current_dir(d)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap()
+    };
+    let paire = |x: &PathBuf, nx: &str, y: &PathBuf, ny: &str, code: &str| {
+        // x appelle son correspondant ny ; y appelle le sien nx.
+        let p = lance(x, code, ny);
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        let q = lance(y, code, nx);
+        assert!(p.wait_with_output().unwrap().status.success());
+        assert!(q.wait_with_output().unwrap().status.success());
+    };
+    paire(&a, "Alice", &b, "Bob", "GAB");
+    paire(&a, "Alice", &c, "Carole", "GAC");
+    paire(&b, "Bob", &c, "Carole", "GBC");
+
+    let cmd = |d: &PathBuf, args: &[&str]| {
+        let o = Command::new(bin())
+            .args(args)
+            .arg("--config")
+            .arg(d.join("brocolis.toml"))
+            .output()
+            .unwrap();
+        assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+        (
+            String::from_utf8_lossy(&o.stdout).into_owned(),
+            String::from_utf8_lossy(&o.stderr).into_owned(),
+        )
+    };
+    let (sortie, _) = cmd(
+        &a,
+        &[
+            "group-create",
+            "--name",
+            "Famille",
+            "--members",
+            "Bob,Carole",
+        ],
+    );
+    let id = sortie
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("Identifiant : "))
+        .unwrap()
+        .to_owned();
+    cmd(
+        &b,
+        &[
+            "group-create",
+            "--name",
+            "Famille",
+            "--members",
+            "Alice,Carole",
+            "--id",
+            &id,
+        ],
+    );
+    cmd(
+        &c,
+        &[
+            "group-create",
+            "--name",
+            "Famille",
+            "--members",
+            "Alice,Bob",
+            "--id",
+            &id,
+        ],
+    );
+
+    let (envoi, err) = cmd(
+        &a,
+        &[
+            "encrypt",
+            "--group",
+            "Famille",
+            "--text",
+            "rdv ((à 8 h)) ok",
+        ],
+    );
+    assert!(err.contains("groupe à cliquet"), "{err}");
+    assert!(
+        envoi.contains("[[BROCOLIS:v4:") && !envoi.contains("à 8 h"),
+        "{envoi}"
+    );
+    for d in [&b, &c] {
+        let (clair, err) = cmd(d, &["decrypt", "--text", envoi.trim()]);
+        assert_eq!(clair.trim(), "rdv à 8 h ok", "{err}");
+        assert!(err.contains("de : Alice"), "{err}");
+    }
+    // Bob répond au groupe ; Alice et Carole le lisent.
+    let (reponse, _) = cmd(
+        &b,
+        &["encrypt", "--group", "Famille", "--text", "((bien reçu))"],
+    );
+    for d in [&a, &c] {
+        assert_eq!(
+            cmd(d, &["decrypt", "--text", reponse.trim()]).0.trim(),
+            "bien reçu"
+        );
+    }
+    // Carole sort : la suite lui reste fermée.
+    cmd(
+        &a,
+        &["group-members", "--name", "Famille", "--members", "Bob"],
+    );
+    let (suite, _) = cmd(
+        &a,
+        &["encrypt", "--group", "Famille", "--text", "((sans Carole))"],
+    );
+    assert_eq!(
+        cmd(&b, &["decrypt", "--text", suite.trim()]).0.trim(),
+        "sans Carole"
+    );
+    let (vu, _) = cmd(&c, &["decrypt", "--text", suite.trim()]);
+    assert!(!vu.contains("sans Carole"), "{vu}");
+    for d in [a, b, c] {
+        let _ = std::fs::remove_dir_all(&d);
+    }
+}

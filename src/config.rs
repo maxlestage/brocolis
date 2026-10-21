@@ -65,6 +65,31 @@ impl Contact {
     }
 }
 
+/// Un groupe à cliquet : chacun y écrit avec sa propre chaîne (Sender Keys),
+/// remise aux autres par leur session à deux.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Group {
+    pub name: String,
+    /// L'identifiant du groupe (16 octets, base64), le même chez chaque
+    /// membre.
+    pub id: String,
+    /// Les autres membres : des noms de contacts.
+    pub members: Vec<String>,
+}
+
+impl Group {
+    /// L'identifiant en octets ; `None` s'il est mal formé.
+    pub fn id_bytes(&self) -> Option<[u8; 16]> {
+        use base64::Engine as _;
+        base64::engine::general_purpose::STANDARD
+            .decode(self.id.trim())
+            .ok()?
+            .try_into()
+            .ok()
+    }
+}
+
 /// Deux noms désignent-ils le même contact ? Sans tenir compte de la casse ni
 /// des espaces autour : « alice » et « Alice » sont la même personne.
 pub fn same_name(a: &str, b: &str) -> bool {
@@ -101,6 +126,10 @@ pub struct Config {
     /// Correspondants nommés, une clé chacun (`[[contacts]]`).
     #[serde(default)]
     pub contacts: Vec<Contact>,
+    /// Groupes à cliquet (`[[groups]]`, §9.9 de la sécurité de la
+    /// messagerie) : des contacts appairés, et un identifiant commun.
+    #[serde(default)]
+    pub groups: Vec<Group>,
     /// Pour qui le proxy chiffre : des noms de contacts. Vide = la clé `key`
     /// (ou tout le trousseau si `encrypt_multi`). Plusieurs noms = un seul
     /// jeton `v2` que chacun d'eux ouvre avec sa clé.
@@ -129,6 +158,11 @@ impl Config {
             }
         }
         out
+    }
+
+    /// Le groupe de ce nom (casse indifférente).
+    pub fn group(&self, name: &str) -> Option<&Group> {
+        self.groups.iter().find(|g| same_name(&g.name, name))
     }
 
     /// Le contact de ce nom (casse indifférente).
@@ -181,6 +215,7 @@ impl Default for Config {
             keys: Vec::new(),
             encrypt_multi: false,
             contacts: Vec::new(),
+            groups: Vec::new(),
             encrypt_to: Vec::new(),
             encrypt_hosts: Vec::new(),
         }

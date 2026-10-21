@@ -30,8 +30,9 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
 use brocolis_proto::session::MAX_PLAINTEXT;
 use brocolis_proto::{
-    hasard, jeton_v3, jeton_v4, paquet, Content, Device, Erreur, KeyBundle, Mode, ReplayGuard,
-    Session, Session4, Token, Token4, JOUR,
+    hasard, jeton_v3, jeton_v4, paquet, Content, Device, Erreur, KeyBundle, Mode,
+    ReceivedSenderKey, ReplayGuard, SenderKeyDistribution, SenderKeyState, Session, Session4,
+    Token, Token4, JOUR,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -125,6 +126,8 @@ pub enum Opened {
     Text(String),
     /// Déjà lu, et le clair n'est plus gardé.
     Replay,
+    /// Une chaîne de groupe reçue (§9.9) : gardée, rien à afficher.
+    Hidden,
     /// Illisible (pas pour nous, session perdue, altéré…).
     Failed(Erreur),
 }
@@ -364,6 +367,74 @@ struct Stored {
     v4_seen: Vec<String>,
     /// Les clés sur lesquelles une PSK v4 est arrivée.
     psk4_seen: Vec<String>,
+    /// Mes chaînes de groupe (§9.9), par identifiant de groupe (hex).
+    groups: BTreeMap<String, StoredChain>,
+    /// Les chaînes reçues des autres membres.
+    received: Vec<StoredReceived>,
+}
+
+/// Ma chaîne d'un groupe, et à qui elle a été remise.
+#[derive(Serialize, Deserialize)]
+struct StoredChain {
+    chain: Value,
+    given: Vec<String>,
+}
+
+/// La chaîne d'un autre membre, et de qui elle vient (`c:`/`k:`, comme
+/// [`OpenedEntry::from`]).
+#[derive(Serialize, Deserialize)]
+struct StoredReceived {
+    from: String,
+    key: Value,
+}
+
+/// Ma chaîne d'un groupe.
+struct MyChain {
+    chain: SenderKeyState,
+    /// Les membres (`c:`/`k:`) qui l'ont reçue.
+    given: Vec<String>,
+}
+
+/// Une chaîne reçue.
+struct Received {
+    from: String,
+    key: ReceivedSenderKey,
+}
+
+/// Les chaînes reçues gardées, au plus.
+const RECEIVED_MAX: usize = 512;
+
+/// Ce qu'une session à deux transporte : un texte, ou une chaîne de groupe.
+#[derive(Clone, Copy)]
+enum Payload<'a> {
+    Text(&'a str),
+    Chain(&'a SenderKeyDistribution),
+}
+
+impl Payload<'_> {
+    fn seal3(self, s: &mut Session) -> brocolis_proto::Resultat<String> {
+        match self {
+            Payload::Text(t) => s.encrypt(t),
+            // Une distribution v3 (0x03) ne voyage que sur une session que
+            // l'autre a déjà : tant que la nôtre n'est pas confirmée, un
+            // premier message vide (0x01) la lui ouvre d'abord.
+            Payload::Chain(d) => {
+                let mut out = String::new();
+                if !s.is_confirmed() {
+                    out.push_str(&s.encrypt("")?);
+                }
+                out.push_str(&s.encrypt_distribution(d)?);
+                Ok(out)
+            }
+        }
+    }
+
+    fn seal4(self, s: &mut Session4) -> brocolis_proto::Resultat<String> {
+        match self {
+            Payload::Text(t) => s.encrypt(t),
+            Payload::Chain(d) => s.encrypt_distribution(d),
+        }
+    }
 }
 
 /// Ce qu'il faut écrire après une opération, dans cet ordre (§8.3).
@@ -389,6 +460,8 @@ pub struct Engine {
     psk4_seen: Vec<String>,
     /// L'expéditeur du dernier jeton déchiffré (voir [`Engine::sender`]).
     last_from: String,
+    groups: BTreeMap<String, MyChain>,
+    received: Vec<Received>,
     device_dirty: bool,
     state_dirty: bool,
 }
@@ -416,6 +489,31 @@ impl Engine {
             v4_seen: stored.v4_seen,
             psk4_seen: stored.psk4_seen,
             last_from: String::new(),
+            groups: stored
+                .groups
+                .iter()
+                .filter_map(|(k, c)| {
+                    let chain = SenderKeyState::from_json(&c.chain.to_string()).ok()?;
+                    Some((
+                        k.clone(),
+                        MyChain {
+                            chain,
+                            given: c.given.clone(),
+                        },
+                    ))
+                })
+                .collect(),
+            received: stored
+                .received
+                .iter()
+                .filter_map(|r| {
+                    let key = ReceivedSenderKey::from_json(&r.key.to_string()).ok()?;
+                    Some(Received {
+                        from: r.from.clone(),
+                        key,
+                    })
+                })
+                .collect(),
             device_dirty: created,
             state_dirty: false,
         };
@@ -468,6 +566,29 @@ impl Engine {
             psk4: store_table(&self.psk4),
             v4_seen: self.v4_seen.clone(),
             psk4_seen: self.psk4_seen.clone(),
+            groups: self
+                .groups
+                .iter()
+                .filter_map(|(k, c)| {
+                    Some((
+                        k.clone(),
+                        StoredChain {
+                            chain: serde_json::from_str(&c.chain.to_json()).ok()?,
+                            given: c.given.clone(),
+                        },
+                    ))
+                })
+                .collect(),
+            received: self
+                .received
+                .iter()
+                .filter_map(|r| {
+                    Some(StoredReceived {
+                        from: r.from.clone(),
+                        key: serde_json::from_str(&r.key.to_json()).ok()?,
+                    })
+                })
+                .collect(),
         };
         serde_json::to_string(&stored).unwrap_or_default()
     }
@@ -627,28 +748,114 @@ impl Engine {
         }
         // Un contact v4 ne reçoit plus que du v4 (§9.6) : sans session ni
         // paquet frais, la PSK (v4) prend le relais, jamais le v3.
-        let contact = if self.contact4(k).is_some() {
-            self.seal_contact4(k, text, now)
-        } else {
-            self.seal_contact(k, text, now)
-        };
-        let token = contact.or_else(|| {
-            if self.psk4_allowed(k, now) {
-                self.seal_psk4(k, text)
-            } else {
-                self.seal_psk(k, text, now)
-            }
-        })?;
+        let token = self.seal_payload(k, Payload::Text(text), now)?;
         self.remember(&token, text, true, now);
         Some(token)
     }
 
-    fn seal_contact(&mut self, k: &KeyInfo<'_>, text: &str, now: u64) -> Option<String> {
+    fn seal_payload(&mut self, k: &KeyInfo<'_>, payload: Payload<'_>, now: u64) -> Option<String> {
+        let contact = if self.contact4(k).is_some() {
+            self.seal_contact4(k, payload, now)
+        } else {
+            self.seal_contact(k, payload, now)
+        };
+        contact.or_else(|| {
+            if self.psk4_allowed(k, now) {
+                self.seal_psk4(k, payload)
+            } else {
+                self.seal_psk(k, payload, now)
+            }
+        })
+    }
+
+    /// Qui est ce membre d'un groupe : `c:` + son IK (contact), ou `k:` + sa
+    /// clé (PSK).
+    fn member_tag(k: &KeyInfo<'_>) -> String {
+        match Self::contact(k) {
+            Some(b) => format!("c:{}", hex(&b.identity.dh)),
+            None => format!("k:{}", k.id),
+        }
+    }
+
+    /// Chiffre `text` pour un groupe à cliquet (§9.9) : ma chaîne du groupe
+    /// (neuve si un membre l'a quitté), remise d'abord par sa session à deux
+    /// à chaque membre qui ne l'a pas encore, puis le message de groupe
+    /// (0x04). `None` si un membre n'a pas de session possible : l'appelant
+    /// reste en v2.
+    pub fn seal_group(
+        &mut self,
+        group_id: &[u8; 16],
+        members: &[KeyInfo<'_>],
+        text: &str,
+        now: u64,
+    ) -> Option<String> {
+        if text.len() > MAX_PLAINTEXT
+            || members.is_empty()
+            || members.iter().any(|k| !self.protection(k, now).is_v3())
+        {
+            return None;
+        }
+        let tags: Vec<String> = members.iter().map(Self::member_tag).collect();
+        let gid = hex(group_id);
+        let renew = self
+            .groups
+            .get(&gid)
+            .is_none_or(|c| c.given.iter().any(|t| !tags.contains(t)));
+        if renew {
+            let chain = SenderKeyState::generate(*group_id, &mut hasard::system());
+            self.groups.insert(
+                gid.clone(),
+                MyChain {
+                    chain,
+                    given: Vec::new(),
+                },
+            );
+            self.state_dirty = true;
+        }
+        let (d, given) = {
+            let c = self.groups.get(&gid)?;
+            (c.chain.distribution(), c.given.clone())
+        };
+        let mut out = String::new();
+        let mut newly = Vec::new();
+        for (k, tag) in members.iter().zip(&tags) {
+            if given.contains(tag) || newly.contains(tag) {
+                continue;
+            }
+            let token = self.seal_payload(k, Payload::Chain(&d), now)?;
+            self.remember(&token, "", true, now);
+            out.push_str(&token);
+            newly.push(tag.clone());
+        }
+        let c = self.groups.get_mut(&gid)?;
+        let msg = c.chain.encrypt(text).ok()?;
+        c.given.extend(newly);
+        self.state_dirty = true;
+        self.remember(&msg, text, true, now);
+        out.push_str(&msg);
+        Some(out)
+    }
+
+    /// Garde la chaîne d'un membre (elle remplace celle de même groupe et
+    /// même expéditeur).
+    fn keep_chain(&mut self, d: &SenderKeyDistribution, from: String) -> Result<(), Erreur> {
+        let key = ReceivedSenderKey::from_distribution(d)?;
+        self.received
+            .retain(|r| !(r.key.group_id() == d.group_id && r.key.sender_id() == d.sender_id));
+        self.received.push(Received { from, key });
+        while self.received.len() > RECEIVED_MAX {
+            self.received.remove(0);
+        }
+        self.state_dirty = true;
+        Ok(())
+    }
+
+    fn seal_contact(&mut self, k: &KeyInfo<'_>, payload: Payload<'_>, now: u64) -> Option<String> {
         let b = Self::contact(k)?;
         let fresh = Self::fresh(k, now);
         let peer = self.peers.entry(hex(&b.identity.dh)).or_default();
         if let Some(s) = peer.sending() {
-            match s.encrypt(text) {
+            match payload.seal3(s) {
                 Ok(token) => {
                     self.state_dirty = true;
                     return Some(token);
@@ -664,18 +871,18 @@ impl Engine {
             .device
             .initiate(b, b.pq.is_some(), &mut hasard::system())
             .ok()?;
-        let token = s.encrypt(text).ok()?;
+        let token = payload.seal3(&mut s).ok()?;
         peer.put(s);
         self.state_dirty = true;
         Some(token)
     }
 
-    fn seal_contact4(&mut self, k: &KeyInfo<'_>, text: &str, now: u64) -> Option<String> {
+    fn seal_contact4(&mut self, k: &KeyInfo<'_>, payload: Payload<'_>, now: u64) -> Option<String> {
         let b = self.contact4(k)?;
         let fresh = Self::fresh(k, now);
         let peer = self.peers4.entry(hex(&b.identity.dh)).or_default();
         if let Some(s) = peer.sending() {
-            match s.encrypt(text) {
+            match payload.seal4(s) {
                 Ok(token) => {
                     self.state_dirty = true;
                     return Some(token);
@@ -687,16 +894,16 @@ impl Engine {
             return None;
         }
         let mut s = self.device.initiate4(b, &mut hasard::system()).ok()?;
-        let token = s.encrypt(text).ok()?;
+        let token = payload.seal4(&mut s).ok()?;
         peer.put(s);
         self.state_dirty = true;
         Some(token)
     }
 
-    fn seal_psk4(&mut self, k: &KeyInfo<'_>, text: &str) -> Option<String> {
+    fn seal_psk4(&mut self, k: &KeyInfo<'_>, payload: Payload<'_>) -> Option<String> {
         let peer = self.psk4.entry(k.id.to_owned()).or_default();
         if let Some(s) = peer.sending() {
-            match s.encrypt(text) {
+            match payload.seal4(s) {
                 Ok(token) => {
                     self.state_dirty = true;
                     return Some(token);
@@ -705,19 +912,19 @@ impl Engine {
             }
         }
         let mut s = Session4::initiate_psk(&k.key, &mut hasard::system()).ok()?;
-        let token = s.encrypt(text).ok()?;
+        let token = payload.seal4(&mut s).ok()?;
         peer.put(s);
         self.state_dirty = true;
         Some(token)
     }
 
-    fn seal_psk(&mut self, k: &KeyInfo<'_>, text: &str, now: u64) -> Option<String> {
+    fn seal_psk(&mut self, k: &KeyInfo<'_>, payload: Payload<'_>, now: u64) -> Option<String> {
         if !self.psk_allowed(k, now) {
             return None;
         }
         let peer = self.psk.entry(k.id.to_owned()).or_default();
         if let Some(s) = peer.sending() {
-            match s.encrypt(text) {
+            match payload.seal3(s) {
                 Ok(token) => {
                     self.state_dirty = true;
                     return Some(token);
@@ -726,7 +933,7 @@ impl Engine {
             }
         }
         let mut s = Session::initiate_psk(&k.key, &mut hasard::system()).ok()?;
-        let token = s.encrypt(text).ok()?;
+        let token = payload.seal3(&mut s).ok()?;
         peer.put(s);
         self.state_dirty = true;
         Some(token)
@@ -774,32 +981,61 @@ impl Engine {
         } else {
             Token::decode(&clean).and_then(|t| self.decrypt(&t, keys, now))
         };
-        match result {
-            Ok(text) => {
-                self.remember(token, &text, false, now);
-                let from = std::mem::take(&mut self.last_from);
-                let h = token_hash(token);
-                if let Some(e) = self.opened.iter_mut().find(|e| e.h == h) {
-                    e.from = from;
-                }
-                Opened::Text(text)
-            }
-            Err(Erreur::Rejoue) => Opened::Replay,
-            Err(e) => Opened::Failed(e),
+        let from = std::mem::take(&mut self.last_from);
+        let (text, opened) = match result {
+            Ok(Content::Text(text)) => (text.clone(), Opened::Text(text)),
+            Ok(Content::Distribution(d)) => match self.keep_chain(&d, from.clone()) {
+                Ok(()) => (String::new(), Opened::Hidden),
+                Err(e) => return Opened::Failed(e),
+            },
+            Err(Erreur::Rejoue) => return Opened::Replay,
+            Err(e) => return Opened::Failed(e),
+        };
+        self.remember(token, &text, false, now);
+        let h = token_hash(token);
+        if let Some(e) = self.opened.iter_mut().find(|e| e.h == h) {
+            e.from = from;
         }
+        opened
     }
 
-    fn decrypt(&mut self, token: &Token, keys: &[KeyInfo<'_>], now: u64) -> Result<String, Erreur> {
+    /// Un message de groupe (0x04) : la chaîne reçue de son expéditeur.
+    fn decrypt_group(
+        &mut self,
+        m: &brocolis_proto::GroupMessage,
+        now: u64,
+    ) -> Result<Content, Erreur> {
+        let r = self
+            .received
+            .iter_mut()
+            .find(|r| r.key.matches(m))
+            .ok_or(Erreur::ExpediteurInconnu)?;
+        let text = r.key.decrypt(m, now)?;
+        self.last_from = r.from.clone();
+        self.state_dirty = true;
+        Ok(Content::Text(text))
+    }
+
+    fn decrypt(
+        &mut self,
+        token: &Token,
+        keys: &[KeyInfo<'_>],
+        now: u64,
+    ) -> Result<Content, Erreur> {
+        if let Token::Group(m) = token {
+            return self.decrypt_group(m, now);
+        }
         let id = token.session_id().ok_or(Erreur::SessionInconnue)?;
         let rng = &mut hasard::system();
-        for table in [&mut self.peers, &mut self.psk] {
-            for peer in table.values_mut() {
+        for (kind, table) in [("c", &mut self.peers), ("k", &mut self.psk)] {
+            for (owner, peer) in table.iter_mut() {
                 let Some(s) = peer.get(&id) else { continue };
                 match s.decrypt(token, now, rng) {
                     Ok(content) => {
                         peer.current = Some(id);
+                        self.last_from = format!("{kind}:{owner}");
                         self.state_dirty = true;
-                        return text_of(content);
+                        return Ok(content);
                     }
                     // L'autre a ouvert une session neuve (il avait perdu la
                     // sienne) : elle remplacera celle-ci.
@@ -815,12 +1051,13 @@ impl Engine {
             for k in keys.iter().filter(|k| !k.group) {
                 match Session::accept_psk(&[k.key], first, &mut self.psk_replay, now, rng) {
                     Ok((s, content)) => {
+                        self.last_from = format!("k:{}", k.id);
                         self.psk.entry(k.id.to_owned()).or_default().put(s);
                         if !self.psk_seen.iter().any(|x| x == k.id) {
                             self.psk_seen.push(k.id.to_owned());
                         }
                         self.state_dirty = true;
-                        return text_of(content);
+                        return Ok(content);
                     }
                     Err(Erreur::SessionInconnue) => continue,
                     Err(e) => return Err(e),
@@ -838,9 +1075,10 @@ impl Engine {
         }
         let (s, content) = self.device.accept(first, now, rng)?;
         self.device_dirty = true;
+        self.last_from = format!("c:{}", hex(&first.identity));
         self.peers.entry(hex(&first.identity)).or_default().put(s);
         self.state_dirty = true;
-        text_of(content)
+        Ok(content)
     }
 
     /// Ce jeton est-il un de mes envois (gardé au chiffrement) ?
@@ -887,7 +1125,7 @@ impl Engine {
         token: &Token4,
         keys: &[KeyInfo<'_>],
         now: u64,
-    ) -> Result<String, Erreur> {
+    ) -> Result<Content, Erreur> {
         let rng = &mut hasard::system();
         let mut opened = None;
         'tables: for (psk, table) in [(false, &mut self.peers4), (true, &mut self.psk4)] {
@@ -912,7 +1150,7 @@ impl Engine {
                 self.v4_seen.push(owner);
             }
             self.state_dirty = true;
-            return text_of(content);
+            return Ok(content);
         }
         match token {
             Token4::Initial(..) => {
@@ -933,7 +1171,7 @@ impl Engine {
                 }
                 self.peers4.entry(owner).or_default().put(s);
                 self.state_dirty = true;
-                text_of(content)
+                Ok(content)
             }
             Token4::Message(_) => {
                 for k in keys.iter().filter(|k| !k.group) {
@@ -947,7 +1185,7 @@ impl Engine {
                                 }
                             }
                             self.state_dirty = true;
-                            return text_of(content);
+                            return Ok(content);
                         }
                         Err(Erreur::SessionInconnue) => continue,
                         Err(e) => return Err(e),
@@ -1009,14 +1247,6 @@ fn store_table<S: Stockable>(table: &BTreeMap<String, Peer<S>>) -> BTreeMap<Stri
         .iter()
         .map(|(k, p)| (k.clone(), p.to_stored()))
         .collect()
-}
-
-fn text_of(content: Content) -> Result<String, Erreur> {
-    match content {
-        Content::Text(t) => Ok(t),
-        // Brocolis ne se sert pas (encore) des chaînes de groupe.
-        Content::Distribution(_) => Err(Erreur::Format),
-    }
 }
 
 #[cfg(test)]
@@ -1343,6 +1573,95 @@ mod tests {
         // Rejoué : déjà lu.
         b.engine.opened.clear();
         assert_eq!(b.engine.open(&m, &[kb], NOW), Opened::Replay);
+    }
+
+    /// Ouvre chaque jeton d'un envoi de groupe : le texte du message de
+    /// groupe, et combien de chaînes étaient pour moi.
+    fn read_group(e: &mut Engine, out: &str, keys: &[KeyInfo<'_>]) -> (Option<String>, usize) {
+        let (mut text, mut chains) = (None, 0);
+        for (a, b) in find_tokens(out) {
+            match e.open(&out[a..b], keys, NOW) {
+                Opened::Hidden => chains += 1,
+                Opened::Text(t) => text = Some(t),
+                _ => {}
+            }
+        }
+        (text, chains)
+    }
+
+    #[test]
+    fn a_ratchet_group_hands_out_chains_and_renews_when_someone_leaves() {
+        let (mut a, mut b, mut c) = (Side::new("a"), Side::new("b"), Side::new("c"));
+        let (ba, bb, bc) = (a.bundle(), b.bundle(), c.bundle());
+        let (kab, kac, kbc) = ([21u8; 32], [22u8; 32], [23u8; 32]);
+        // Chacun a une session à deux avec chaque autre membre.
+        let a_b = info("ab", kab, Some(&bb));
+        let a_c = info("ac", kac, Some(&bc));
+        let b_a = info("ab", kab, Some(&ba));
+        let b_c = info("bc", kbc, Some(&bc));
+        let c_a = info("ac", kac, Some(&ba));
+        let c_b = info("bc", kbc, Some(&bb));
+        let gid = [7u8; 16];
+        let m1 = a
+            .engine
+            .seal_group(&gid, &[a_b, a_c], "salut le groupe", NOW)
+            .unwrap();
+        // Pour chacun : un premier message vide (la session v3 n'est pas
+        // encore confirmée), sa chaîne ; puis le message de groupe.
+        assert_eq!(find_tokens(&m1).len(), 5);
+        assert_eq!(
+            read_group(&mut b.engine, &m1, &[b_a, b_c]),
+            (Some("salut le groupe".into()), 1)
+        );
+        assert_eq!(
+            read_group(&mut c.engine, &m1, &[c_a, c_b]),
+            (Some("salut le groupe".into()), 1)
+        );
+        // L'expéditeur est celui qui a remis la chaîne.
+        let (s, e) = *find_tokens(&m1).last().unwrap();
+        assert_eq!(b.engine.sender(&m1[s..e], &[b_a, b_c]), Some(0));
+        // Ensuite, le message seul.
+        let m2 = a
+            .engine
+            .seal_group(&gid, &[a_b, a_c], "deuxième", NOW)
+            .unwrap();
+        assert_eq!(find_tokens(&m2).len(), 1);
+        assert_eq!(
+            read_group(&mut c.engine, &m2, &[c_a, c_b]).0,
+            Some("deuxième".into())
+        );
+        // B répond au groupe avec sa propre chaîne.
+        let r = b
+            .engine
+            .seal_group(&gid, &[b_a, b_c], "bien reçu", NOW)
+            .unwrap();
+        assert_eq!(
+            read_group(&mut a.engine, &r, &[a_b, a_c]).0,
+            Some("bien reçu".into())
+        );
+        assert_eq!(
+            read_group(&mut c.engine, &r, &[c_a, c_b]).0,
+            Some("bien reçu".into())
+        );
+        // Rejoué : déjà lu.
+        c.engine.opened.clear();
+        assert_eq!(c.engine.open(&m2, &[c_a, c_b], NOW), Opened::Replay);
+        // C quitte le groupe : A tire une chaîne neuve, C ne lit plus rien.
+        let m3 = a.engine.seal_group(&gid, &[a_b], "sans C", NOW).unwrap();
+        assert_eq!(find_tokens(&m3).len(), 2, "B a répondu : session confirmée");
+        assert_eq!(
+            read_group(&mut b.engine, &m3, &[b_a, b_c]).0,
+            Some("sans C".into())
+        );
+        assert_eq!(read_group(&mut c.engine, &m3, &[c_a, c_b]), (None, 0));
+        // L'état se relit.
+        let dirty = b.engine.take_dirty();
+        let mut b2 = Engine::load(dirty.device.as_deref(), dirty.state.as_deref(), NOW);
+        let m4 = a.engine.seal_group(&gid, &[a_b], "relu", NOW).unwrap();
+        assert_eq!(read_group(&mut b2, &m4, &[b_a, b_c]).0, Some("relu".into()));
+        // Un membre sans session possible : pas de groupe à cliquet.
+        let d = info("ad", [24u8; 32], None);
+        assert!(a.engine.seal_group(&gid, &[a_b, d], "x", NOW).is_none());
     }
 
     #[test]
