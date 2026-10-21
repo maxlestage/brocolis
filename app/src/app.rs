@@ -75,6 +75,8 @@ enum Act {
     AskDelete(String),
     Delete(String),
     CancelDelete,
+    /// Double cliquet à partir de la clé partagée : oui ou non.
+    Psk(String, bool),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -399,18 +401,29 @@ impl BrocolisApp {
                 .map_err(|e| e.to_string())?;
             rt.block_on(async {
                 let identity = brocolis::agreement::load_or_create_identity(&files.identity)?;
+                // Le paquet de clés v3 part avec la clé publique : un
+                // correspondant à jour passe en double cliquet (§8.4).
+                let bundle = brocolis::v3store::V3Store::for_config(&files.config)
+                    .bundle_b64()
+                    .ok();
                 let client =
                     brocolis::pairing::RendezvousClient::new(brocolis::pairing::DEFAULT_SERVER)?;
-                let derived = brocolis::pairing::pair_two(
+                let paired = brocolis::pairing::pair_two(
                     &client,
                     &code,
                     &identity,
+                    bundle.as_deref(),
                     Duration::from_secs(120),
                 )
                 .await?;
-                keyring::contact_add(&files.config, &name, &derived.symmetric_key_base64)?;
+                keyring::contact_add_paired(
+                    &files.config,
+                    &name,
+                    &paired.key_b64,
+                    paired.bundle.as_deref(),
+                )?;
                 anyhow::Ok(JobDone::Paired {
-                    fingerprint: derived.fingerprint,
+                    fingerprint: paired.fingerprint,
                 })
             })
             .map_err(|e| e.to_string())
@@ -740,6 +753,13 @@ impl BrocolisApp {
                 });
                 ui.add_space(4.0);
                 key_line(ui, &person.key, "");
+                let label = t.protection(person.protection);
+                let color = if person.protection.is_v3() {
+                    ACCENT
+                } else {
+                    MUTED
+                };
+                ui.label(RichText::new(label).size(12.5).color(color));
                 ui.add_space(8.0);
                 let editing = |e: &Edit| match e {
                     Edit::Rekey(n) | Edit::Rename(n) => n == name,
@@ -782,6 +802,18 @@ impl BrocolisApp {
                             }
                             if small_button(ui, t.delete_contact).clicked() {
                                 acts.push(Act::AskDelete(name.clone()));
+                            }
+                            // Sans paquet échangé, le double cliquet part de
+                            // la clé partagée : au choix de l'utilisateur.
+                            if !person.paired && !person.group {
+                                let (text, on) = if person.psk {
+                                    (t.psk_off, false)
+                                } else {
+                                    (t.psk_on, true)
+                                };
+                                if small_button(ui, text).on_hover_text(t.psk_note).clicked() {
+                                    acts.push(Act::Psk(name.clone(), on));
+                                }
                             }
                         });
                     }
@@ -1030,6 +1062,7 @@ impl BrocolisApp {
                 self.confirm_delete = None;
                 keyring::contact_delete(&config, &name).map(|()| None)
             }
+            Act::Psk(name, on) => keyring::contact_set_psk(&config, &name, on).map(|()| None),
         };
         match result {
             Ok(note) => {
@@ -1129,14 +1162,15 @@ impl BrocolisApp {
             let empty = self.book.own.is_empty() && self.book.contacts.is_empty();
             return Ok(if empty { t.no_keys } else { t.no_recipient }.to_owned());
         }
-        let (out, sealed) = brocolis::crypto::encrypt_message(&self.message, &keys)?;
+        let (out, sealed, protection) =
+            keyring::seal(&self.opts.files.config, &self.message, &keys)?;
         let who = me
             .then_some(t.me_short.to_owned())
             .into_iter()
             .chain(self.send_to.iter().cloned())
             .collect::<Vec<_>>()
             .join(", ");
-        Ok(match sealed {
+        let done = match sealed {
             Sealed::Segments(n) => {
                 self.output = out;
                 t.encrypted_n
@@ -1147,25 +1181,38 @@ impl BrocolisApp {
                 self.output = out;
                 t.encrypted_whole.replace("{who}", &who)
             }
-            Sealed::Nothing => t.empty_message.to_owned(),
+            Sealed::Nothing => return Ok(t.empty_message.to_owned()),
+        };
+        // Le double cliquet se signale ; l'ancien format est la règle d'avant.
+        Ok(if protection.is_v3() {
+            format!("{done} {}", t.protection(protection))
+        } else {
+            done
         })
     }
 
     /// Déchiffre avec toutes les clés et dit de qui vient le message.
     fn decrypt(&mut self) -> anyhow::Result<String> {
         let t = self.t();
-        let Some((out, n, from)) = keyring::read(&self.opts.files.config, &self.message)? else {
+        let Some(read) = keyring::read(&self.opts.files.config, &self.message)? else {
             return Ok(t.no_keys.to_owned());
         };
-        self.output = out;
-        Ok(if n == 0 {
+        self.output = read.text;
+        let n = read.opened;
+        let note = if n == 0 {
             t.nothing_readable.to_owned()
-        } else if from.is_empty() {
+        } else if read.from.is_empty() {
             t.decrypted_n.replace("{n}", &n.to_string())
         } else {
             t.decrypted_from
                 .replace("{n}", &n.to_string())
-                .replace("{who}", &from.join(", "))
+                .replace("{who}", &read.from.join(", "))
+        };
+        Ok(if read.replayed > 0 {
+            let replayed = t.replayed.replace("{n}", &read.replayed.to_string());
+            format!("{note} {replayed}")
+        } else {
+            note
         })
     }
 

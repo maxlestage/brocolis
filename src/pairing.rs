@@ -8,11 +8,16 @@
 //! Protocole identique à l'app iOS (`PairingClient.swift`) :
 //!
 //! ```text
-//! POST /pair {code, peerId, pub}                 -> { peers: [{peerId, pub}] }
+//! POST /pair {code, peerId, pub, bundle?}        -> { peers: [{peerId, pub, bundle?}] }
 //! GET  /pair?code=..&peerId=..                   -> { peers: [...] }
 //! POST /wrap {code, fromPeerId, fromPub, items}  -> { ok, count }
 //! GET  /wrap?code=..&peerId=..                   -> { wrap: {from, fromPub, blob} | null }
 //! ```
+//!
+//! `bundle` est le paquet de clés publiques v3 (§8.4 de la sécurité de la
+//! messagerie) : publié à chaque publication, vérifié par le serveur, rendu
+//! avec le participant. Un ancien client l'ignore ; s'il manque d'un côté,
+//! l'appairage reste en ancien format (et l'empreinte aussi).
 
 use std::time::Duration;
 
@@ -39,6 +44,9 @@ pub struct PairingPeer {
     pub peer_id: String,
     #[serde(rename = "pub")]
     pub public_key: String,
+    /// Son paquet de clés v3 (base64), s'il en a publié un.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bundle: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -93,8 +101,12 @@ impl RendezvousClient {
         code: &str,
         peer_id: &str,
         public_key: &str,
+        bundle: Option<&str>,
     ) -> Result<Vec<PairingPeer>, PairingError> {
-        let body = serde_json::json!({ "code": code, "peerId": peer_id, "pub": public_key });
+        let mut body = serde_json::json!({ "code": code, "peerId": peer_id, "pub": public_key });
+        if let Some(b) = bundle {
+            body["bundle"] = serde_json::Value::from(b);
+        }
         let resp: PairingResponse = self.post_json("/pair", &body).await?;
         Ok(resp.peers)
     }
@@ -196,23 +208,52 @@ fn enc(s: &str) -> String {
         .collect()
 }
 
-/// Appairage à deux : publie la clé publique de `identity` sous `code`, attend
-/// qu'un correspondant en fasse autant (au plus `timeout`), puis dérive la clé
-/// partagée avec le premier arrivé.
+/// Le résultat d'un appairage à deux.
+pub struct Paired {
+    /// La clé partagée (base64).
+    pub key_b64: String,
+    /// L'empreinte à comparer de vive voix : celle du v3 (elle couvre la clé
+    /// et les deux identités) si les deux côtés ont publié un paquet, celle
+    /// du mode compatible sinon.
+    pub fingerprint: String,
+    /// Le paquet v3 du correspondant (base64), seulement si les deux côtés en
+    /// ont publié un : c'est ce qui fait passer le contact en double cliquet.
+    pub bundle: Option<String>,
+}
+
+/// L'empreinte d'un appairage à deux avec les deux paquets (§8.4) :
+/// `SHA-256("Brocolis_v3_Appairage" ‖ K ‖ min(P_A, P_B) ‖ max(P_A, P_B))[0..8]`.
+/// `None` si une clé ou un paquet est illisible.
+pub fn duo_fingerprint(key_b64: &str, mine: &str, theirs: &str) -> Option<String> {
+    let key = crate::crypto::SymKey::from_base64(key_b64).ok()?.bytes();
+    let a = brocolis_proto::KeyBundle::from_base64(mine.trim()).ok()?;
+    let b = brocolis_proto::KeyBundle::from_base64(theirs.trim()).ok()?;
+    Some(crate::v3::pairing_fingerprint(
+        &key,
+        &crate::v3::identity_of(&a),
+        &crate::v3::identity_of(&b),
+    ))
+}
+
+/// Appairage à deux (le « mode compatible » de la messagerie) : publie la clé
+/// publique de `identity` sous `code` — et le paquet v3 `bundle` s'il est
+/// donné —, attend qu'un correspondant en fasse autant (au plus `timeout`),
+/// puis dérive la clé partagée avec le premier arrivé.
 ///
 /// Les deux côtés obtiennent la même clé et la même empreinte ; l'empreinte
 /// doit être comparée de vive voix avant tout secret (elle trahirait un
-/// serveur qui substituerait les clés publiques).
+/// serveur qui substituerait les clés publiques ou les paquets).
 pub async fn pair_two(
     client: &RendezvousClient,
     code: &str,
     identity: &crate::agreement::PrivateKey,
+    bundle: Option<&str>,
     timeout: Duration,
-) -> anyhow::Result<crate::agreement::Derived> {
+) -> anyhow::Result<Paired> {
     let peer_id = random_peer_id();
     let my_pub = identity.public_key_base64();
     tracing::info!("Publication de la clé publique (code « {code} »)…");
-    let mut peers = client.publish(code, &peer_id, &my_pub).await?;
+    let mut peers = client.publish(code, &peer_id, &my_pub, bundle).await?;
 
     let deadline = tokio::time::Instant::now() + timeout;
     while peers.is_empty() {
@@ -225,9 +266,30 @@ pub async fn pair_two(
         peers = client.fetch(code, &peer_id).await?;
     }
 
-    identity
-        .derive(&peers[0].public_key)
-        .map_err(|e| anyhow::anyhow!("dérivation de la clé partagée: {e}"))
+    let peer = &peers[0];
+    let derived = identity
+        .derive(&peer.public_key)
+        .map_err(|e| anyhow::anyhow!("dérivation de la clé partagée: {e}"))?;
+    // Les deux paquets, ou l'ancien format des deux côtés : un paquet
+    // illisible compte comme absent (l'autre côté, qui le voit valide,
+    // afficherait une autre empreinte — c'est le signal voulu).
+    let v3 = bundle
+        .zip(peer.bundle.as_deref())
+        .and_then(|(mine, theirs)| {
+            duo_fingerprint(&derived.symmetric_key_base64, mine, theirs).map(|f| (f, theirs))
+        });
+    Ok(match v3 {
+        Some((fingerprint, theirs)) => Paired {
+            key_b64: derived.symmetric_key_base64,
+            fingerprint,
+            bundle: Some(theirs.trim().to_owned()),
+        },
+        None => Paired {
+            key_b64: derived.symmetric_key_base64,
+            fingerprint: derived.fingerprint,
+            bundle: None,
+        },
+    })
 }
 
 /// Retire une clé du trousseau d'un document TOML : du champ `key` (clé
@@ -304,6 +366,14 @@ mod tests {
         assert_eq!(resp.peers.len(), 1);
         assert_eq!(resp.peers[0].peer_id, "abc");
         assert_eq!(resp.peers[0].public_key, "UFVCS0VZ");
+    }
+
+    #[test]
+    fn peer_bundle_is_optional() {
+        let json = r#"{"peers":[{"peerId":"a","pub":"P","bundle":"B"},{"peerId":"b","pub":"Q"}]}"#;
+        let resp: PairingResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.peers[0].bundle.as_deref(), Some("B"));
+        assert!(resp.peers[1].bundle.is_none());
     }
 
     #[test]

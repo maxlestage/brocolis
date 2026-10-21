@@ -27,6 +27,22 @@ use serde::Deserialize;
 pub struct Contact {
     pub name: String,
     pub key: String,
+    /// Le paquet de clés v3 du correspondant (base64), reçu à l'appairage :
+    /// avec lui, ce qu'on lui envoie part en double cliquet (protocole v3 de
+    /// la messagerie). Public par nature, signé par son identité.
+    #[serde(default)]
+    pub bundle: Option<String>,
+    /// Quand ce paquet est arrivé (secondes Unix) : il sert à ouvrir une
+    /// session pendant 30 jours.
+    #[serde(default)]
+    pub bundle_at: Option<u64>,
+    /// `false` : la clé vient d'un appairage de groupe (jamais de v3).
+    #[serde(default)]
+    pub duo: Option<bool>,
+    /// « À deux, double cliquet » : le v3 à partir de la clé partagée (PSK),
+    /// quand l'autre est à jour mais qu'aucun paquet n'a été échangé.
+    #[serde(default)]
+    pub psk: bool,
 }
 
 impl Contact {

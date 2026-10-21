@@ -77,6 +77,8 @@ Cette architecture permet de séparer clairement les responsabilités :
 | Interception MITM     | Redirection transparente du trafic via le proxy |
 | Certificats SSL       | Génération de certificats auto-signés           |
 | Chiffrement AES-256   | Chiffrement du contenu textuel ciblé            |
+| Double cliquet (v3)   | Avec un contact appairé : une clé neuve par message, établie en hybride X25519 + ML-KEM-768 — le protocole de la messagerie |
+| Clé protégée          | `[[BROCOLIS-CLE:v2:…]]` : une clé transmise sous une phrase secrète (Argon2id) |
 | Gestion des clés      | Partage sécurisé des clés symétriques           |
 | Contacts              | Un contact, une clé ; chiffrer pour l'un ou plusieurs (application) |
 | Message entier        | Sans `((…))`, tout le message est chiffré (application) |
@@ -160,9 +162,11 @@ L'architecture interne comprend :
 ## Architecture du code
 
 Le cœur est une **bibliothèque** Rust (`src/lib.rs` : modules `agreement`,
-`ca`, `config`, `contacts`, `crypto`, `keys`, `pairing`, `proxy`, `system`) exposée via deux
+`ca`, `config`, `contacts`, `crypto`, `keys`, `pairing`, `proxy`, `system`, `v3`,
+`v3store`) exposée via deux
 frontends : la **ligne de commande** `brocolis` (`src/main.rs`) et
-l'**application de bureau** (`app/`, paquet `brocolis-app`). Les deux forment
+l'**application de bureau** (`app/`, paquet `brocolis-app`). Avec le protocole
+de la messagerie (`proto/`, paquet `brocolis-proto`), ils forment
 un espace de travail Cargo et partagent le même `target/`. La configuration système automatique
 (`brocolis auto`) est prise en charge nativement sur **macOS, Linux et
 Windows** (module `system`, un sous-module par OS) ; le proxy et le
@@ -403,6 +407,25 @@ compte de segments et les journaux partent sur stderr), donc les commandes s'enc
 tube. Un jeton qu'aucune clé n'ouvre est laissé tel quel, sans erreur : c'est un
 message destiné à quelqu'un d'autre.
 
+### Contacts, double cliquet et clé protégée
+
+```
+$ brocolis pair --code TOMATE-42 --name Alice     # contact en double cliquet
+$ brocolis contacts                                # la protection de chacun
+Alice	1D47-6221-06A0-8AC5	🔐 double cliquet (post-quantique)
+$ brocolis encrypt --to Alice --text "rdv ((au café))"
+rdv [[BROCOLIS:v3:…]]
+$ BROCOLIS_PHRASE='une phrase longue' brocolis protect --contact Alice
+[[BROCOLIS-CLE:v2:…]]
+$ BROCOLIS_PHRASE='une phrase longue' brocolis unprotect --text '[[BROCOLIS-CLE:v2:…]]' --name Alice
+```
+
+`encrypt --to` vise un ou plusieurs contacts (un seul contact appairé : v3 ;
+sinon v1/v2). `decrypt` ouvre toutes les versions et dit, pour le v3, de qui
+vient le message. La phrase d'une clé protégée est lue dans `BROCOLIS_PHRASE`,
+sinon sur la première ligne de l'entrée standard. Voir
+[Double cliquet](#double-cliquet--le-protocole-v3-de-la-messagerie).
+
 ### Commandes de base
 
 Générer une clé symétrique AES-256 à partager (canal sûr) :
@@ -574,6 +597,12 @@ Read** suffit. Sans lui, le site fonctionne normalement mais `/dl/*` répond
 - **Réécriture plafonnée à 8 Mio.** Au-delà, le corps est relayé sans
   réécriture (voir `MAX_REWRITE_BYTES`) — les messages visés pèsent quelques
   kilo-octets.
+- **Double cliquet : un appareil, un état.** Les sessions v3 vivent dans le
+  dossier `v3/` d'**une** configuration : l'application (dossier de
+  l'utilisateur) et le service système (`/etc/brocolis`) ont chacun les leurs,
+  et un contact appairé dans l'un ne l'est pas dans l'autre. Ne copiez pas
+  `v3/` d'une machine à l'autre : deux appareils sur un même état
+  réutiliseraient des clés de message.
 - **Trousseau limité à 255 clés** en chiffrement multi-destinataire (le format
   `v2` code le nombre sur un octet). Au-delà, le segment n'est pas chiffré : il
   est remplacé par un marqueur d'erreur visible, jamais émis en clair.
@@ -642,6 +671,60 @@ figés** verrouillent la compatibilité binaire :
 `tests/interop_ios.rs` et `tests/interop_android.rs`
 (`cargo test --test interop_ios --test interop_android`). Si le format dérivait
 (préfixe, base64, ordre nonce/tag, longueur de tag), ces tests échoueraient.
+
+### Double cliquet : le protocole v3 de la messagerie
+
+Brocolis parle désormais le **même protocole que la messagerie** (iPhone,
+Android, discussion du site) : le v3 de
+[`docs/SECURITE.md`](https://github.com/maxlestage/messagerie-/blob/master/docs/SECURITE.md),
+avec son implémentation de référence en Rust, copiée telle quelle dans
+[`proto/`](proto/) (vecteurs de test et Wycheproof compris).
+
+- **Une clé neuve par message** (Double Ratchet, comme Signal), effacée aussitôt
+  utilisée : voler la clé plus tard n'ouvre pas les messages passés, et la
+  session guérit d'une compromission passagère au premier aller-retour.
+- **Hybride X25519 + ML-KEM-768** à l'établissement (inspiré de PQXDH) : un
+  ordinateur quantique ne suffit pas à rouvrir ce qu'on a gardé.
+- **Remplissage à 160 octets** : la longueur d'un message ne se lit pas sur le
+  jeton `[[BROCOLIS:v3:…]]`.
+
+Comment on y passe (§8 de la spécification) :
+
+1. **Appairer à deux en nommant le contact** (`brocolis pair --name`, ou
+   l'appairage de l'application). Chaque côté publie en plus le **paquet de
+   clés publiques** de son appareil (`bundle` de `POST /pair`) ; le contact
+   garde celui de l'autre (`bundle`, `bundle_at`, `duo` dans `brocolis.toml`).
+   L'empreinte affichée couvre alors la clé **et** les deux identités v3
+   (`Brocolis_v3_Appairage`) ; si l'autre est un ancien client, l'appairage
+   reste en ancien format et l'empreinte aussi, des deux côtés.
+2. **Le choix du format** d'un envoi pour **une** clé : contact appairé (paquet
+   de moins de 30 jours) → sa session ; sinon **PSK** si le contact est marqué
+   « à deux, double cliquet » (`psk = true`, bouton de l'onglet Contacts) ou si
+   un message PSK est déjà arrivé sur sa clé ; sinon v1 — v2 pour plusieurs
+   clés. Une clé de groupe (partagée par plusieurs contacts, `pair-group`, clés
+   sans nom) reste toujours en v1/v2.
+3. **La réception** : un message v3 ne se déchiffre qu'**une** fois ; son clair
+   est gardé (2 000 messages, 1 Mio) pour que la page se recharge, qu'on relise
+   ses propres envois et qu'un même jeton se rouvre. Un premier message n'est
+   accepté que d'un contact appairé, ou en PSK d'une de vos clés.
+4. **Partout** : le proxy (`((…))` pour un seul destinataire `encrypt_to`,
+   jetons des pages), `encrypt`/`decrypt`, l'onglet Message de l'application.
+   L'onglet Contacts et `brocolis contacts` affichent les libellés de la
+   messagerie : 🔐 double cliquet (post-quantique / classique / clé partagée),
+   ou ancien format.
+
+L'appareil et l'état (sessions, messages ouverts) sont dans **`v3/`, à côté de
+`brocolis.toml`** (`appareil.json`, `etat.json`), lisibles par leur seul
+propriétaire comme le reste de la configuration. Le proxy, la ligne de commande
+et l'application s'y succèdent **une transaction à la fois** (verrou exclusif
+entre processus), et aucun jeton n'est rendu avant que l'état qui l'a produit
+soit écrit : un message n'est jamais chiffré deux fois avec la même clé. Le v3
+indisponible (dossier impossible à écrire) : l'envoi repart en v1. Les jetons
+v1/v2 restent lisibles pour toujours.
+
+Ce qui reste à faire, comme dans la messagerie : les Sender Keys pour les
+groupes, rafraîchir le paquet d'un contact sans réappairer, le chiffrement des
+en-têtes.
 
 #### Client iOS (Swift / CryptoKit)
 

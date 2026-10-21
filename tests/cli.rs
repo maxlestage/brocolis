@@ -899,3 +899,60 @@ fn off_sur_un_etat_corrompu_explique_et_conserve_le_fichier() {
     );
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// `protect` puis `unprotect` : la clé revient, la phrase fausse est refusée,
+/// une phrase trop courte aussi, et la clé protégée ne contient pas la clé.
+#[test]
+fn proteger_puis_retrouver_une_cle_par_sa_phrase() {
+    let d = tmpdir("cle-protegee");
+    let cle = String::from_utf8(Command::new(bin()).arg("keygen").output().unwrap().stdout)
+        .unwrap()
+        .trim()
+        .to_owned();
+    let protect = |phrase: &str| {
+        Command::new(bin())
+            .args(["protect", "--key", &cle])
+            .env("BROCOLIS_PHRASE", phrase)
+            .current_dir(&d)
+            .output()
+            .unwrap()
+    };
+    assert!(!protect("court").status.success(), "8 caractères au moins");
+    let out = protect("une phrase assez longue");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let protegee = String::from_utf8(out.stdout).unwrap().trim().to_owned();
+    assert!(protegee.starts_with("[[BROCOLIS-CLE:v2:"), "{protegee}");
+    assert!(!protegee.contains(&cle));
+
+    let unprotect = |phrase: &str, extra: &[&str]| {
+        Command::new(bin())
+            .args(["unprotect", "--text", &format!("tiens : {protegee}")])
+            .args(extra)
+            .env("BROCOLIS_PHRASE", phrase)
+            .current_dir(&d)
+            .output()
+            .unwrap()
+    };
+    assert!(!unprotect("une autre phrase", &[]).status.success());
+    let out = unprotect("une phrase assez longue", &[]);
+    assert!(out.status.success());
+    assert_eq!(String::from_utf8(out.stdout).unwrap().trim(), cle);
+
+    // Avec un nom, elle devient un contact.
+    let config = d.join("brocolis.toml");
+    let out = unprotect(
+        "une phrase assez longue",
+        &["--name", "Zoé", "--config", config.to_str().unwrap()],
+    );
+    assert!(out.status.success());
+    let toml = std::fs::read_to_string(&config).unwrap();
+    assert!(
+        toml.contains("name = \"Zoé\"") && toml.contains(&cle),
+        "{toml}"
+    );
+    let _ = std::fs::remove_dir_all(&d);
+}

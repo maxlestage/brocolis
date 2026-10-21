@@ -29,7 +29,7 @@ impl Engine {
         if is_listening(listen) {
             anyhow::bail!("le port {listen} est déjà utilisé");
         }
-        let (state, _keys) = brocolis::build_app_state(cfg)?;
+        let (state, _keys) = brocolis::build_app_state_v3(cfg, config)?;
 
         let (stop, stopped) = oneshot::channel::<()>();
         let failure = Arc::new(Mutex::new(None));

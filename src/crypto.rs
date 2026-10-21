@@ -32,7 +32,7 @@ const NONCE_LEN: usize = 12;
 const TAG_LEN: usize = 16;
 /// Taille fixe d'une clé de message emballée : nonce(12) + clé(32) + tag(16).
 const WRAPPED_KEY_LEN: usize = NONCE_LEN + KEY_LEN + TAG_LEN;
-/// Tête commune à toutes les versions de jeton (`v1`, `v2`).
+/// Tête commune à toutes les versions de jeton (`v1`, `v2`, `v3`).
 const TOKEN_HEAD: &str = "[[BROCOLIS:";
 const TOKEN_PREFIX: &str = "[[BROCOLIS:v1:";
 const TOKEN_PREFIX_V2: &str = "[[BROCOLIS:v2:";
@@ -91,6 +91,11 @@ impl SymKey {
 
     pub fn to_base64(&self) -> String {
         B64.encode(self.bytes)
+    }
+
+    /// Les 32 octets de la clé.
+    pub fn bytes(&self) -> [u8; KEY_LEN] {
+        self.bytes
     }
 
     fn cipher(&self) -> Aes256Gcm {
@@ -264,6 +269,15 @@ pub fn encrypt_marked(input: &str, key: &SymKey) -> (String, usize) {
 /// les `keys` (jeton `v2` d'enveloppe si plusieurs, `v1` si une seule). Permet
 /// d'écrire un message lisible par plusieurs correspondants sans rien changer.
 pub fn encrypt_marked_multi(input: &str, keys: &[SymKey]) -> (String, usize) {
+    encrypt_marked_with(input, &mut |secret| seal_token(secret.as_bytes(), keys))
+}
+
+/// Comme [`encrypt_marked_multi`], mais chaque segment est scellé par `seal`
+/// (le protocole v3 : [`crate::v3store`]). `None` : échec fermé.
+pub fn encrypt_marked_with(
+    input: &str,
+    seal: &mut dyn FnMut(&str) -> Option<String>,
+) -> (String, usize) {
     let mut out = String::with_capacity(input.len());
     let mut count = 0usize;
     let mut rest = input;
@@ -276,7 +290,7 @@ pub fn encrypt_marked_multi(input: &str, keys: &[SymKey]) -> (String, usize) {
         };
         let secret = &after_open[..close];
         out.push_str(&rest[..open]);
-        match seal_token(secret.as_bytes(), keys) {
+        match seal(secret) {
             Some(token) => {
                 out.push_str(&token);
                 count += 1;
@@ -335,8 +349,17 @@ pub fn encrypt_message(input: &str, keys: &[SymKey]) -> Result<(String, Sealed),
     if keys.is_empty() {
         return Err(CryptoError::NoKey);
     }
+    encrypt_message_with(input, &mut |text| seal_token(text.as_bytes(), keys))
+}
+
+/// Comme [`encrypt_message`], mais le message (ou chaque segment) est scellé
+/// par `seal` (le protocole v3 : [`crate::v3store`]).
+pub fn encrypt_message_with(
+    input: &str,
+    seal: &mut dyn FnMut(&str) -> Option<String>,
+) -> Result<(String, Sealed), CryptoError> {
     if has_marked_segment(input) {
-        let (out, n) = encrypt_marked_multi(input, keys);
+        let (out, n) = encrypt_marked_with(input, seal);
         return Ok((out, Sealed::Segments(n)));
     }
     let body = input.trim();
@@ -346,7 +369,7 @@ pub fn encrypt_message(input: &str, keys: &[SymKey]) -> Result<(String, Sealed),
     let start = input.len() - input.trim_start().len();
     let end = start + body.len();
     // Échec fermé, comme pour les segments : jamais de repli vers le clair.
-    let token = seal_token(body.as_bytes(), keys).ok_or(CryptoError::Aead)?;
+    let token = seal(body).ok_or(CryptoError::Aead)?;
     Ok((
         format!("{}{token}{}", &input[..start], &input[end..]),
         Sealed::Whole,
@@ -419,6 +442,14 @@ fn form_encode(s: &str) -> String {
 /// Renvoie `(corps_transformé, nb_segments_chiffrés)`. Les champs sans marqueur
 /// sont laissés tels quels, à l'octet près.
 pub fn encrypt_marked_form(body: &str, keys: &[SymKey]) -> (String, usize) {
+    encrypt_marked_form_with(body, &mut |secret| seal_token(secret.as_bytes(), keys))
+}
+
+/// Comme [`encrypt_marked_form`], chaque segment étant scellé par `seal`.
+pub fn encrypt_marked_form_with(
+    body: &str,
+    seal: &mut dyn FnMut(&str) -> Option<String>,
+) -> (String, usize) {
     let mut total = 0usize;
     let parts: Vec<String> = body
         .split('&')
@@ -431,7 +462,7 @@ pub fn encrypt_marked_form(body: &str, keys: &[SymKey]) -> (String, usize) {
             let Some(decoded) = form_decode(raw_value) else {
                 return pair.to_string();
             };
-            let (transformed, n) = encrypt_marked_multi(&decoded, keys);
+            let (transformed, n) = encrypt_marked_with(&decoded, seal);
             if n == 0 {
                 // Rien à chiffrer : on ne touche pas au champ d'origine.
                 return pair.to_string();
@@ -529,6 +560,17 @@ pub fn decrypt_tokens_escaped(
     keys: &[SymKey],
     escape: PlainEscape,
 ) -> (String, usize) {
+    decrypt_tokens_with(input, keys, escape, &mut |_| None)
+}
+
+/// Comme [`decrypt_tokens_escaped`], les jetons v3 (`[[BROCOLIS:v3:…]]`,
+/// donnés entiers) étant ouverts par `v3` ([`crate::v3store`]).
+pub fn decrypt_tokens_with(
+    input: &str,
+    keys: &[SymKey],
+    escape: PlainEscape,
+    v3: &mut dyn FnMut(&str) -> Option<String>,
+) -> (String, usize) {
     let mut out = String::with_capacity(input.len());
     let mut count = 0usize;
     let mut rest = input;
@@ -551,6 +593,8 @@ pub fn decrypt_tokens_escaped(
             })
         } else if let Some(b64) = inner.strip_prefix("v2:") {
             decrypt_token_v2(b64, keys).map(|p| String::from_utf8_lossy(&p).into_owned())
+        } else if inner.starts_with("v3:") {
+            v3(&format!("{TOKEN_HEAD}{inner}{TOKEN_SUFFIX}"))
         } else {
             None
         };
